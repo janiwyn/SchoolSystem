@@ -19,7 +19,7 @@ requireLogin();
         <a class="navbar-brand" href="#">School System</a>
         <div class="d-flex align-items-center">
             <span class="text-white me-3"><?= htmlspecialchars($_SESSION['user']) ?></span>
-            <a href="../public/logout.php" class="btn btn-outline-warning btn-sm">Logout</a>
+            <a href="../app/public/logout.php" class="btn btn-outline-warning btn-sm">Logout</a>
         </div>
     </div>
 </nav>

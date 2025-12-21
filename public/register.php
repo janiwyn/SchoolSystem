@@ -7,12 +7,19 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name     = trim($_POST['name']);
     $email    = trim($_POST['email']);
+    $username = trim($_POST['username']); // Using email as username
+    $role     = $_POST['role'];   
     $password = $_POST['password'];
     $confirm  = $_POST['confirm'];
 
-    if (!$name || !$email || !$password || !$confirm) {
+    if (!$name || !$email || !$role || !$password || !$confirm) {
         $error = "All fields are required";
-    } elseif ($password !== $confirm) {
+    } elseif(!in_array($role, ['admin', 'principal', 'bursar'])){
+         $error = "Invalid role selected";
+
+    } 
+    
+    elseif ($password !== $confirm) {
         $error = "Passwords do not match";
     } else {
         // Hash the password
@@ -28,11 +35,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Email already exists";
         } else {
             // Insert new user
-            $stmt = $mysqli->prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)");
+            $stmt = $mysqli->prepare("INSERT INTO users (name, email, password, role, username) VALUES (?, ?, ?, ?, ?)");
             if ($stmt) {
-                $stmt->bind_param("sss", $name, $email, $hash);
+                $stmt->bind_param("sssss", $name, $email, $hash, $role, $username);
                 if ($stmt->execute()) {
-                    $message = "Registration successful! You can now <a href='login.php'>login</a>.";
+                    $message = "Registration successful! You can now ";
                 } else {
                     $error = "Something went wrong: " . $stmt->error;
                 }
@@ -79,9 +86,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="text" id="name" name="name" class="form-control" placeholder="Enter your full name" required>
                 </div>
 
+                  <div class="mb-3">
+                    <label for="username" class="form-label">UserName</label>
+                    <input type="text" id="username" name="username" class="form-control" placeholder="Enter your username" required>
+                </div>
+
                 <div class="mb-3">
                     <label for="email" class="form-label">Email</label>
                     <input type="email" id="email" name="email" class="form-control" placeholder="Enter your email" required>
+                </div>
+
+                 <div class="mb-3">
+                    <label>Register As</label>
+                    <select name="role" class="form-control" required>
+                        <option value="">Select role</option>
+                        <option value="admin">Admin</option>
+                        <option value="principal">Principal</option>
+                        <option value="bursar">Bursar</option>
+                    </select>
                 </div>
 
                 <div class="mb-3">

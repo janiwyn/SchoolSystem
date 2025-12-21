@@ -1,12 +1,10 @@
 <?php
 session_start();
 
-// Unset all session data
-$_SESSION = [];
-
-// Destroy session
+// Clear all session data including notification flag
+session_unset();
 session_destroy();
 
-// Redirect to login
-header("Location: login.php");
-exit;
+header("location: ../index.php");
+exit();
+?>

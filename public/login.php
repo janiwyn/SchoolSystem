@@ -1,111 +1,141 @@
 <?php
+ob_start();
 session_start();
 require_once '../app/config/db.php'; // Make sure path to db.php is correct
 
-$error = '';
+$error = "";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email    = trim($_POST['email']);
-    $password = $_POST['password'];
 
-    if ($email && $password) {
-        // Fetch user
-        $stmt = $mysqli->prepare("SELECT * FROM users WHERE email = ? AND status = 1 LIMIT 1");
-        if ($stmt) {
-            $stmt->bind_param("s", $email);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $user = $result->fetch_assoc();
+    $username = trim($_POST['username']);
+    $password = trim($_POST['password']);
 
-            if ($user && password_verify($password, $user['password'])) {
-                // Login success
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['role']    = $user['role'];
-                $_SESSION['user']    = $user['name'];
+    if ($username && $password) {
 
-                // Update last login
-                $updateStmt = $mysqli->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
-                if ($updateStmt) {
-                    $updateStmt->bind_param("i", $user['id']);
-                    $updateStmt->execute();
-                    $updateStmt->close();
-                }
+     // Fetch user
+$query = "SELECT id, name, username, password, role 
+          FROM users 
+          WHERE username = ? AND status = 1 
+          LIMIT 1";
 
-                // Redirect based on role
-                switch ($user['role']) {
-                    case 'admin':
-                        header("Location: ../app/admin/dashboard.php");
-                        break;
-                    case 'principal':
-                        header("Location: ../app/principal/dashboard.php");
-                        break;
-                    case 'bursar':
-                        header("Location: ../app/finance/dashboard.php");
-                        break;
-                    default:
-                        header("Location: ../app/finance/dashboard.php");
-                        break;
-                }
-                exit();
+$stmt = $mysqli->prepare($query);
+$stmt->bind_param("s", $username);
+$stmt->execute();
 
-            } else {
-                $error = "Invalid email or password";
+$result = $stmt->get_result();
+$user = $result->fetch_assoc();
+
+$stmt->close();
+
+        if ($user && password_verify($password, $user['password'])) {
+
+            // Store session data
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['name']    = $user['name'];
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['role']    = strtolower(trim($user['role']));
+
+            // Redirect based on role
+            switch ($_SESSION['role']) {
+                case 'admin':
+                    header("Location: ../app/admin/dashboard.php");
+                    break;
+
+                case 'principal':
+                    header("Location: ../app/principal/dashboard.php");
+                    break;
+
+                case 'bursar':
+                    header("Location: ../app/bursar/dashboard.php");
+                    break;
+
+                default:
+                    $error = "Unauthorized role";
             }
+            exit;
 
-            $stmt->close();
         } else {
-            $error = "Database error: " . $mysqli->error;
+            $error = "Invalid username or password";
         }
+
     } else {
-        $error = "Please enter email and password";
+        $error = "Please enter username and password";
     }
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>School System Login</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <title>School System Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body {
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #1c1c1c, #2a5298);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 2.5rem;
+      box-shadow: 0 10px 35px rgba(0,0,0,0.25);
+      max-width: 420px;
+      width: 100%;
+    }
+    .form-control {
+      border-radius: 50px;
+      padding: 0.7rem 1rem;
+    }
+    .btn-school {
+      background: linear-gradient(90deg, #2a5298, #1e3c72);
+      color: #fff;
+      font-weight: 600;
+      border-radius: 50px;
+    }
+  </style>
 </head>
-<body class="bg-light">
+<body>
 
-<div class="container mt-5 col-md-4">
-    <div class="card shadow-sm">
-        <div class="card-header text-center bg-primary text-white">
-            <h4 class="mb-0">Login</h4>
-        </div>
-        <div class="card-body">
+<div class="login-card">
 
-            <?php if (!empty($error)) : ?>
-                <div class="alert alert-danger text-center"><?= htmlspecialchars($error) ?></div>
-            <?php endif; ?>
+  <div class="text-center mb-3">
+    <h4>School Management System</h4>
+    <p class="text-muted">Secure Login</p>
+  </div>
 
-            <form method="POST" action="">
-                <div class="mb-3">
-                    <label for="email" class="form-label">Email</label>
-                    <input type="email" id="email" name="email" class="form-control" placeholder="Enter your email" required>
-                </div>
-
-                <div class="mb-3">
-                    <label for="password" class="form-label">Password</label>
-                    <input type="password" id="password" name="password" class="form-control" placeholder="Enter your password" required>
-                </div>
-
-                <button type="submit" class="btn btn-primary w-100">Login</button>
-            </form>
-
-            <p class="mt-3 text-center">
-                Don't have an account? <a href="register.php" class="text-decoration-none">Register</a>
-            </p>
-
-        </div>
+  <?php if (!empty($error)): ?>
+    <div class="alert alert-danger text-center">
+      <?= htmlspecialchars($error); ?>
     </div>
+  <?php endif; ?>
+
+  <form method="POST">
+    <div class="mb-3">
+      <label class="fw-semibold">Username</label>
+      <input type="text" name="username" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+      <label class="fw-semibold">Password</label>
+      <input type="password" name="password" class="form-control" required>
+    </div>
+
+    <button class="btn btn-school w-100">Login</button>
+  </form>
+
+  <div class="text-center mt-3">
+    <p>Don't have an account? <a href="register.php">Register</a></p>
+  </div>
+
 </div>
 
-<!-- Bootstrap JS Bundle -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
+<?php ob_end_flush(); ?>
+
