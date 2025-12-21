@@ -1,0 +1,132 @@
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(100) UNIQUE,
+    password VARCHAR(255),
+    role ENUM('admin','principal','bursar'),
+    status TINYINT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE students (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admission_no VARCHAR(50) UNIQUE,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    gender ENUM('Male','Female'),
+    class_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE classes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_name VARCHAR(50),
+    stream VARCHAR(20)
+);
+CREATE TABLE subjects (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    subject_name VARCHAR(100)
+);
+CREATE TABLE marks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    subject_id INT,
+    term VARCHAR(20),
+    score INT,
+    created_by INT,
+    synced TINYINT DEFAULT 1
+);
+CREATE TABLE fees (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    amount_paid DECIMAL(10,2),
+    balance DECIMAL(10,2),
+    payment_date DATE,
+    received_by INT,
+    synced TINYINT DEFAULT 1
+);
+CREATE TABLE report_cards (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    term VARCHAR(20),
+    total_marks INT,
+    average DECIMAL(5,2),
+    remarks TEXT,
+    approved_by INT
+);
+CREATE TABLE sync_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    action VARCHAR(100),
+    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE fee_structure (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT,
+    term VARCHAR(20),
+    amount DECIMAL(10,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE student_balances (
+    student_id INT PRIMARY KEY,
+    total_fee DECIMAL(10,2),
+    total_paid DECIMAL(10,2),
+    balance DECIMAL(10,2),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    amount_paid DECIMAL(10,2),
+    payment_method ENUM('cash','bank','mobile'),
+    reference_no VARCHAR(100),
+    received_by INT,
+    payment_date DATETIME,
+    is_offline TINYINT DEFAULT 0,
+    synced TINYINT DEFAULT 1,
+    status ENUM('valid','reversed') DEFAULT 'valid'
+);
+CREATE TABLE financial_audit_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    role ENUM('admin','principal','bursar'),
+    action ENUM(
+        'RECEIVE_PAYMENT',
+        'REVERSE_PAYMENT',
+        'ADJUST_BALANCE',
+        'UPDATE_FEE_STRUCTURE',
+        'APPROVE_REVERSAL'
+    ),
+    payment_id INT NULL,
+    student_id INT,
+    amount_before DECIMAL(10,2),
+    amount_after DECIMAL(10,2),
+    reason TEXT,
+    is_offline TINYINT DEFAULT 0,
+    ip_address VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE payment_reversals (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    payment_id INT,
+    reversed_by INT,
+    approved_by INT,
+    reason TEXT,
+    reversed_at DATETIME
+);
+CREATE TABLE balance_adjustments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    old_balance DECIMAL(10,2),
+    new_balance DECIMAL(10,2),
+    adjusted_by INT,
+    approved_by INT,
+    reason TEXT,
+    adjusted_at DATETIME
+);
+CREATE TABLE password_resets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    token VARCHAR(255),
+    expires_at DATETIME,
+    used TINYINT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
