@@ -46,3 +46,5 @@ require_once __DIR__ . '/../../includes/sidebar.php';
     </div>
 
 </div>
+
+<?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>
