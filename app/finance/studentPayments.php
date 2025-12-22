@@ -116,6 +116,39 @@ if (isset($_GET['success']) && $_GET['success'] == 1) {
 // Include layout AFTER header operations
 require_once __DIR__ . '/../helper/layout.php';
 
+// Build filter query
+$filterWhere = "1=1";
+$search_filter = $_GET['search'] ?? '';
+$date_from = $_GET['date_from'] ?? '';
+$date_to = $_GET['date_to'] ?? '';
+$term_filter = $_GET['term'] ?? '';
+$approval_filter = $_GET['approval'] ?? '';
+$pay_status_filter = $_GET['pay_status'] ?? '';
+
+if ($search_filter) {
+    $searchTerm = '%' . $mysqli->real_escape_string($search_filter) . '%';
+    $filterWhere .= " AND (full_name LIKE '$searchTerm')";
+}
+if ($date_from) {
+    $filterWhere .= " AND DATE(payment_date) >= '" . $mysqli->real_escape_string($date_from) . "'";
+}
+if ($date_to) {
+    $filterWhere .= " AND DATE(payment_date) <= '" . $mysqli->real_escape_string($date_to) . "'";
+}
+if ($term_filter) {
+    $filterWhere .= " AND term = '" . $mysqli->real_escape_string($term_filter) . "'";
+}
+if ($approval_filter) {
+    $filterWhere .= " AND status_approved = '" . $mysqli->real_escape_string($approval_filter) . "'";
+}
+if ($pay_status_filter) {
+    if ($pay_status_filter === 'paid') {
+        $filterWhere .= " AND balance = 0";
+    } elseif ($pay_status_filter === 'unpaid') {
+        $filterWhere .= " AND balance > 0";
+    }
+}
+
 // Get approved students for dropdown
 $approvedStudentsQuery = "SELECT 
     id, admission_no, first_name, last_name, gender, class_id, day_boarding, 
@@ -127,137 +160,24 @@ ORDER BY first_name ASC";
 $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
 $approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
 
-// Get all payments recorded
+// Get all payments recorded with filter
 $paymentsQuery = "SELECT 
     id, admission_no, full_name, day_boarding, gender, class_name, term,
     expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
     parent_contact, parent_email, payment_date, created_at, status_approved
 FROM student_payments
+WHERE $filterWhere
 ORDER BY created_at DESC
 LIMIT 500";
 
 $paymentsResult = $mysqli->query($paymentsQuery);
 $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
-?>
 
-<style>
-    .form-header {
-        background-color: #17a2b8 !important;
-    }
-    
-    .btn-form-submit {
-        background-color: #17a2b8;
-        border-color: #17a2b8;
-        color: white;
-        font-weight: 600;
-        padding: 10px 24px;
-    }
-    
-    .btn-form-submit:hover {
-        background-color: #138496;
-        border-color: #138496;
-        color: white;
-    }
-    
-    .form-section {
-        background-color: #f8f9fa;
-        padding: 20px;
-        border-radius: 4px;
-        margin-bottom: 20px;
-    }
-    
-    .table-container {
-        overflow-x: auto;
-    }
-    
-    .table {
-        margin: 0;
-        font-size: 13px;
-    }
-    
-    .table thead th {
-        background-color: #17a2b8;
-        color: white;
-        font-weight: 600;
-        border: none;
-        padding: 12px;
-        text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 0.5px;
-    }
-    
-    .table tbody td {
-        padding: 10px 12px;
-        border-color: #eee;
-        vertical-align: middle;
-    }
-    
-    .table tbody tr:hover {
-        background-color: #f8f9fa;
-    }
-    
-    .readonly-field {
-        background-color: #e9ecef;
-        cursor: not-allowed;
-    }
-    
-    .status-paid {
-        background-color: #28a745;
-        color: white;
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        font-size: 12px;
-    }
-    
-    .status-incomplete {
-        background-color: #dc3545;
-        color: white;
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        font-size: 12px;
-    }
-    
-    .status-approved {
-        background-color: #28a745;
-        color: white;
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        font-size: 12px;
-    }
-    
-    .status-unapproved {
-        background-color: #dc3545;
-        color: white;
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-weight: 600;
-        font-size: 12px;
-    }
-    
-    .btn-pay {
-        background-color: #17a2b8;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-    
-    .btn-pay:hover {
-        background-color: #138496;
-    }
-    
-    .btn-pay:disabled {
-        background-color: #6c757d;
-        cursor: not-allowed;
-    }
-</style>
+// Get unique terms for filter
+$termsQuery = "SELECT DISTINCT term FROM student_payments ORDER BY term ASC";
+$termsResult = $mysqli->query($termsQuery);
+$terms = $termsResult->fetch_all(MYSQLI_ASSOC);
+?>
 
 <!-- Record Payment Form -->
 <div class="card shadow-sm border-0 mb-4">
@@ -365,6 +285,71 @@ $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
                 <button type="submit" name="record_payment" class="btn btn-form-submit">
                     <i class="bi bi-check-circle"></i> Record Payment
                 </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Filter Section -->
+<div class="card filter-card">
+    <div class="card-body">
+        <form method="GET">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>Search Name</label>
+                    <input type="text" name="search" class="form-control" placeholder="Student name" value="<?= htmlspecialchars($search_filter) ?>">
+                </div>
+
+                <div class="filter-group">
+                    <label>Date From</label>
+                    <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($date_from) ?>">
+                </div>
+
+                <div class="filter-group">
+                    <label>Date To</label>
+                    <input type="date" name="date_to" class="form-control" value="<?= htmlspecialchars($date_to) ?>">
+                </div>
+
+                <div class="filter-group">
+                    <label>Term</label>
+                    <select name="term" class="form-control">
+                        <option value="">All Terms</option>
+                        <?php foreach ($terms as $t): ?>
+                            <option value="<?= htmlspecialchars($t['term']) ?>" <?= $term_filter === $t['term'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($t['term']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Approval</label>
+                    <select name="approval" class="form-control">
+                        <option value="">All Status</option>
+                        <option value="approved" <?= $approval_filter === 'approved' ? 'selected' : '' ?>>Approved</option>
+                        <option value="unapproved" <?= $approval_filter === 'unapproved' ? 'selected' : '' ?>>Unapproved</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Pay Status</label>
+                    <select name="pay_status" class="form-control">
+                        <option value="">All Status</option>
+                        <option value="paid" <?= $pay_status_filter === 'paid' ? 'selected' : '' ?>>Paid</option>
+                        <option value="unpaid" <?= $pay_status_filter === 'unpaid' ? 'selected' : '' ?>>Unpaid</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <div class="filter-buttons">
+                        <button type="submit" class="btn-filter">
+                            <i class="bi bi-funnel"></i> Filter
+                        </button>
+                        <a href="studentPayments.php" class="btn-reset">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </a>
+                    </div>
+                </div>
             </div>
         </form>
     </div>
@@ -481,52 +466,7 @@ $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
-<script>
-    function populateStudentData() {
-        const select = document.getElementById('studentSelect');
-        const option = select.options[select.selectedIndex];
-        
-        if (option.value === '') {
-            // Clear all fields
-            document.getElementById('fullName').value = '';
-            document.getElementById('gender').value = '';
-            document.getElementById('className').value = '';
-            document.getElementById('dayBoarding').value = '';
-            document.getElementById('term').value = '';
-            document.getElementById('expectedTuition').value = '';
-            document.getElementById('admissionFee').value = '';
-            document.getElementById('uniformFee').value = '';
-            document.getElementById('parentContact').value = '';
-            document.getElementById('parentEmail').value = '';
-            return;
-        }
-        
-        // Populate fields from data attributes
-        document.getElementById('fullName').value = option.dataset.first + ' ' + option.dataset.last;
-        document.getElementById('gender').value = option.dataset.gender;
-        document.getElementById('className').value = option.dataset.class;
-        document.getElementById('dayBoarding').value = option.dataset.boarding;
-        document.getElementById('admissionFee').value = option.dataset.admissionFee;
-        document.getElementById('uniformFee').value = option.dataset.uniformFee;
-        document.getElementById('parentContact').value = option.dataset.contact;
-        document.getElementById('parentEmail').value = option.dataset.email;
-        
-        // Get expected tuition and term from server
-        fetch(`../api/getStudentTuition.php?class_id=${option.dataset.class}`)
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('expectedTuition').value = data.tuition || 0;
-                document.getElementById('term').value = data.term || '';
-            })
-            .catch(error => console.error('Error:', error));
-    }
-    
-    function setPaymentId(paymentId, balance) {
-        document.getElementById('modalPaymentId').value = paymentId;
-        document.getElementById('modalBalance').value = balance.toFixed(2);
-        document.getElementById('modalAmount').value = '';
-        document.getElementById('modalAmount').max = balance;
-    }
-</script>
+<link rel="stylesheet" href="../../assets/css/studentPayments.css">
+<script src="../../assets/js/studentPayments.js"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>
