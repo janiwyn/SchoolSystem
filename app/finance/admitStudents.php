@@ -70,22 +70,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
 
         if (!$error) {
             // Insert into admit_students table with unapproved status
-            $user_id = $_SESSION['user_id'];
-            $status = 'unapproved';
-            $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, parent_email, student_image, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-            if ($stmt) {
-                // Fixed: Correct type string with correct number of variables
-                // Types: s=string, i=integer, d=double
-                // admission_no(s), first_name(s), last_name(s), gender(s), class_id(i), day_boarding(s), admission_fee(d), uniform_fee(d), parent_contact(s), parent_email(s), student_image(s), status(s), created_by(i)
-                $stmt->bind_param("ssssissddsssi", $admission_no, $first_name, $last_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $email, $image_path, $status, $user_id);
-                if ($stmt->execute()) {
-                    // Redirect to prevent form resubmission
-                    header("Location: admitStudents.php?success=1");
-                    exit();
+            $user_id = $_SESSION['user_id'] ?? null;
+            
+            // Verify user_id is valid
+            if (!$user_id) {
+                $error = "User session error. Please log in again.";
+            } else {
+                // Check if user exists
+                $checkUserStmt = $mysqli->prepare("SELECT id FROM users WHERE id = ?");
+                $checkUserStmt->bind_param("i", $user_id);
+                $checkUserStmt->execute();
+                $userCheckResult = $checkUserStmt->get_result();
+                
+                if ($userCheckResult->num_rows === 0) {
+                    $error = "Invalid user. Please log in again.";
                 } else {
-                    $error = "Error admitting student: " . $stmt->error;
+                    $status = 'unapproved';
+                    $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, parent_email, student_image, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    if ($stmt) {
+                        // Fixed: Correct type string with correct number of variables
+                        // Types: s=string, i=integer, d=double
+                        // admission_no(s), first_name(s), last_name(s), gender(s), class_id(i), day_boarding(s), admission_fee(d), uniform_fee(d), parent_contact(s), parent_email(s), student_image(s), status(s), created_by(i)
+                        $stmt->bind_param("ssssissddsssi", $admission_no, $first_name, $last_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $email, $image_path, $status, $user_id);
+                        if ($stmt->execute()) {
+                            // Redirect to prevent form resubmission
+                            header("Location: admitStudents.php?success=1");
+                            exit();
+                        } else {
+                            $error = "Error admitting student: " . $stmt->error;
+                        }
+                        $stmt->close();
+                    }
                 }
-                $stmt->close();
+                $checkUserStmt->close();
             }
         }
     }
