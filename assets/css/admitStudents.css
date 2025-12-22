@@ -196,3 +196,56 @@
 .btn-reset:hover {
     background-color: #5a6268;
 }
+
+.tabs-section {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.tabs-section .btn-group {
+    display: flex;
+    gap: 6px;
+    width: auto;
+}
+
+.tabs-section .btn {
+    padding: 4px 12px;
+    font-weight: 500;
+    border-radius: 15px;
+    border: 1px solid #17a2b8;
+    transition: all 0.3s ease;
+    font-size: 15px;
+    white-space: nowrap;
+    height: auto;
+    line-height: 1.1;
+    min-height: 28px;
+}
+
+.tabs-section .btn-primary {
+    background-color: #17a2b8;
+    color: white;
+    border-color: #17a2b8;
+}
+
+.tabs-section .btn-primary:hover {
+    background-color: #138496;
+    border-color: #138496;
+}
+
+.tabs-section .btn-outline-primary {
+    color: #17a2b8;
+    background-color: white;
+    border-color: #17a2b8;
+}
+
+.tabs-section .btn-outline-primary:hover {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.tabs-section .btn i {
+    margin-right: 4px;
+    font-size: 11px;
+}

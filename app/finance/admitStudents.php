@@ -157,6 +157,7 @@ $class_filter = $_GET['class'] ?? '';
 $gender_filter = $_GET['gender'] ?? '';
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
+$day_boarding_filter = $_GET['day_boarding'] ?? 'Day'; // Default to Day students
 
 if ($search_filter) {
     $searchTerm = '%' . $mysqli->real_escape_string($search_filter) . '%';
@@ -173,6 +174,9 @@ if ($date_from) {
 }
 if ($date_to) {
     $filterWhere .= " AND DATE(admit_students.created_at) <= '" . $mysqli->real_escape_string($date_to) . "'";
+}
+if ($day_boarding_filter) {
+    $filterWhere .= " AND admit_students.day_boarding = '" . $mysqli->real_escape_string($day_boarding_filter) . "'";
 }
 
 // Get admitted students - with filters
@@ -297,6 +301,7 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
 <div class="card filter-card">
     <div class="card-body">
         <form method="GET">
+            <input type="hidden" name="day_boarding" value="<?= htmlspecialchars($day_boarding_filter) ?>">
             <div class="filter-row">
                 <div class="filter-group">
                     <label>Search Student</label>
@@ -349,11 +354,27 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
+<!-- Day/Boarding Tabs -->
+<div class="tabs-section mb-4">
+    <div class="btn-group" role="tablist">
+        <a href="?day_boarding=Day<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" 
+           class="btn <?= $day_boarding_filter === 'Day' ? 'btn-primary' : 'btn-outline-primary' ?>" role="tab">
+            <i class="bi bi-person-check"></i> Day Students
+        </a>
+        <a href="?day_boarding=Boarding<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" 
+           class="btn <?= $day_boarding_filter === 'Boarding' ? 'btn-primary' : 'btn-outline-primary' ?>" role="tab">
+            <i class="bi bi-house-fill"></i> Boarding Students
+        </a>
+    </div>
+</div>
+
 <!-- Admitted Students Table -->
 <div class="card shadow-sm border-0">
     <div class="card-body">
         <?php if (empty($students)): ?>
-            <div class="alert alert-info">No students found.</div>
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> No <?= $day_boarding_filter ?> students found.
+            </div>
         <?php else: ?>
             <div class="table-container">
                 <table class="table table-striped">
