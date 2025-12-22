@@ -459,7 +459,7 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                                 </td>
                                 <td><?= date('Y-m-d H:i', strtotime($student['created_at'])) ?></td>
                                 <td>
-                                    <span class="badge <?= $student['status'] === 'approved' ? 'bg-success' : 'bg-warning' ?>">
+                                    <span class="badge <?= $student['status'] === 'approved' ? 'bg-success' : 'bg-danger' ?>">
                                         <?= ucfirst($student['status']) ?>
                                     </span>
                                 </td>
