@@ -12,6 +12,10 @@ requireLogin();
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Page-specific CSS -->
+    <?php if ($title === "Tuition Management"): ?>
+        <link rel="stylesheet" href="../../assets/css/tuition.css">
+    <?php endif; ?>
     <style>
         * {
             margin: 0;
