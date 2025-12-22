@@ -130,3 +130,40 @@ CREATE TABLE password_resets (
     used TINYINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE students (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admission_no VARCHAR(50) UNIQUE NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    gender ENUM('Male','Female') NOT NULL,
+    date_of_birth DATE,
+    class VARCHAR(50),
+    stream VARCHAR(50),
+    status ENUM('active','inactive') DEFAULT 'active',
+    created_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+CREATE TABLE classes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_name VARCHAR(50) NOT NULL
+);
+CREATE TABLE streams (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    stream_name VARCHAR(50),
+
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+);
+CREATE TABLE audit_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    action VARCHAR(50),
+    module VARCHAR(50),
+    record_id INT,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
