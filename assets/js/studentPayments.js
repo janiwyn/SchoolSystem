@@ -1,3 +1,25 @@
+function togglePaymentForm() {
+    const formCard = document.getElementById('paymentFormCard');
+    const toggleBtn = document.querySelector('.btn-toggle-form');
+    const icon = toggleBtn.querySelector('i');
+    
+    if (formCard.style.display === 'none') {
+        // Open form
+        formCard.style.display = 'block';
+        toggleBtn.classList.remove('collapsed');
+        toggleBtn.classList.add('expanded');
+        icon.classList.remove('bi-chevron-right');
+        icon.classList.add('bi-chevron-down');
+    } else {
+        // Close form
+        formCard.style.display = 'none';
+        toggleBtn.classList.remove('expanded');
+        toggleBtn.classList.add('collapsed');
+        icon.classList.remove('bi-chevron-down');
+        icon.classList.add('bi-chevron-right');
+    }
+}
+
 function populateStudentData() {
     const select = document.getElementById('studentSelect');
     const option = select.options[select.selectedIndex];

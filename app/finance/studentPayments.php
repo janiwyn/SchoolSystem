@@ -179,8 +179,15 @@ $termsResult = $mysqli->query($termsQuery);
 $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
 ?>
 
-<!-- Record Payment Form -->
-<div class="card shadow-sm border-0 mb-4">
+<!-- Toggle Button for Record Payment Form -->
+<div class="mb-3">
+    <button type="button" class="btn btn-toggle-form" onclick="togglePaymentForm()">
+        <i class="bi bi-chevron-right"></i> Record Student Payment
+    </button>
+</div>
+
+<!-- Record Student Payment Form (Collapsible) -->
+<div class="card shadow-sm border-0 mb-4" id="paymentFormCard" style="display: none;">
     <div class="card-header form-header text-white">
         <h5 class="mb-0">Record Student Payment</h5>
     </div>
