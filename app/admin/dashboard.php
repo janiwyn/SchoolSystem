@@ -1,7 +1,7 @@
 <?php
 $title = "Admin Dashboard";
 require_once __DIR__ . '/../helper/layout.php';
-require_once __DIR__ . '/../../includes/sidebar.php';
+
 ?>
 
 <div class="content-wrapper">
