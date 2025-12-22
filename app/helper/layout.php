@@ -13,7 +13,7 @@ requireLogin();
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <!-- Page-specific CSS -->
-    <?php if ($title === "Tuition Management"): ?>
+<?php if (($title ?? '') === "Tuition Management"): ?>
         <link rel="stylesheet" href="../../assets/css/tuition.css">
     <?php elseif ($title === "Admit Students"): ?>
         <link rel="stylesheet" href="../../assets/css/admitStudents.css">

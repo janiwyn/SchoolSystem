@@ -15,6 +15,7 @@ CREATE TABLE students (
     last_name VARCHAR(50),
     gender ENUM('Male','Female'),
     class_id INT,
+    stream_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE classes (
@@ -25,15 +26,6 @@ CREATE TABLE classes (
 CREATE TABLE subjects (
     id INT AUTO_INCREMENT PRIMARY KEY,
     subject_name VARCHAR(100)
-);
-CREATE TABLE marks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_id INT,
-    subject_id INT,
-    term VARCHAR(20),
-    score INT,
-    created_by INT,
-    synced TINYINT DEFAULT 1
 );
 CREATE TABLE fees (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -133,22 +125,213 @@ CREATE TABLE password_resets (
     used TINYINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE admit_students (
+CREATE TABLE students (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admission_no VARCHAR(50) UNIQUE NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    gender ENUM('Male','Female') NOT NULL,
+    date_of_birth DATE,
+    class VARCHAR(50),
+    stream VARCHAR(50),
+    status ENUM('active','inactive') DEFAULT 'active',
+    created_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+CREATE TABLE classes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_name VARCHAR(50) NOT NULL
+);
+CREATE TABLE streams (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    stream_name VARCHAR(50),
+
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+);
+CREATE TABLE audit_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    action VARCHAR(50),
+    module VARCHAR(50),
+    record_id INT,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+// NEW TABLES
+CREATE TABLE years(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    year_name VARCHAR(20)
+); 
+CREATE TABLE terms(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    term_name VARCHAR(20)
+);
+CREATE TABLE classes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_name VARCHAR(50),
+);
+CREATE TABLE streams (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT,
+    stream_name VARCHAR(50),
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+);
+CREATE TABLE house(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    house_name VARCHAR(50)
+
+);
+ CREATE TABLE students (
     id INT AUTO_INCREMENT PRIMARY KEY,
     admission_no VARCHAR(50) UNIQUE,
     first_name VARCHAR(50),
-    last_name VARCHAR(50),
-    gender ENUM('Male','Female'),
+    pic VARCHAR(255),
+    status ENUM('active','inactive'),
+    date_of_birth DATE,
     class_id INT,
-    day_boarding ENUM('Day','Boarding'),
-    admission_fee DECIMAL(10,2),
-    uniform_fee DECIMAL(10,2),
-    parent_contact VARCHAR(20),
-    parent_email VARCHAR(100),
-    student_image VARCHAR(255),
-    status ENUM('approved','unapproved') DEFAULT 'unapproved',
+    stream_id INT,
+    house_id INT,
+    gender ENUM('Male','Female')
+);
+CREATE TABLE student_term_class(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    class_id INT,
+    stream_id INT,
+    year_id INT,
+    term_id INT,
+    section VARCHAR(20)
+)
+
+CREATE TABLE subject(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    subject_name VARCHAR(100)
+    short_name VARCHAR(20)
+)
+CREATE TABLE subject_teacher_class(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    subject_id INT FOREIGN KEY REFERENCES subjects(id),
+    teacher_id INT FOREIGN KEY REFERENCES users(id),
+    class_id INT FOREIGN KEY REFERENCES classes(id),
+    stream_id INT   FOREIGN KEY REFERENCES streams(id),
+    year_id INT FOREIGN KEY REFERENCES years(id),
+    term_id INT FOREIGN KEY REFERENCES terms(id)
+
+);
+CREATE TABLE exam_sets(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    batch_name VARCHAR(50),
+    short_name VARCHAR(255),
+    enteredOutOf INT, 
+    year_id INT FOREIGN KEY REFERENCES years(id),
+    term_id INT FOREIGN KEY REFERENCES terms(id),
+    class_id INT FOREIGN KEY REFERENCES classes(id)
+    start_date DATE,
+    end_date DATE
+);
+CREATE TABLE marks (
+    exam_batch_id INT,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    subject_id INT,
+    term INT,
+    year_id INT
+    score INT,
+    class_id INT,
+    stream_id INT,
     created_by INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (class_id) REFERENCES classes(id),
-    FOREIGN KEY (created_by) REFERENCES users(id)
+    synced TINYINT DEFAULT 1
+);
+CREATE TABLE report_types(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    report_name VARCHAR(50),
+    report_file VARCHAR(100),
+    
+
+);
+CREATE TABLE report_sets(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    report_type_id INT FOREIGN KEY REFERENCES report_types(id),
+    class_id INT FOREIGN KEY REFERENCES classes(id),
+    stream_id INT FOREIGN KEY REFERENCES streams(id),
+    year_id INT FOREIGN KEY REFERENCES years(id),
+    term_id INT FOREIGN KEY REFERENCES terms(id),
+    set_name VARCHAR(256),
+    subjects_perStudent INT
+);
+CREATE TABLE report_set_columns(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    report_set_id INT FOREIGN KEY REFERENCES report_sets(id),
+    column_name VARCHAR(100),
+    percentage_contribution DECIMAL(5,2)
+    
+);
+CREATE TABLE report_set_column_examBatches(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    report_set_column_id INT FOREIGN KEY REFERENCES report_set_columns(id),
+    exam_batch_id INT FOREIGN KEY REFERENCES exam_sets(id)
+    percentage_contribution DECIMAL(5,2)
+);
+
+CREATE TABLE teachers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_id VARCHAR(20) UNIQUE,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    gender ENUM('Male','Female'),
+    dob DATE,
+    id_no VARCHAR(30),
+    email VARCHAR(100),
+    phone VARCHAR(20),
+    class VARCHAR(50),
+    section VARCHAR(50),
+    subject VARCHAR(100),
+    address TEXT,
+    bio TEXT,
+    photo VARCHAR(255),
+    status ENUM('active','inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE teacher_payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_id INT NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    payment_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    description TEXT,
+    FOREIGN KEY (teacher_id) REFERENCES teachers(id)
+);
+CREATE TABLE `cooks` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `first_name` VARCHAR(100) NOT NULL,
+    `last_name` VARCHAR(100) NOT NULL,
+    `gender` ENUM('Male','Female') NOT NULL,
+    `dob` DATE DEFAULT NULL,
+    `id_no` VARCHAR(50) UNIQUE NOT NULL,
+    `email` VARCHAR(150) UNIQUE,
+    `phone` VARCHAR(20),
+    `section` VARCHAR(50) DEFAULT NULL,
+    `address` TEXT,
+    `bio` TEXT,
+    `photo` VARCHAR(255) DEFAULT NULL,
+    `status` ENUM('active','inactive') DEFAULT 'active',
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE audit_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    action VARCHAR(50) NOT NULL,        -- e.g., CREATE, UPDATE, DELETE
+    module VARCHAR(50) NOT NULL,        -- e.g., teacher_payments, teachers
+    record_id INT NOT NULL,             -- ID of the affected record
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );

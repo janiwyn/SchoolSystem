@@ -45,10 +45,99 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             <span>Payroll</span>
         </a>
         
-        <a href="employees.php" class="nav-item">
-            <i class="bi bi-briefcase-fill"></i>
-            <span>Employees</span>
-        </a>
+<!-- EMPLOYEES -->
+<li class="nav-item">
+    <a class="nav-link text-white d-flex justify-content-between align-items-center"
+       data-bs-toggle="collapse"
+       href="#employeesMenu"
+       role="button">
+        <span>👷 Employees</span>
+        <span class="small">▾</span>
+    </a>
+
+    <div class="collapse ms-3" id="employeesMenu">
+        <ul class="nav flex-column">
+
+            <!-- TEACHERS -->
+            <li class="nav-item">
+                <a class="nav-link text-white"
+                   data-bs-toggle="collapse"
+                   href="#teachersMenu">
+                    👩‍🏫 Teachers
+                </a>
+
+                <div class="collapse ms-3" id="teachersMenu">
+                    <ul class="nav flex-column">
+
+                        <li class="nav-item">
+                            <a href="../../pages/employees/teachers/list.php"
+                               class="nav-link text-white">
+                                📋 All Teachers
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="../../pages/employees/teachers/create.php"
+                               class="nav-link text-white">
+                                ➕ Add Teacher
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="../../pages/employees/teachers/view.php"
+                               class="nav-link text-white">
+                                📋 View Teacher
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a href="../../pages/employees/teachers/payments.php"
+                               class="nav-link text-white">
+                                💰 Payments
+                            </a>
+                        </li>
+
+                    </ul>
+                </div>
+            </li>
+
+         <!-- COOKS -->
+<li class="nav-item">
+    <a class="nav-link text-white" data-bs-toggle="collapse" href="#cooksMenu">
+        🍳 Cooks
+    </a>
+    <div class="collapse ms-3" id="cooksMenu">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a href="../../pages/employees/cooks/list.php" class="nav-link text-white">📋 All Cooks</a>
+            </li>
+            <li class="nav-item">
+                <a href="../../pages/employees/cooks/create.php" class="nav-link text-white">➕ Add Cook</a>
+            </li>
+            <li class="nav-item">
+                <a href="../../pages/employees/cooks/view.php" class="nav-link text-white">📋 View Cook</a>
+            </li>
+            <li class="nav-item">
+                <a href="../../pages/employees/cooks/payments.php" class="nav-link text-white">💰 Payments</a>
+            </li>
+        </ul>
+    </div>
+</li>
+
+
+            <!-- SECURITY -->
+            <li class="nav-item">
+                <a href="/pages/employees/security/index.php"
+                   class="nav-link text-white">
+                    🛡️ Security Guards
+                </a>
+            </li>
+
+        </ul>
+    </div>
+</li>
+
+
         
         <a href="audit.php" class="nav-item">
             <i class="bi bi-shield-lock-fill"></i>
