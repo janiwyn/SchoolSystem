@@ -24,7 +24,8 @@ requireLogin();
         }
         body {
             display: flex;
-            min-height: 100vh;
+            /* min-height: 100vh; */
+            height: 150px;
             background-color: #f8f9fa;
         }
         .sidebar {

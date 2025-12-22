@@ -145,4 +145,34 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             <span>Audit</span>
         </a>
     </nav>
+
+    <style>
+        .nav-subitem {
+            padding-left: 20px !important;
+            font-size: 14px;
+            border-left: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .nav-subitem-child {
+            padding-left: 30px !important;
+            font-size: 13px;
+            border-left: 2px solid rgba(255,255,255,0.1);
+        }
+
+        .nav-item[data-bs-toggle="collapse"] {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-item[data-bs-toggle="collapse"] .bi-chevron-down {
+            transition: transform 0.3s ease;
+            font-size: 12px;
+        }
+
+        .nav-item[data-bs-toggle="collapse"][aria-expanded="true"] .bi-chevron-down {
+            transform: rotate(-180deg);
+        }
+    </style>
 </aside>
