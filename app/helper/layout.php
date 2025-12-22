@@ -15,6 +15,8 @@ requireLogin();
     <!-- Page-specific CSS -->
     <?php if ($title === "Tuition Management"): ?>
         <link rel="stylesheet" href="../../assets/css/tuition.css">
+    <?php elseif ($title === "Admit Students"): ?>
+        <link rel="stylesheet" href="../../assets/css/admitStudents.css">
     <?php endif; ?>
     <style>
         * {

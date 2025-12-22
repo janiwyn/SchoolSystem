@@ -133,3 +133,22 @@ CREATE TABLE password_resets (
     used TINYINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE admit_students (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admission_no VARCHAR(50) UNIQUE,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    gender ENUM('Male','Female'),
+    class_id INT,
+    day_boarding ENUM('Day','Boarding'),
+    admission_fee DECIMAL(10,2),
+    uniform_fee DECIMAL(10,2),
+    parent_contact VARCHAR(20),
+    parent_email VARCHAR(100),
+    student_image VARCHAR(255),
+    status ENUM('approved','unapproved') DEFAULT 'unapproved',
+    created_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (class_id) REFERENCES classes(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
