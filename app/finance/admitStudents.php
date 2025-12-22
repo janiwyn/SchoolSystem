@@ -241,8 +241,15 @@ $studentsResult = $mysqli->query($studentsQuery);
 $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
 ?>
 
-<!-- Add Student Form -->
-<div class="card shadow-sm border-0 mb-4">
+<!-- Toggle Button for Admit Student Form -->
+<div class="mb-3">
+    <button type="button" class="btn-toggle-form" onclick="toggleAdmitForm()">
+        <i class="bi bi-chevron-right"></i> Admit New Student
+    </button>
+</div>
+
+<!-- Admit Student Form (Collapsible) -->
+<div class="card shadow-sm border-0 mb-4" id="admitFormCard" style="display: none;">
     <div class="card-header form-header text-white">
         <h5 class="mb-0">Admit New Student</h5>
     </div>

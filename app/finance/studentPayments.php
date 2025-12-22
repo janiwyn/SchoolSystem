@@ -149,6 +149,49 @@ if ($pay_status_filter) {
     }
 }
 
+// Pagination setup
+$records_per_page = 60;
+$current_page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+$offset = ($current_page - 1) * $records_per_page;
+
+// Get total count for pagination
+$countQuery = "SELECT COUNT(*) as total FROM student_payments WHERE $filterWhere";
+$countResult = $mysqli->query($countQuery);
+$countRow = $countResult->fetch_assoc();
+$total_records = $countRow['total'];
+$total_pages = ceil($total_records / $records_per_page);
+
+// Get all payments recorded with filter and pagination
+$paymentsQuery = "SELECT 
+    id, admission_no, full_name, day_boarding, gender, class_name, term,
+    expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
+    parent_contact, parent_email, payment_date, created_at, status_approved
+FROM student_payments
+WHERE $filterWhere
+ORDER BY created_at DESC
+LIMIT $offset, $records_per_page";
+
+$paymentsResult = $mysqli->query($paymentsQuery);
+$payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
+
+// Get unique terms for filter
+$termsQuery = "SELECT DISTINCT term FROM student_payments ORDER BY term ASC";
+$termsResult = $mysqli->query($termsQuery);
+$terms = $termsResult->fetch_all(MYSQLI_ASSOC);
+
+// Calculate totals for all payments (not just current page)
+$totalsQuery = "SELECT 
+    SUM(expected_tuition) as total_tuition,
+    SUM(amount_paid) as total_paid,
+    SUM(balance) as total_balance,
+    SUM(admission_fee) as total_admission,
+    SUM(uniform_fee) as total_uniform
+FROM student_payments
+WHERE $filterWhere";
+
+$totalsResult = $mysqli->query($totalsQuery);
+$totals = $totalsResult->fetch_assoc();
+
 // Get approved students for dropdown
 $approvedStudentsQuery = "SELECT 
     id, admission_no, first_name, last_name, gender, class_id, day_boarding, 
@@ -158,30 +201,29 @@ WHERE status = 'approved'
 ORDER BY first_name ASC";
 
 $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
+
+// Check if query executed successfully
+if (!$approvedStudentsResult) {
+    die("Database error: " . $mysqli->error);
+}
+
 $approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
 
-// Get all payments recorded with filter
-$paymentsQuery = "SELECT 
-    id, admission_no, full_name, day_boarding, gender, class_name, term,
-    expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
-    parent_contact, parent_email, payment_date, created_at, status_approved
-FROM student_payments
-WHERE $filterWhere
-ORDER BY created_at DESC
-LIMIT 500";
-
-$paymentsResult = $mysqli->query($paymentsQuery);
-$payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
-
-// Get unique terms for filter
-$termsQuery = "SELECT DISTINCT term FROM student_payments ORDER BY term ASC";
-$termsResult = $mysqli->query($termsQuery);
-$terms = $termsResult->fetch_all(MYSQLI_ASSOC);
+// Debug: Check if students were found
+if (empty($approved_students)) {
+    // If no approved students, fetch ALL students to help with debugging
+    $debugQuery = "SELECT COUNT(*) as total, 
+                          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count
+                   FROM admit_students";
+    $debugResult = $mysqli->query($debugQuery);
+    $debugRow = $debugResult->fetch_assoc();
+    // You can log this or display a message if needed
+}
 ?>
 
 <!-- Toggle Button for Record Payment Form -->
 <div class="mb-3">
-    <button type="button" class="btn btn-toggle-form" onclick="togglePaymentForm()">
+    <button type="button" class="btn-toggle-form" onclick="togglePaymentForm()">
         <i class="bi bi-chevron-right"></i> Record Student Payment
     </button>
 </div>
@@ -205,21 +247,25 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                 <label class="form-label">Select Student</label>
                 <select name="student_id" id="studentSelect" class="form-control" required onchange="populateStudentData()">
                     <option value="">-- Select Student --</option>
-                    <?php foreach ($approved_students as $student): ?>
-                        <option value="<?= $student['id'] ?>" 
-                            data-admission="<?= htmlspecialchars($student['admission_no']) ?>"
-                            data-first="<?= htmlspecialchars($student['first_name']) ?>"
-                            data-last="<?= htmlspecialchars($student['last_name']) ?>"
-                            data-gender="<?= htmlspecialchars($student['gender']) ?>"
-                            data-class="<?= $student['class_id'] ?>"
-                            data-boarding="<?= htmlspecialchars($student['day_boarding']) ?>"
-                            data-admission-fee="<?= $student['admission_fee'] ?>"
-                            data-uniform-fee="<?= $student['uniform_fee'] ?>"
-                            data-contact="<?= htmlspecialchars($student['parent_contact']) ?>"
-                            data-email="<?= htmlspecialchars($student['parent_email']) ?>">
-                            <?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?> (<?= htmlspecialchars($student['admission_no']) ?>)
-                        </option>
-                    <?php endforeach; ?>
+                    <?php if (!empty($approved_students)): ?>
+                        <?php foreach ($approved_students as $student): ?>
+                            <option value="<?= $student['id'] ?>" 
+                                data-admission="<?= htmlspecialchars($student['admission_no']) ?>"
+                                data-first="<?= htmlspecialchars($student['first_name']) ?>"
+                                data-last="<?= htmlspecialchars($student['last_name']) ?>"
+                                data-gender="<?= htmlspecialchars($student['gender']) ?>"
+                                data-class="<?= $student['class_id'] ?>"
+                                data-boarding="<?= htmlspecialchars($student['day_boarding']) ?>"
+                                data-admission-fee="<?= $student['admission_fee'] ?>"
+                                data-uniform-fee="<?= $student['uniform_fee'] ?>"
+                                data-contact="<?= htmlspecialchars($student['parent_contact']) ?>"
+                                data-email="<?= htmlspecialchars($student['parent_email']) ?>">
+                                <?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?> (<?= htmlspecialchars($student['admission_no']) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <option value="">No approved students available</option>
+                    <?php endif; ?>
                 </select>
             </div>
             
@@ -434,9 +480,79 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                                 </td>
                             </tr>
                         <?php endforeach; ?>
+                        
+                        <!-- Totals Row -->
+                        <tr class="table-totals">
+                            <td colspan="6" class="text-end fw-bold">TOTALS:</td>
+                            <td class="totals-expected-tuition"><?= number_format($totals['total_tuition'] ?? 0, 2) ?></td>
+                            <td class="totals-amount-paid"><?= number_format($totals['total_paid'] ?? 0, 2) ?></td>
+                            <td class="totals-balance"><?= number_format($totals['total_balance'] ?? 0, 2) ?></td>
+                            <td class="totals-admission-fee"><?= number_format($totals['total_admission'] ?? 0, 2) ?></td>
+                            <td class="totals-uniform-fee"><?= number_format($totals['total_uniform'] ?? 0, 2) ?></td>
+                            <td colspan="6"></td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination -->
+            <?php if ($total_pages > 1): ?>
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <!-- Previous Button -->
+                        <li class="page-item <?= $current_page <= 1 ? 'disabled' : '' ?>">
+                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+
+                        <!-- Page Numbers -->
+                        <?php
+                        $start_page = max(1, $current_page - 2);
+                        $end_page = min($total_pages, $current_page + 2);
+
+                        if ($start_page > 1): ?>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>">1</a>
+                            </li>
+                            <?php if ($start_page > 2): ?>
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            <?php endif; ?>
+                        <?php endif; ?>
+
+                        <?php for ($page = $start_page; $page <= $end_page; $page++): ?>
+                            <li class="page-item <?= $page === $current_page ? 'active' : '' ?>">
+                                <a class="page-link" href="?page=<?= $page ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>">
+                                    <?= $page ?>
+                                </a>
+                            </li>
+                        <?php endfor; ?>
+
+                        <?php if ($end_page < $total_pages): ?>
+                            <?php if ($end_page < $total_pages - 1): ?>
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            <?php endif; ?>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>"><?= $total_pages ?></a>
+                            </li>
+                        <?php endif; ?>
+
+                        <!-- Next Button -->
+                        <li class="page-item <?= $current_page >= $total_pages ? 'disabled' : '' ?>">
+                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+
+                <!-- Pagination Info -->
+                <div class="text-center mt-3">
+                    <p class="text-muted" style="font-size: 13px;">
+                        Showing <?= ($offset + 1) ?> to <?= min($offset + $records_per_page, $total_records) ?> of <?= $total_records ?> payments
+                    </p>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>

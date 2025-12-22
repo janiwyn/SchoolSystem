@@ -226,3 +226,42 @@
 .btn-toggle-form.expanded i {
     transform: rotate(90deg);
 }
+
+.table-totals {
+    background-color: #e8f4f8;
+    border-top: 3px solid #17a2b8;
+    border-bottom: 3px solid #17a2b8;
+    font-weight: 600;
+}
+
+.table-totals td {
+    padding: 14px 12px;
+    color: #17a2b8;
+    font-weight: 700;
+    vertical-align: middle;
+}
+
+.totals-expected-tuition {
+    color: #4a7c4e !important;
+    font-weight: 700;
+}
+
+.totals-amount-paid {
+    color: #0066cc !important;
+    font-weight: 700;
+}
+
+.totals-balance {
+    color: #dc3545 !important;
+    font-weight: 700;
+}
+
+.totals-admission-fee {
+    color: #17a2b8 !important;
+    font-weight: 700;
+}
+
+.totals-uniform-fee {
+    color: #17a2b8 !important;
+    font-weight: 700;
+}
