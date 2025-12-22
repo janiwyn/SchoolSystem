@@ -12,8 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     $student_id = intval($_POST['student_id']);
     $amount_paid = floatval($_POST['amount_paid']);
     $payment_date = trim($_POST['payment_date']);
+    $term = trim($_POST['term']);
     
-    if (!$student_id || !$amount_paid || !$payment_date) {
+    if (!$student_id || !$amount_paid || !$payment_date || !$term) {
         $error = "All fields are required";
     } elseif ($amount_paid <= 0) {
         $error = "Amount must be greater than zero";
@@ -41,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
             $user_id = $_SESSION['user_id'];
             
             // Insert payment record
-            $insertStmt = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $insertStmt = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
             
             if ($insertStmt) {
                 $full_name = $student['first_name'] . ' ' . $student['last_name'];
@@ -51,14 +52,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
                 $uniform_fee = floatval($_POST['uniform_fee']);
                 $class_name = $classRow['class_name'];
                 
-                // Fixed type string: i=int, s=string, d=double
-                // student_id(i), admission_no(s), full_name(s), day_boarding(s), 
-                // gender(s), class_id(i), class_name(s), expected_tuition(d), 
-                // amount_paid(d), balance(d), admission_fee(d), uniform_fee(d), 
-                // parent_contact(s), parent_email(s), payment_date(s), recorded_by(i)
-                $insertStmt->bind_param("issssissddddsssi", 
+                // Fixed type string: 17 variables = issssissdddddssi
+                // i=student_id, s=admission_no, s=full_name, s=day_boarding, s=gender, i=class_id, s=class_name, s=term, d=expected_tuition, d=amount_paid, d=balance, d=admission_fee, d=uniform_fee, s=parent_contact, s=parent_email, s=payment_date, i=recorded_by
+                $insertStmt->bind_param("issssissdddddsssi", 
                     $student_id, $student['admission_no'], $full_name, $student['day_boarding'], 
-                    $student['gender'], $student['class_id'], $class_name, $expected_tuition, 
+                    $student['gender'], $student['class_id'], $class_name, $term, $expected_tuition, 
                     $amount_paid, $balance, $admission_fee, $uniform_fee, 
                     $student['parent_contact'], $student['parent_email'], $payment_date, $user_id);
                 
@@ -131,7 +129,7 @@ $approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
 
 // Get all payments recorded
 $paymentsQuery = "SELECT 
-    id, admission_no, full_name, day_boarding, gender, class_name, 
+    id, admission_no, full_name, day_boarding, gender, class_name, term,
     expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
     parent_contact, parent_email, payment_date, created_at, status_approved
 FROM student_payments
@@ -315,6 +313,11 @@ $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
             </div>
             
             <div class="col-md-3">
+                <label class="form-label">Term</label>
+                <input type="text" name="term" id="term" class="form-control readonly-field" readonly>
+            </div>
+            
+            <div class="col-md-3">
                 <label class="form-label">Day/Boarding</label>
                 <input type="text" id="dayBoarding" class="form-control readonly-field" readonly>
             </div>
@@ -381,6 +384,7 @@ $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
                             <th>Adm No</th>
                             <th>Name</th>
                             <th>Class</th>
+                            <th>Term</th>
                             <th>Type</th>
                             <th>Sex</th>
                             <th>Expected Tuition</th>
@@ -402,6 +406,7 @@ $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
                                 <td><?= htmlspecialchars($payment['admission_no']) ?></td>
                                 <td><?= htmlspecialchars($payment['full_name']) ?></td>
                                 <td><?= htmlspecialchars($payment['class_name']) ?></td>
+                                <td><?= htmlspecialchars($payment['term']) ?></td>
                                 <td><?= htmlspecialchars($payment['day_boarding']) ?></td>
                                 <td><?= htmlspecialchars($payment['gender']) ?></td>
                                 <td><?= number_format($payment['expected_tuition'], 2) ?></td>
@@ -487,6 +492,7 @@ $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
             document.getElementById('gender').value = '';
             document.getElementById('className').value = '';
             document.getElementById('dayBoarding').value = '';
+            document.getElementById('term').value = '';
             document.getElementById('expectedTuition').value = '';
             document.getElementById('admissionFee').value = '';
             document.getElementById('uniformFee').value = '';
@@ -505,11 +511,12 @@ $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
         document.getElementById('parentContact').value = option.dataset.contact;
         document.getElementById('parentEmail').value = option.dataset.email;
         
-        // Get expected tuition from server
+        // Get expected tuition and term from server
         fetch(`../api/getStudentTuition.php?class_id=${option.dataset.class}`)
             .then(response => response.json())
             .then(data => {
                 document.getElementById('expectedTuition').value = data.tuition || 0;
+                document.getElementById('term').value = data.term || '';
             })
             .catch(error => console.error('Error:', error));
     }
