@@ -6,7 +6,7 @@ require_once __DIR__ . '/../middleware/role.php';
 // Only admin can access this page
 requireRole(['admin']);
 
-// Handle approval BEFORE layout include
+// Handle approval for admitted students
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_student'])) {
     $student_id = intval($_POST['student_id']);
     $stmt = $mysqli->prepare("UPDATE admit_students SET status = 'approved' WHERE id = ?");
@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_student'])) {
     }
 }
 
-// Handle rejection BEFORE layout include
+// Handle rejection for admitted students
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_student'])) {
     $student_id = intval($_POST['student_id']);
     $stmt = $mysqli->prepare("DELETE FROM admit_students WHERE id = ?");
@@ -28,6 +28,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_student'])) {
         $stmt->bind_param("i", $student_id);
         if ($stmt->execute()) {
             header("Location: pendingrequest.php?tab=admitted_students&rejected=1");
+            exit();
+        }
+        $stmt->close();
+    }
+}
+
+// Handle approval for student payments
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_payment'])) {
+    $payment_id = intval($_POST['payment_id']);
+    $stmt = $mysqli->prepare("UPDATE student_payments SET status_approved = 'approved' WHERE id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $payment_id);
+        if ($stmt->execute()) {
+            header("Location: pendingrequest.php?tab=student_payments&approved=1");
+            exit();
+        }
+        $stmt->close();
+    }
+}
+
+// Handle rejection for student payments
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_payment'])) {
+    $payment_id = intval($_POST['payment_id']);
+    $stmt = $mysqli->prepare("DELETE FROM student_payments WHERE id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $payment_id);
+        if ($stmt->execute()) {
+            header("Location: pendingrequest.php?tab=student_payments&rejected=1");
             exit();
         }
         $stmt->close();
@@ -63,13 +91,24 @@ ORDER BY admit_students.created_at DESC";
 $admittedResult = $mysqli->query($admittedQuery);
 $admitted_students = $admittedResult->fetch_all(MYSQLI_ASSOC);
 
+// Get unapproved student payments
+$paymentsQuery = "SELECT 
+    id, admission_no, full_name, day_boarding, gender, class_name, term,
+    expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
+    parent_contact, parent_email, payment_date, created_at, status_approved
+FROM student_payments
+WHERE status_approved = 'unapproved'
+ORDER BY created_at DESC";
+
+$paymentsResult = $mysqli->query($paymentsQuery);
+$unapproved_payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
+
 $message = '';
-$error = '';
 if (isset($_GET['approved']) && $_GET['approved'] == 1) {
-    $message = "Student approved successfully!";
+    $message = "Record approved successfully!";
 }
 if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
-    $message = "Student rejected successfully!";
+    $message = "Record rejected successfully!";
 }
 ?>
 
@@ -150,14 +189,41 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
     .btn-reject:hover {
         background-color: #c82333;
     }
+    
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    .table {
+        font-size: 13px;
+        margin: 0;
+    }
+    
+    .table thead th {
+        background-color: #17a2b8;
+        color: white;
+        font-weight: 600;
+        border: none;
+        padding: 12px;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+    }
+    
+    .table tbody td {
+        padding: 10px 12px;
+        border-color: #eee;
+        vertical-align: middle;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
 </style>
 
 <!-- Message Display -->
 <?php if (!empty($message)): ?>
     <div class="alert alert-success mb-4"><?= htmlspecialchars($message) ?></div>
-<?php endif; ?>
-<?php if (!empty($error)): ?>
-    <div class="alert alert-danger mb-4"><?= htmlspecialchars($error) ?></div>
 <?php endif; ?>
 
 <!-- Pending Request Tabs -->
@@ -244,9 +310,65 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
             <h5 class="mb-0">Pending Student Payments</h5>
         </div>
         <div class="card-body">
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> Student payment approvals will be displayed here.
-            </div>
+            <?php if (empty($unapproved_payments)): ?>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No pending student payment approvals.
+                </div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Adm No</th>
+                                <th>Name</th>
+                                <th>Class</th>
+                                <th>Term</th>
+                                <th>Type</th>
+                                <th>Gender</th>
+                                <th>Expected Tuition</th>
+                                <th>Amount Paid</th>
+                                <th>Balance</th>
+                                <th>Parent Contact</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($unapproved_payments as $payment): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($payment['admission_no']) ?></td>
+                                    <td><?= htmlspecialchars($payment['full_name']) ?></td>
+                                    <td><?= htmlspecialchars($payment['class_name']) ?></td>
+                                    <td><?= htmlspecialchars($payment['term']) ?></td>
+                                    <td><span class="badge bg-info"><?= htmlspecialchars($payment['day_boarding']) ?></span></td>
+                                    <td><?= htmlspecialchars($payment['gender']) ?></td>
+                                    <td><?= number_format($payment['expected_tuition'], 2) ?></td>
+                                    <td><?= number_format($payment['amount_paid'], 2) ?></td>
+                                    <td><?= number_format($payment['balance'], 2) ?></td>
+                                    <td><?= htmlspecialchars($payment['parent_contact']) ?></td>
+                                    <td><?= date('Y-m-d', strtotime($payment['payment_date'])) ?></td>
+                                    <td>
+                                        <div class="action-button-group">
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="payment_id" value="<?= $payment['id'] ?>">
+                                                <button type="submit" name="approve_payment" class="btn-approve" onclick="return confirm('Approve this payment?')">
+                                                    <i class="bi bi-check-circle"></i> Approve
+                                                </button>
+                                            </form>
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="payment_id" value="<?= $payment['id'] ?>">
+                                                <button type="submit" name="reject_payment" class="btn-reject" onclick="return confirm('Reject this payment?')">
+                                                    <i class="bi bi-x-circle"></i> Reject
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
