@@ -14,7 +14,7 @@ requireLogin();
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <!-- Page-specific CSS -->
 <?php if (($title ?? '') === "Tuition Management"): ?>
-        <link rel="stylesheet" href="../../assets/css/tuition.css">
+        <link rel="stylesheet" href="../assets/css/tuition.css">
     <?php endif; ?>
     <style>
         * {
@@ -97,7 +97,7 @@ requireLogin();
             <span class="navbar-text"><?= $title ?? 'Dashboard' ?></span>
             <div class="d-flex align-items-center ms-auto">
                 <span class="me-3"><?= htmlspecialchars($_SESSION['name']) ?></span>
-                <a href="../../public/logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
+                <a href="../public/logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
             </div>
         </div>
     </nav>

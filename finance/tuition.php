@@ -2,6 +2,8 @@
 $title = "Tuition Management";
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../middleware/role.php';
+require_once __DIR__ . '/../assets/css/tuition.php';
+
 
 requireRole(['bursar', 'admin', 'principal']);
 
@@ -122,6 +124,8 @@ $termsQuery = "SELECT DISTINCT term FROM fee_structure ORDER BY term ASC";
 $termsResult = $mysqli->query($termsQuery);
 $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
 ?>
+
+
 
 <!-- Add Tuition Form -->
 <div class="card shadow-sm border-0 mb-4">

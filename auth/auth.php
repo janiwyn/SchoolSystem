@@ -7,7 +7,7 @@ function isLoggedIn(){
 
 function requireLogin(){
     if(!isLoggedIn()){
-        header("location: /login.php");
+        header("location: ../public/login.php");
         exit();
     }
 }
@@ -18,7 +18,7 @@ function currentUser(){
 
 function require_role(array $roles){
     if(!isset($_SESSION['role'])){
-        header("location: /login.php");
+        header("location: ../public/login.php");
         exit();
 
     }   

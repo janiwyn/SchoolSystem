@@ -1,3 +1,5 @@
+<style>
+
 .form-header {
     background-color: #17a2b8 !important;
 }
@@ -132,3 +134,5 @@
 .table tbody tr:last-child td {
     border-bottom: 1px solid #eee;
 }
+
+</style>

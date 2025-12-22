@@ -2,12 +2,13 @@
 // Sidebar navigation based on user role
 $role = $_SESSION['role'] ?? 'bursar';
 $dashboardLinks = [
-    'admin' => '../admin/dashboard.php',
-    'principal' => '../principal/dashboard.php',
-    'bursar' => '../finance/dashboard.php'
+    'admin' => 'admin/dashboard.php',
+    'principal' => 'principal/dashboard.php',
+    'bursar' => 'finance/dashboard.php'
 ];
-$dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
+$dashboardLink = $dashboardLinks[$role] ?? 'finance/dashboard.php';
 ?>
+
 
 <aside class="sidebar">
     <div class="sidebar-header">
@@ -15,32 +16,32 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
     </div>
     
     <nav class="sidebar-nav">
-        <a href="<?= $dashboardLink ?>" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'dashboard.php' ? 'active' : '' ?>">
+        <a href="../../../<?= $dashboardLink ?>" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'dashboard.php' ? 'active' : '' ?>">
             <i class="bi bi-house-door-fill"></i>
             <span>Dashboard</span>
         </a>
         
-        <a href="../finance/tuition.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'tuition.php' ? 'active' : '' ?>">
+        <a href="../../../finance/tuition.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'tuition.php' ? 'active' : '' ?>">
             <i class="bi bi-cash-coin"></i>
             <span>Tuition</span>
         </a>
         
-        <a href="pending-requests.php" class="nav-item">
+        <a href="#pending-requests.php" class="nav-item">
             <i class="bi bi-clock-history"></i>
             <span>Pending Requests</span>
         </a>
         
-        <a href="admitted-students.php" class="nav-item">
+        <a href="#admitted-students.php" class="nav-item">
             <i class="bi bi-people-fill"></i>
             <span>Admitted Students</span>
         </a>
         
-        <a href="student-payments.php" class="nav-item">
+        <a href="#student-payments.php" class="nav-item">
             <i class="bi bi-credit-card"></i>
             <span>Student Payments</span>
         </a>
         
-        <a href="payroll.php" class="nav-item">
+        <a href="#payroll.php" class="nav-item">
             <i class="bi bi-file-earmark-text"></i>
             <span>Payroll</span>
         </a>
@@ -70,28 +71,28 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
                     <ul class="nav flex-column">
 
                         <li class="nav-item">
-                            <a href="../../pages/employees/teachers/list.php"
+                            <a href="../teachers/list.php"
                                class="nav-link text-white">
                                 📋 All Teachers
                             </a>
                         </li>
 
                         <li class="nav-item">
-                            <a href="../../pages/employees/teachers/create.php"
+                            <a href="../teachers/create.php"
                                class="nav-link text-white">
                                 ➕ Add Teacher
                             </a>
                         </li>
 
                         <li class="nav-item">
-                            <a href="../../pages/employees/teachers/view.php"
+                            <a href="../teachers/view.php"
                                class="nav-link text-white">
                                 📋 View Teacher
                             </a>
                         </li>
 
                         <li class="nav-item">
-                            <a href="../../pages/employees/teachers/payments.php"
+                            <a href="../teachers/payments.php"
                                class="nav-link text-white">
                                 💰 Payments
                             </a>
@@ -109,16 +110,16 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
     <div class="collapse ms-3" id="cooksMenu">
         <ul class="nav flex-column">
             <li class="nav-item">
-                <a href="../../pages/employees/cooks/list.php" class="nav-link text-white">📋 All Cooks</a>
+                <a href="../cooks/list.php" class="nav-link text-white">📋 All Cooks</a>
             </li>
             <li class="nav-item">
-                <a href="../../pages/employees/cooks/create.php" class="nav-link text-white">➕ Add Cook</a>
+                <a href="../cooks/create.php" class="nav-link text-white">➕ Add Cook</a>
             </li>
             <li class="nav-item">
-                <a href="../../pages/employees/cooks/view.php" class="nav-link text-white">📋 View Cook</a>
+                <a href="../cooks/view.php" class="nav-link text-white">📋 View Cook</a>
             </li>
             <li class="nav-item">
-                <a href="../../pages/employees/cooks/payments.php" class="nav-link text-white">💰 Payments</a>
+                <a href="../cooks/payments.php" class="nav-link text-white">💰 Payments</a>
             </li>
         </ul>
     </div>
@@ -127,7 +128,7 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
 
             <!-- SECURITY -->
             <li class="nav-item">
-                <a href="/pages/employees/security/index.php"
+                <a href="/security/index.php"
                    class="nav-link text-white">
                     🛡️ Security Guards
                 </a>

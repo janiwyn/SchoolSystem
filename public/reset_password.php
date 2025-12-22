@@ -1,5 +1,5 @@
 <?php
-require_once '/../app/config/db.php';
+require_once '/../config/db.php';
 
 $token = $_GET['token'] ?? '';
 $error = '';

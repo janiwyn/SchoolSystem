@@ -1,3 +1,4 @@
+<style>
 /* General tweaks */
 body {
     background-color: #f8f9fa;
@@ -21,3 +22,5 @@ body {
 .audit-offline {
     background-color: #fff3cd;
 }
+
+</style>

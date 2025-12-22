@@ -1,7 +1,7 @@
 <?php
 ob_start();
 session_start();
-require_once '../app/config/db.php'; // Make sure path to db.php is correct
+require_once '../config/db.php'; // Make sure path to db.php is correct
 
 $error = "";
 
@@ -38,15 +38,15 @@ $stmt->close();
             // Redirect based on role
             switch ($_SESSION['role']) {
                 case 'admin':
-                    header("Location: ../app/admin/dashboard.php");
+                    header("Location: ../admin/dashboard.php");
                     break;
 
                 case 'principal':
-                    header("Location: ../app/principal/dashboard.php");
+                    header("Location: ../principal/dashboard.php");
                     break;
 
                 case 'bursar':
-                    header("Location: ../app/bursar/dashboard.php");
+                    header("Location: ../bursar/dashboard.php");
                     break;
 
                 default:
