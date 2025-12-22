@@ -158,6 +158,10 @@ $gender_filter = $_GET['gender'] ?? '';
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
 $day_boarding_filter = $_GET['day_boarding'] ?? 'Day'; // Default to Day students
+$sort_order = $_GET['sort'] ?? 'DESC'; // Default sort order
+
+// Toggle sort order
+$next_sort_order = ($sort_order === 'ASC') ? 'DESC' : 'ASC';
 
 if ($search_filter) {
     $searchTerm = '%' . $mysqli->real_escape_string($search_filter) . '%';
@@ -179,7 +183,21 @@ if ($day_boarding_filter) {
     $filterWhere .= " AND admit_students.day_boarding = '" . $mysqli->real_escape_string($day_boarding_filter) . "'";
 }
 
-// Get admitted students - with filters
+// Pagination setup
+$records_per_page = 60;
+$current_page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+$offset = ($current_page - 1) * $records_per_page;
+
+// Get total count for pagination
+$countQuery = "SELECT COUNT(*) as total FROM admit_students 
+              LEFT JOIN classes c ON admit_students.class_id = c.id
+              WHERE $filterWhere";
+$countResult = $mysqli->query($countQuery);
+$countRow = $countResult->fetch_assoc();
+$total_records = $countRow['total'];
+$total_pages = ceil($total_records / $records_per_page);
+
+// Get admitted students - with filters, sorting and pagination
 $studentsQuery = "SELECT 
     admit_students.id,
     admit_students.admission_no,
@@ -199,7 +217,8 @@ $studentsQuery = "SELECT
 FROM admit_students
 LEFT JOIN classes c ON admit_students.class_id = c.id
 WHERE $filterWhere
-ORDER BY admit_students.created_at DESC";
+ORDER BY admit_students.admission_no $sort_order
+LIMIT $offset, $records_per_page";
 
 $studentsResult = $mysqli->query($studentsQuery);
 $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
@@ -357,11 +376,11 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
 <!-- Day/Boarding Tabs -->
 <div class="tabs-section mb-4">
     <div class="btn-group" role="tablist">
-        <a href="?day_boarding=Day<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" 
+        <a href="?day_boarding=Day&page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" 
            class="btn <?= $day_boarding_filter === 'Day' ? 'btn-primary' : 'btn-outline-primary' ?>" role="tab">
             <i class="bi bi-person-check"></i> Day Students
         </a>
-        <a href="?day_boarding=Boarding<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" 
+        <a href="?day_boarding=Boarding&page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" 
            class="btn <?= $day_boarding_filter === 'Boarding' ? 'btn-primary' : 'btn-outline-primary' ?>" role="tab">
             <i class="bi bi-house-fill"></i> Boarding Students
         </a>
@@ -380,7 +399,12 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Adm No</th>
+                            <th>
+                                <a href="?day_boarding=<?= $day_boarding_filter ?>&sort=<?= $next_sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" style="text-decoration: none; color: white; display: flex; align-items: center; gap: 8px;">
+                                    Adm No
+                                    <i class="bi <?= $sort_order === 'ASC' ? 'bi-sort-up' : 'bi-sort-down' ?>"></i>
+                                </a>
+                            </th>
                             <th>Name</th>
                             <th>Sex</th>
                             <th>Class</th>
@@ -437,6 +461,65 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination -->
+            <?php if ($total_pages > 1): ?>
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <!-- Previous Button -->
+                        <li class="page-item <?= $current_page <= 1 ? 'disabled' : '' ?>">
+                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+
+                        <!-- Page Numbers -->
+                        <?php
+                        $start_page = max(1, $current_page - 2);
+                        $end_page = min($total_pages, $current_page + 2);
+
+                        if ($start_page > 1): ?>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>">1</a>
+                            </li>
+                            <?php if ($start_page > 2): ?>
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            <?php endif; ?>
+                        <?php endif; ?>
+
+                        <?php for ($page = $start_page; $page <= $end_page; $page++): ?>
+                            <li class="page-item <?= $page === $current_page ? 'active' : '' ?>">
+                                <a class="page-link" href="?page=<?= $page ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>">
+                                    <?= $page ?>
+                                </a>
+                            </li>
+                        <?php endfor; ?>
+
+                        <?php if ($end_page < $total_pages): ?>
+                            <?php if ($end_page < $total_pages - 1): ?>
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            <?php endif; ?>
+                            <li class="page-item">
+                                <a class="page-link" href="?page=<?= $total_pages ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>"><?= $total_pages ?></a>
+                            </li>
+                        <?php endif; ?>
+
+                        <!-- Next Button -->
+                        <li class="page-item <?= $current_page >= $total_pages ? 'disabled' : '' ?>">
+                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+
+                <!-- Pagination Info -->
+                <div class="text-center mt-3">
+                    <p class="text-muted" style="font-size: 13px;">
+                        Showing <?= ($offset + 1) ?> to <?= min($offset + $records_per_page, $total_records) ?> of <?= $total_records ?> students
+                    </p>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
@@ -539,32 +622,6 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
-<script>
-    function loadEditForm(id, firstName, lastName, gender, admissionFee, uniformFee, parentContact, parentEmail, dayBoarding, classId) {
-        document.getElementById('editStudentId').value = id;
-        document.getElementById('editFirstName').value = firstName;
-        document.getElementById('editLastName').value = lastName;
-        document.getElementById('editGender').value = gender;
-        document.getElementById('editAdmissionFee').value = admissionFee;
-        document.getElementById('editUniformFee').value = uniformFee;
-        document.getElementById('editParentContact').value = parentContact;
-        document.getElementById('editParentEmail').value = parentEmail;
-        document.getElementById('editDayBoarding').value = dayBoarding;
-        document.getElementById('editClassId').value = classId;
-    }
-
-    document.querySelectorAll('.btn-icon-view').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const imageSrc = this.getAttribute('data-image');
-            const fullImagePath = '/SchoolSystem/' + imageSrc;
-            console.log('Loading image from:', fullImagePath);
-            document.getElementById('modalImage').src = fullImagePath;
-            document.getElementById('modalImage').onerror = function() {
-                console.log('Image failed to load from:', fullImagePath);
-                this.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="16" fill="%23999"%3EImage Not Found%3C/text%3E%3C/svg%3E';
-            };
-        });
-    });
-</script>
+<script src="../../assets/js/admitStudents.js"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>
