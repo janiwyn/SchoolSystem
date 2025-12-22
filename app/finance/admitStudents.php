@@ -150,13 +150,39 @@ if (isset($_GET['error']) && $_GET['error'] == 1) {
 // Include layout AFTER all header operations
 require_once __DIR__ . '/../helper/layout.php';
 
-// Get admitted students - FIXED: specify table names for ambiguous columns
+// Build filter query
+$filterWhere = "1=1";
+$search_filter = $_GET['search'] ?? '';
+$class_filter = $_GET['class'] ?? '';
+$gender_filter = $_GET['gender'] ?? '';
+$date_from = $_GET['date_from'] ?? '';
+$date_to = $_GET['date_to'] ?? '';
+
+if ($search_filter) {
+    $searchTerm = '%' . $mysqli->real_escape_string($search_filter) . '%';
+    $filterWhere .= " AND (admit_students.first_name LIKE '$searchTerm' OR admit_students.last_name LIKE '$searchTerm' OR admit_students.admission_no LIKE '$searchTerm' OR admit_students.parent_email LIKE '$searchTerm')";
+}
+if ($class_filter) {
+    $filterWhere .= " AND admit_students.class_id = " . intval($class_filter);
+}
+if ($gender_filter) {
+    $filterWhere .= " AND admit_students.gender = '" . $mysqli->real_escape_string($gender_filter) . "'";
+}
+if ($date_from) {
+    $filterWhere .= " AND DATE(admit_students.created_at) >= '" . $mysqli->real_escape_string($date_from) . "'";
+}
+if ($date_to) {
+    $filterWhere .= " AND DATE(admit_students.created_at) <= '" . $mysqli->real_escape_string($date_to) . "'";
+}
+
+// Get admitted students - with filters
 $studentsQuery = "SELECT 
     admit_students.id,
     admit_students.admission_no,
     admit_students.first_name,
     admit_students.last_name,
     admit_students.gender,
+    admit_students.class_id,
     c.class_name,
     admit_students.day_boarding,
     admit_students.admission_fee,
@@ -168,6 +194,7 @@ $studentsQuery = "SELECT
     admit_students.created_at
 FROM admit_students
 LEFT JOIN classes c ON admit_students.class_id = c.id
+WHERE $filterWhere
 ORDER BY admit_students.created_at DESC";
 
 $studentsResult = $mysqli->query($studentsQuery);
@@ -266,11 +293,67 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
+<!-- Filter Section -->
+<div class="card filter-card">
+    <div class="card-body">
+        <form method="GET">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>Search Student</label>
+                    <input type="text" name="search" class="form-control" placeholder="Name, Admission No, Email" value="<?= htmlspecialchars($search_filter) ?>">
+                </div>
+
+                <div class="filter-group">
+                    <label>Class</label>
+                    <select name="class" class="form-control">
+                        <option value="">All Classes</option>
+                        <?php foreach ($classes as $class): ?>
+                            <option value="<?= $class['class_id'] ?>" <?= $class_filter == $class['class_id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($class['class_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Gender</label>
+                    <select name="gender" class="form-control">
+                        <option value="">All Genders</option>
+                        <option value="Male" <?= $gender_filter === 'Male' ? 'selected' : '' ?>>Male</option>
+                        <option value="Female" <?= $gender_filter === 'Female' ? 'selected' : '' ?>>Female</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Date From</label>
+                    <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($date_from) ?>">
+                </div>
+
+                <div class="filter-group">
+                    <label>Date To</label>
+                    <input type="date" name="date_to" class="form-control" value="<?= htmlspecialchars($date_to) ?>">
+                </div>
+
+                <div class="filter-group">
+                    <div class="filter-buttons">
+                        <button type="submit" class="btn-filter">
+                            <i class="bi bi-funnel"></i> Filter
+                        </button>
+                        <a href="admitStudents.php" class="btn-reset">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Admitted Students Table -->
 <div class="card shadow-sm border-0">
     <div class="card-body">
         <?php if (empty($students)): ?>
-            <div class="alert alert-info">No students admitted yet.</div>
+            <div class="alert alert-info">No students found.</div>
         <?php else: ?>
             <div class="table-container">
                 <table class="table table-striped">
@@ -320,7 +403,7 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                                 </td>
                                 <td>
                                     <div class="action-buttons">
-                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $student['id'] ?>, '<?= htmlspecialchars($student['first_name']) ?>', '<?= htmlspecialchars($student['last_name']) ?>', '<?= htmlspecialchars($student['gender']) ?>', <?= $student['admission_fee'] ?>, <?= $student['uniform_fee'] ?>, '<?= htmlspecialchars($student['parent_contact']) ?>', '<?= htmlspecialchars($student['parent_email']) ?>', '<?= htmlspecialchars($student['day_boarding']) ?>', <?= isset($student['class_id']) ? $student['class_id'] : 0 ?>)">
+                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $student['id'] ?>, '<?= htmlspecialchars($student['first_name']) ?>', '<?= htmlspecialchars($student['last_name']) ?>', '<?= htmlspecialchars($student['gender']) ?>', <?= $student['admission_fee'] ?>, <?= $student['uniform_fee'] ?>, '<?= htmlspecialchars($student['parent_contact']) ?>', '<?= htmlspecialchars($student['parent_email']) ?>', '<?= htmlspecialchars($student['day_boarding']) ?>', <?= $student['class_id'] ?>)">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
                                         <a href="deleteStudent.php?id=<?= $student['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure?')">
