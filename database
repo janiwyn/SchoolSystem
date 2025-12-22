@@ -64,7 +64,9 @@ CREATE TABLE fee_structure (
     class_id INT,
     term VARCHAR(20),
     amount DECIMAL(10,2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id)
 );
 CREATE TABLE student_balances (
     student_id INT PRIMARY KEY,

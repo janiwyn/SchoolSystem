@@ -20,7 +20,7 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             <span>Dashboard</span>
         </a>
         
-        <a href="tuition.php" class="nav-item">
+        <a href="../finance/tuition.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'tuition.php' ? 'active' : '' ?>">
             <i class="bi bi-cash-coin"></i>
             <span>Tuition</span>
         </a>
