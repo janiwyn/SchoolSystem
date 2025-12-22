@@ -1,6 +1,5 @@
 <?php
 $title = "Tuition Management";
-require_once __DIR__ . '/../helper/layout.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../middleware/role.php';
 
@@ -52,7 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_tuition'])) {
         if ($stmt) {
             $stmt->bind_param("isdi", $class_id, $term, $amount, $user_id);
             if ($stmt->execute()) {
-                $message = "Tuition record added successfully!";
+                // Redirect to prevent form resubmission - BEFORE layout include
+                header("Location: tuition.php?success=1");
+                exit();
             } else {
                 $error = "Error adding tuition: " . $stmt->error;
             }
@@ -60,6 +61,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_tuition'])) {
         }
     }
 }
+
+// Check for success message from redirect
+if (isset($_GET['success']) && $_GET['success'] == 1) {
+    $message = "Tuition record added successfully!";
+}
+
+// Include layout AFTER all header operations
+require_once __DIR__ . '/../helper/layout.php';
 
 // Build filter query
 $filterWhere = "1=1";
@@ -71,7 +80,7 @@ if ($year_filter) {
     $filterWhere .= " AND YEAR(fee_structure.created_at) = '" . intval($year_filter) . "'";
 }
 if ($class_filter) {
-    $filterWhere .= " AND classes.class_name LIKE '%" . $mysqli->real_escape_string($class_filter) . "%'";
+    $filterWhere .= " AND fee_structure.class_id = " . intval($class_filter);
 }
 if ($term_filter) {
     $filterWhere .= " AND fee_structure.term = '" . $mysqli->real_escape_string($term_filter) . "'";
@@ -95,20 +104,166 @@ ORDER BY fee_structure.created_at DESC";
 $result = $mysqli->query($query);
 $tuitions = $result->fetch_all(MYSQLI_ASSOC);
 
-// Get unique years for filter
+// Get unique years from fee_structure table
 $yearsQuery = "SELECT DISTINCT YEAR(created_at) as year FROM fee_structure ORDER BY year DESC";
 $yearsResult = $mysqli->query($yearsQuery);
 $years = $yearsResult->fetch_all(MYSQLI_ASSOC);
+
+// Get unique classes from fee_structure table
+$filterClassesQuery = "SELECT DISTINCT fs.class_id, c.class_name 
+                       FROM fee_structure fs 
+                       LEFT JOIN classes c ON fs.class_id = c.id 
+                       ORDER BY c.class_name ASC";
+$filterClassesResult = $mysqli->query($filterClassesQuery);
+$filterClasses = $filterClassesResult->fetch_all(MYSQLI_ASSOC);
 
 // Get unique terms for filter
 $termsQuery = "SELECT DISTINCT term FROM fee_structure ORDER BY term ASC";
 $termsResult = $mysqli->query($termsQuery);
 $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
+
+$styles = "<style>
+    .form-header {
+        background-color: #17a2b8 !important;
+    }
+    
+    .btn-form-submit {
+        background-color: #17a2b8;
+        border-color: #17a2b8;
+        color: white;
+        font-weight: 600;
+        padding: 10px 24px;
+    }
+    
+    .btn-form-submit:hover {
+        background-color: #138496;
+        border-color: #138496;
+        color: white;
+    }
+    
+    .filter-card {
+        background: #f8f9fa;
+        border: none;
+        margin-bottom: 30px;
+    }
+    
+    .filter-card .card-body {
+        padding: 25px;
+    }
+    
+    .filter-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        align-items: flex-end;
+    }
+    
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .filter-group label {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #333;
+    }
+    
+    .filter-group input,
+    .filter-group select {
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        height: 40px;
+    }
+    
+    .filter-group input:focus,
+    .filter-group select:focus {
+        border-color: #17a2b8;
+        box-shadow: 0 0 0 0.2rem rgba(23, 162, 184, 0.25);
+    }
+    
+    .filter-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .btn-filter {
+        background-color: #17a2b8;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 4px;
+        font-weight: 600;
+        cursor: pointer;
+        height: 40px;
+        font-size: 14px;
+    }
+    
+    .btn-filter:hover {
+        background-color: #138496;
+    }
+    
+    .btn-reset {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        height: 40px;
+        width: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .btn-reset:hover {
+        background-color: #5a6268;
+    }
+    
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    .table {
+        margin: 0;
+        font-size: 14px;
+    }
+    
+    .table thead th {
+        background-color: #17a2b8;
+        color: white;
+        font-weight: 600;
+        border: none;
+        padding: 16px 12px;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.5px;
+    }
+    
+    .table tbody td {
+        padding: 14px 12px;
+        border-color: #eee;
+        vertical-align: middle;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .table tbody tr:last-child td {
+        border-bottom: 1px solid #eee;
+    }
+</style>";
+echo $styles;
 ?>
 
 <!-- Add Tuition Form -->
 <div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-primary text-white">
+    <div class="card-header form-header text-white">
         <h5 class="mb-0">Add Tuition Record</h5>
     </div>
     <div class="card-body">
@@ -146,7 +301,7 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
             </div>
 
             <div class="col-12">
-                <button type="submit" name="add_tuition" class="btn btn-primary">
+                <button type="submit" name="add_tuition" class="btn btn-form-submit">
                     <i class="bi bi-plus-circle"></i> Add Tuition
                 </button>
             </div>
@@ -155,43 +310,55 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
 </div>
 
 <!-- Filter Section -->
-<div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-secondary text-white">
-        <h5 class="mb-0">Filter Records</h5>
-    </div>
+<div class="card filter-card">
     <div class="card-body">
-        <form method="GET" class="row g-3">
-            <div class="col-md-3">
-                <label class="form-label">Year</label>
-                <input type="text" name="year" class="form-control" placeholder="All Years" value="<?= htmlspecialchars($year_filter) ?>">
-            </div>
+        <form method="GET">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>Year</label>
+                    <select name="year" class="form-control">
+                        <option value="">All Years</option>
+                        <?php foreach ($years as $y): ?>
+                            <option value="<?= $y['year'] ?>" <?= $year_filter == $y['year'] ? 'selected' : '' ?>>
+                                <?= $y['year'] ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
 
-            <div class="col-md-3">
-                <label class="form-label">Class</label>
-                <input type="text" name="class" class="form-control" placeholder="All Classes" value="<?= htmlspecialchars($class_filter) ?>">
-            </div>
+                <div class="filter-group">
+                    <label>Class</label>
+                    <select name="class" class="form-control">
+                        <option value="">All Classes</option>
+                        <?php foreach ($filterClasses as $fc): ?>
+                            <option value="<?= $fc['class_id'] ?>" <?= $class_filter == $fc['class_id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($fc['class_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
 
-            <div class="col-md-3">
-                <label class="form-label">Term</label>
-                <select name="term" class="form-control">
-                    <option value="">All Terms</option>
-                    <?php foreach ($terms as $t): ?>
-                        <option value="<?= $t['term'] ?>" <?= $term_filter == $t['term'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($t['term']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
+                <div class="filter-group">
+                    <label>Term</label>
+                    <select name="term" class="form-control">
+                        <option value="">All Terms</option>
+                        <?php foreach ($terms as $t): ?>
+                            <option value="<?= $t['term'] ?>" <?= $term_filter == $t['term'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($t['term']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
 
-            <div class="col-md-3">
-                <label class="form-label">&nbsp;</label>
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-info w-100">
-                        <i class="bi bi-funnel"></i> Filter
-                    </button>
-                    <a href="tuition.php" class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-clockwise"></i>
-                    </a>
+                <div class="filter-group">
+                    <div class="filter-buttons">
+                        <button type="submit" class="btn-filter">
+                            <i class="bi bi-funnel"></i> Filter
+                        </button>
+                        <a href="tuition.php" class="btn-reset">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </a>
+                    </div>
                 </div>
             </div>
         </form>
@@ -200,34 +367,31 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
 
 <!-- Tuition Records Table -->
 <div class="card shadow-sm border-0">
-    <div class="card-header bg-dark text-white">
-        <h5 class="mb-0">Tuition Records</h5>
-    </div>
     <div class="card-body">
         <?php if (empty($tuitions)): ?>
             <div class="alert alert-info">No tuition records found.</div>
         <?php else: ?>
-            <div class="table-responsive">
-                <table class="table table-striped table-hover">
-                    <thead class="table-dark">
+            <div class="table-container">
+                <table class="table table-striped">
+                    <thead>
                         <tr>
+                            <th>Date & Time</th>
                             <th>Year</th>
                             <th>Class</th>
                             <th>Term</th>
                             <th>Expected Tuition</th>
                             <th>Recorded By</th>
-                            <th>Date & Time</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($tuitions as $tuition): ?>
                             <tr>
+                                <td><?= date('Y-m-d H:i', strtotime($tuition['created_at'])) ?></td>
                                 <td><?= $tuition['year'] ?></td>
                                 <td><?= htmlspecialchars($tuition['class_name'] ?? 'N/A') ?></td>
                                 <td><?= htmlspecialchars($tuition['term']) ?></td>
                                 <td><?= number_format($tuition['amount'], 2) ?></td>
                                 <td><?= htmlspecialchars($tuition['recorded_by'] ?? 'System') ?></td>
-                                <td><?= date('M d, Y H:i', strtotime($tuition['created_at'])) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
