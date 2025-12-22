@@ -38,7 +38,7 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             <span>Admitted Students</span>
         </a>
         
-        <a href="student-payments.php" class="nav-item">
+        <a href="../finance/studentPayments.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'studentPayments.php' ? 'active' : '' ?>">
             <i class="bi bi-credit-card"></i>
             <span>Student Payments</span>
         </a>

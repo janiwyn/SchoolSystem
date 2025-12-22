@@ -335,3 +335,27 @@ CREATE TABLE audit_logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+
+CREATE TABLE student_payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    admission_no VARCHAR(50),
+    full_name VARCHAR(100),
+    day_boarding VARCHAR(20),
+    gender VARCHAR(20),
+    class_id INT,
+    class_name VARCHAR(50),
+    expected_tuition DECIMAL(10,2),
+    amount_paid DECIMAL(10,2),
+    balance DECIMAL(10,2),
+    admission_fee DECIMAL(10,2),
+    uniform_fee DECIMAL(10,2),
+    parent_contact VARCHAR(20),
+    parent_email VARCHAR(100),
+    payment_date DATE,
+    recorded_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES admit_students(id),
+    FOREIGN KEY (recorded_by) REFERENCES users(id)
+);
