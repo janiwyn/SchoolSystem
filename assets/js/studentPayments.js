@@ -36,6 +36,7 @@ function populateStudentData() {
         document.getElementById('parentContact').value = '';
         document.getElementById('parentEmail').value = '';
         document.getElementById('studentStatus').value = '';
+        document.getElementById('term').value = '';
         return;
     }
 
@@ -43,6 +44,7 @@ function populateStudentData() {
     const firstName = option.getAttribute('data-first');
     const lastName = option.getAttribute('data-last');
     const fullName = firstName + ' ' + lastName;
+    const classId = option.getAttribute('data-class');
 
     document.getElementById('fullName').value = fullName;
     document.getElementById('gender').value = option.getAttribute('data-gender');
@@ -65,6 +67,19 @@ function populateStudentData() {
     } else {
         statusField.style.backgroundColor = '';
         statusField.style.color = '';
+    }
+
+    // Fetch term and tuition from fee_structure table based on class_id
+    if (classId) {
+        fetch('../../app/api/getStudentTuition.php?class_id=' + classId)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('term').value = data.term || '';
+                document.getElementById('expectedTuition').value = data.tuition || 0;
+            })
+            .catch(error => {
+                console.error('Error fetching tuition data:', error);
+            });
     }
 }
 
