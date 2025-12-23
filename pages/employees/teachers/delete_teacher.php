@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../../../app/config/db.php';
-require_once __DIR__ . '/../../../app/auth/auth.php'; // login check
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../auth/auth.php'; // login check
 
 if (!isset($_GET['id']) || empty($_GET['id'])) {
     die("Teacher ID is missing.");

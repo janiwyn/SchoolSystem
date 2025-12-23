@@ -64,15 +64,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_payment'])) {
 // Handle approvals and rejections for balance top-ups
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_topup'])) {
     $topup_id = intval($_POST['topup_id']);
-    $stmt = $mysqli->prepare("UPDATE student_payment_topups SET status_approved = 'approved' WHERE id = ?");
-    if ($stmt) {
+    
+    // Get topup details to retrieve previous_status
+    $getStmt = $mysqli->prepare("SELECT payment_id, previous_status FROM student_payment_topups WHERE id = ?");
+    $getStmt->bind_param("i", $topup_id);
+    $getStmt->execute();
+    $topupRow = $getStmt->get_result()->fetch_assoc();
+    $getStmt->close();
+    
+    if ($topupRow) {
+        // Update topup status to approved
+        $stmt = $mysqli->prepare("UPDATE student_payment_topups SET status_approved = 'approved' WHERE id = ?");
         $stmt->bind_param("i", $topup_id);
-        if ($stmt->execute()) {
-            header("Location: pendingrequest.php?tab=student_payments&subtab=topups&approved=1");
-            exit();
-        }
+        $stmt->execute();
         $stmt->close();
+        
+        // Update payment status back to previous status (usually 'approved')
+        $updatePaymentStmt = $mysqli->prepare("UPDATE student_payments SET status_approved = ? WHERE id = ?");
+        $updatePaymentStmt->bind_param("si", $topupRow['previous_status'], $topupRow['payment_id']);
+        $updatePaymentStmt->execute();
+        $updatePaymentStmt->close();
     }
+    
+    header("Location: pendingrequest.php?tab=student_payments&subtab=topups&approved=1");
+    exit();
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_topup'])) {
@@ -112,33 +127,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_topup'])) {
     exit();
 }
 
-// Handle approval of balance top-up - restore previous status
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_topup'])) {
-    $topup_id = intval($_POST['topup_id']);
-    
-    // Get topup details to retrieve previous_status
-    $getStmt = $mysqli->prepare("SELECT payment_id, previous_status FROM student_payment_topups WHERE id = ?");
-    $getStmt->bind_param("i", $topup_id);
-    $getStmt->execute();
-    $topupRow = $getStmt->get_result()->fetch_assoc();
-    $getStmt->close();
-    
-    if ($topupRow) {
-        // Update topup status to approved
-        $stmt = $mysqli->prepare("UPDATE student_payment_topups SET status_approved = 'approved' WHERE id = ?");
-        $stmt->bind_param("i", $topup_id);
-        $stmt->execute();
+// Handle approval for expenses
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_expense'])) {
+    $expense_id = intval($_POST['expense_id']);
+    $stmt = $mysqli->prepare("UPDATE expenses SET status = 'approved' WHERE id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $expense_id);
+        if ($stmt->execute()) {
+            header("Location: pendingrequest.php?tab=expenses&approved=1");
+            exit();
+        }
         $stmt->close();
-        
-        // Update payment status back to previous status (usually 'approved')
-        $updatePaymentStmt = $mysqli->prepare("UPDATE student_payments SET status_approved = ? WHERE id = ?");
-        $updatePaymentStmt->bind_param("si", $topupRow['previous_status'], $topupRow['payment_id']);
-        $updatePaymentStmt->execute();
-        $updatePaymentStmt->close();
     }
-    
-    header("Location: pendingrequest.php?tab=student_payments&subtab=topups&approved=1");
-    exit();
+}
+
+// Handle rejection for expenses
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_expense'])) {
+    $expense_id = intval($_POST['expense_id']);
+    $stmt = $mysqli->prepare("DELETE FROM expenses WHERE id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $expense_id);
+        if ($stmt->execute()) {
+            header("Location: pendingrequest.php?tab=expenses&rejected=1");
+            exit();
+        }
+        $stmt->close();
+    }
 }
 
 // Include layout AFTER all header operations
@@ -198,6 +212,16 @@ ORDER BY created_at DESC";
 $topupsResult = $mysqli->query($topupsQuery);
 $pending_topups = $topupsResult->fetch_all(MYSQLI_ASSOC);
 
+// Get unapproved expenses
+$expensesQuery = "SELECT 
+    id, category, item, amount, date, recorded_by, status, created_at
+FROM expenses
+WHERE status = 'unapproved'
+ORDER BY created_at DESC";
+
+$expensesResult = $mysqli->query($expensesQuery);
+$unapproved_expenses = $expensesResult->fetch_all(MYSQLI_ASSOC);
+
 $message = '';
 if (isset($_GET['approved']) && $_GET['approved'] == 1) {
     $message = "Record approved successfully!";
@@ -219,6 +243,9 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
     </a>
     <a href="?tab=student_payments" class="pending-tab-btn <?= $active_tab === 'student_payments' ? 'active' : '' ?>">
         <i class="bi bi-credit-card"></i> Student Payments
+    </a>
+    <a href="?tab=expenses" class="pending-tab-btn <?= $active_tab === 'expenses' ? 'active' : '' ?>">
+        <i class="bi bi-receipt"></i> Expenses
     </a>
 </div>
 
@@ -418,6 +445,76 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
                     </div>
                 <?php endif; ?>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab 3: Expenses -->
+<div class="tab-content <?= $active_tab === 'expenses' ? 'active' : '' ?>" id="expenses-tab">
+    <div class="card shadow-sm border-0">
+        <div class="card-header pending-card-header text-white">
+            <h5 class="mb-0">Pending Expenses</h5>
+        </div>
+        <div class="card-body">
+            <?php if (empty($unapproved_expenses)): ?>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No pending expenses.
+                </div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Item</th>
+                                <th>Amount</th>
+                                <th>Date</th>
+                                <th>Recorded By</th>
+                                <th>Date Added</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($unapproved_expenses as $expense): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($expense['category']) ?></td>
+                                    <td><?= htmlspecialchars($expense['item']) ?></td>
+                                    <td><?= number_format($expense['amount'], 2) ?></td>
+                                    <td><?= date('Y-m-d', strtotime($expense['date'])) ?></td>
+                                    <td>
+                                        <?php
+                                        $userQuery = "SELECT name FROM users WHERE id = ?";
+                                        $userStmt = $mysqli->prepare($userQuery);
+                                        $userStmt->bind_param("i", $expense['recorded_by']);
+                                        $userStmt->execute();
+                                        $userName = $userStmt->get_result()->fetch_assoc()['name'] ?? 'N/A';
+                                        $userStmt->close();
+                                        echo htmlspecialchars($userName);
+                                        ?>
+                                    </td>
+                                    <td><?= date('Y-m-d', strtotime($expense['created_at'])) ?></td>
+                                    <td>
+                                        <div class="action-button-group">
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="expense_id" value="<?= $expense['id'] ?>">
+                                                <button type="submit" name="approve_expense" class="btn-approve" onclick="return confirm('Approve this expense?')">
+                                                    <i class="bi bi-check-circle"></i> Approve
+                                                </button>
+                                            </form>
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="expense_id" value="<?= $expense['id'] ?>">
+                                                <button type="submit" name="reject_expense" class="btn-reject" onclick="return confirm('Reject this expense?')">
+                                                    <i class="bi bi-x-circle"></i> Reject
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

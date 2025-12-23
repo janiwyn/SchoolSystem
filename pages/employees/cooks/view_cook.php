@@ -5,21 +5,21 @@ require_once __DIR__ . '/../helper/layout.php'; // layout helper
 
 // Check if ID is provided
 if (!isset($_GET['id']) || empty($_GET['id'])) {
-    die("Teacher ID is missing.");
+    die("Cook ID is missing.");
 }
 
-$teacher_id = intval($_GET['id']);
+$cook_id = intval($_GET['id']);
 
-// Fetch teacher from DB
-$stmt = $mysqli->prepare("SELECT * FROM teachers WHERE id = ?");
-$stmt->bind_param("i", $teacher_id);
+// Fetch cook from DB
+$stmt = $mysqli->prepare("SELECT * FROM cooks WHERE id = ?");
+$stmt->bind_param("i", $cook_id);
 $stmt->execute();
 $result = $stmt->get_result();
-$teacher = $result->fetch_assoc();
+$cook = $result->fetch_assoc();
 $stmt->close();
 
-if (!$teacher) {
-    die("Teacher not found.");
+if (!$cook) {
+    die("Cook not found.");
 }
 ?>
 
@@ -28,7 +28,7 @@ if (!$teacher) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($title ?? 'Teacher Details') ?></title>
+    <title><?= htmlspecialchars($title ?? 'Cook Details') ?></title>
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -106,7 +106,7 @@ if (!$teacher) {
             <!-- Header -->
             <div class="profile-header">
                 <h4 class="mb-0">
-                    <i class="bi bi-person-badge-fill"></i> Teacher Profile
+                    <i class="bi bi-person-badge-fill"></i> Cook Profile
                 </h4>
             </div>
 
@@ -115,10 +115,10 @@ if (!$teacher) {
 
                 <!-- Photo -->
                 <div class="text-center mb-4">
-                    <?php if (!empty($teacher['photo']) && file_exists("uploads/" . $teacher['photo'])): ?>
-                        <img src="uploads/<?= htmlspecialchars($teacher['photo']) ?>"
+                    <?php if (!empty($cook['photo']) && file_exists("uploads/" . $cook['photo'])): ?>
+                        <img src="uploads/<?= htmlspecialchars($cook['photo']) ?>"
                              class="profile-photo"
-                             alt="Teacher Photo">
+                             alt="Cook Photo">
                     <?php else: ?>
                         <img src="../../../../assets/images/default-avatar.png"
                              class="profile-photo"
@@ -128,7 +128,7 @@ if (!$teacher) {
 
                 <!-- Name -->
                 <h5 class="text-center profile-name mb-4">
-                    <?= htmlspecialchars($teacher['first_name'] . ' ' . $teacher['last_name']) ?>
+                    <?= htmlspecialchars($cook['first_name'] . ' ' . $cook['last_name']) ?>
                 </h5>
 
                 <!-- Details -->
@@ -136,43 +136,35 @@ if (!$teacher) {
                     <table class="table table-bordered details-table align-middle">
                         <tr>
                             <th>Gender</th>
-                            <td><?= htmlspecialchars($teacher['gender']) ?></td>
+                            <td><?= htmlspecialchars($cook['gender']) ?></td>
                         </tr>
                         <tr>
                             <th>Date of Birth</th>
-                            <td><?= htmlspecialchars($teacher['dob']) ?></td>
+                            <td><?= htmlspecialchars($cook['dob']) ?></td>
                         </tr>
                         <tr>
                             <th>ID Number</th>
-                            <td><?= htmlspecialchars($teacher['id_no']) ?></td>
+                            <td><?= htmlspecialchars($cook['id_no']) ?></td>
                         </tr>
                         <tr>
                             <th>Email</th>
-                            <td><?= htmlspecialchars($teacher['email']) ?></td>
+                            <td><?= htmlspecialchars($cook['email']) ?></td>
                         </tr>
                         <tr>
                             <th>Phone</th>
-                            <td><?= htmlspecialchars($teacher['phone']) ?></td>
-                        </tr>
-                        <tr>
-                            <th>Class</th>
-                            <td><?= htmlspecialchars($teacher['class']) ?></td>
+                            <td><?= htmlspecialchars($cook['phone']) ?></td>
                         </tr>
                         <tr>
                             <th>Section</th>
-                            <td><?= htmlspecialchars($teacher['section']) ?></td>
-                        </tr>
-                        <tr>
-                            <th>Subject</th>
-                            <td><?= htmlspecialchars($teacher['subject']) ?></td>
+                            <td><?= htmlspecialchars($cook['section']) ?></td>
                         </tr>
                         <tr>
                             <th>Address</th>
-                            <td><?= htmlspecialchars($teacher['address']) ?></td>
+                            <td><?= htmlspecialchars($cook['address']) ?></td>
                         </tr>
                         <tr>
                             <th>Bio</th>
-                            <td><?= htmlspecialchars($teacher['bio']) ?></td>
+                            <td><?= htmlspecialchars($cook['bio']) ?></td>
                         </tr>
                     </table>
                 </div>

@@ -72,6 +72,7 @@ $query = "SELECT
     expenses.quantity,
     expenses.amount,
     expenses.date,
+    expenses.status,
     users.name as recorded_by,
     expenses.created_at
 FROM expenses
@@ -199,6 +200,7 @@ $totals = $totalsResult->fetch_assoc();
                             <th>Quantity</th>
                             <th>Amount ($)</th>
                             <th>Recorded By</th>
+                            <th>Status</th>
                             <th>Recorded Date</th>
                         </tr>
                     </thead>
@@ -211,16 +213,22 @@ $totals = $totalsResult->fetch_assoc();
                                 <td><?= number_format($expense['quantity'], 2) ?></td>
                                 <td><?= number_format($expense['amount'], 2) ?></td>
                                 <td><?= htmlspecialchars($expense['recorded_by'] ?? 'System') ?></td>
+                                <td>
+                                    <?php if ($expense['status'] === 'approved'): ?>
+                                        <span class="badge bg-success">Approved</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-warning text-dark">Unapproved</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= date('Y-m-d H:i', strtotime($expense['created_at'])) ?></td>
                             </tr>
                         <?php endforeach; ?>
                         
                         <!-- Totals Row -->
                         <tr class="table-totals">
-                            <td colspan="3" class="text-end fw-bold">TOTALS:</td>
-                            <td><?= number_format($totals['total_quantity'] ?? 0, 2) ?></td>
+                            <td colspan="4" class="text-end fw-bold">TOTALS:</td>
                             <td><?= number_format($totals['total_amount'] ?? 0, 2) ?></td>
-                            <td colspan="2"></td>
+                            <td colspan="3"></td>
                         </tr>
                     </tbody>
                 </table>
