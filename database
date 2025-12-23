@@ -359,3 +359,21 @@ CREATE TABLE student_payments (
     FOREIGN KEY (student_id) REFERENCES admit_students(id),
     FOREIGN KEY (recorded_by) REFERENCES users(id)
 );
+
+
+
+
+CREATE TABLE expenses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    category VARCHAR(100) NOT NULL,
+    item VARCHAR(255) NOT NULL,
+    quantity DECIMAL(10, 2) DEFAULT 0,
+    amount DECIMAL(12, 2) NOT NULL,
+    date DATE NOT NULL,
+    recorded_by INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recorded_by) REFERENCES users(id),
+    INDEX (date),
+    INDEX (category),
+    INDEX (recorded_by)
+);

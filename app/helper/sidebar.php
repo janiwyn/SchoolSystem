@@ -49,6 +49,11 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             <span>Audit</span>
         </a>
         
+        <a href="../finance/expenses.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'expenses.php' ? 'active' : '' ?>">
+            <i class="bi bi-receipt"></i>
+            <span>Expenses</span>
+        </a>
+        
         <!-- Employees Dropdown -->
         <a href="#" class="nav-item" data-bs-toggle="collapse" data-bs-target="#employeesMenu">
             <i class="bi bi-briefcase-fill"></i>

@@ -207,153 +207,6 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
 }
 ?>
 
-<style>
-    .pending-card-header {
-        background-color: #17a2b8 !important;
-    }
-    
-    .pending-tabs {
-        margin-bottom: 20px;
-        display: flex;
-        gap: 10px;
-    }
-    
-    .pending-tab-btn {
-        padding: 8px 16px;
-        font-weight: 600;
-        border-radius: 4px;
-        border: 2px solid #17a2b8;
-        background-color: white;
-        color: #17a2b8;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-size: 14px;
-    }
-    
-    .pending-tab-btn.active {
-        background-color: #17a2b8;
-        color: white;
-    }
-    
-    .pending-tab-btn:hover {
-        background-color: #17a2b8;
-        color: white;
-    }
-    
-    .sub-tabs {
-        margin-bottom: 15px;
-        display: flex;
-        gap: 8px;
-        border-bottom: 2px solid #17a2b8;
-        padding-bottom: 10px;
-    }
-    
-    .sub-tab-btn {
-        padding: 6px 14px;
-        font-weight: 600;
-        border-radius: 4px;
-        border: 1px solid #17a2b8;
-        background-color: white;
-        color: #17a2b8;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-size: 13px;
-    }
-    
-    .sub-tab-btn.active {
-        background-color: #17a2b8;
-        color: white;
-    }
-    
-    .sub-tab-btn:hover {
-        background-color: #17a2b8;
-        color: white;
-    }
-    
-    .tab-content {
-        display: none;
-    }
-    
-    .tab-content.active {
-        display: block;
-    }
-    
-    .sub-tab-content {
-        display: none;
-    }
-    
-    .sub-tab-content.active {
-        display: block;
-    }
-    
-    .action-button-group {
-        display: flex;
-        gap: 8px;
-    }
-    
-    .btn-approve {
-        background-color: #28a745;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-    
-    .btn-approve:hover {
-        background-color: #218838;
-    }
-    
-    .btn-reject {
-        background-color: #dc3545;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-    }
-    
-    .btn-reject:hover {
-        background-color: #c82333;
-    }
-    
-    .table-container {
-        overflow-x: auto;
-    }
-    
-    .table {
-        font-size: 13px;
-        margin: 0;
-    }
-    
-    .table thead th {
-        background-color: #17a2b8;
-        color: white;
-        font-weight: 600;
-        border: none;
-        padding: 12px;
-        text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 0.5px;
-    }
-    
-    .table tbody td {
-        padding: 10px 12px;
-        border-color: #eee;
-        vertical-align: middle;
-    }
-    
-    .table tbody tr:hover {
-        background-color: #f8f9fa;
-    }
-</style>
-
 <!-- Message Display -->
 <?php if (!empty($message)): ?>
     <div class="alert alert-success mb-4"><?= htmlspecialchars($message) ?></div>
@@ -367,13 +220,10 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
     <a href="?tab=student_payments" class="pending-tab-btn <?= $active_tab === 'student_payments' ? 'active' : '' ?>">
         <i class="bi bi-credit-card"></i> Student Payments
     </a>
-    <a href="?tab=payrolls" class="pending-tab-btn <?= $active_tab === 'payrolls' ? 'active' : '' ?>">
-        <i class="bi bi-file-earmark-text"></i> Payrolls
-    </a>
 </div>
 
 <!-- Tab 1: Admitted Students -->
-<div class="tab-content <?= $active_tab === 'admitted_students' ? 'active' : '' ?>">
+<div class="tab-content <?= $active_tab === 'admitted_students' ? 'active' : '' ?>" id="admitted_students-tab">
     <div class="card shadow-sm border-0">
         <div class="card-header pending-card-header text-white">
             <h5 class="mb-0">Pending Admitted Students</h5>
@@ -437,7 +287,7 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
 </div>
 
 <!-- Tab 2: Student Payments (with sub-tabs) -->
-<div class="tab-content <?= $active_tab === 'student_payments' ? 'active' : '' ?>">
+<div class="tab-content <?= $active_tab === 'student_payments' ? 'active' : '' ?>" id="student_payments-tab">
     <div class="card shadow-sm border-0">
         <div class="card-header pending-card-header text-white">
             <h5 class="mb-0">Pending Student Payments</h5>
@@ -572,40 +422,7 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
     </div>
 </div>
 
-<!-- Tab 3: Payrolls -->
-<div class="tab-content <?= $active_tab === 'payrolls' ? 'active' : '' ?>">
-    <div class="card shadow-sm border-0">
-        <div class="card-header pending-card-header text-white">
-            <h5 class="mb-0">Pending Payrolls</h5>
-        </div>
-        <div class="card-body">
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> Payroll approvals will be displayed here.
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-    function switchSubTab(tabName) {
-        // Hide all sub-tab contents
-        document.getElementById('payments-content').classList.remove('active');
-        document.getElementById('topups-content').classList.remove('active');
-        
-        // Remove active class from all sub-tab buttons
-        document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
-        
-        // Show selected sub-tab content
-        document.getElementById(tabName + '-content').classList.add('active');
-        
-        // Add active class to clicked button
-        event.target.classList.add('active');
-        
-        // Update URL
-        const urlParams = new URLSearchParams(window.location.search);
-        urlParams.set('subtab', tabName);
-        window.history.pushState(null, '', '?' + urlParams.toString());
-    }
-</script>
+<link rel="stylesheet" href="../../assets/css/pendingrequest.css">
+<script src="../../assets/js/pendingrequest.js"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

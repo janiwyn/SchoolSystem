@@ -46,7 +46,7 @@ $stmt->close();
                     break;
 
                 case 'bursar':
-                    header("Location: ../app/bursar/dashboard.php");
+                    header("Location: ../app/finance/dashboard.php");
                     break;
 
                 default:
@@ -69,69 +69,213 @@ $stmt->close();
   <meta charset="UTF-8">
   <title>School System Login</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
 
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
-      height: 100vh;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #1c1c1c, #2a5298);
+      background: linear-gradient(135deg, #1a3a52 0%, #2c5282 50%, #1a3a52 100%);
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
     }
-    .login-card {
-      background: #fff;
-      border-radius: 20px;
-      padding: 2.5rem;
-      box-shadow: 0 10px 35px rgba(0,0,0,0.25);
-      max-width: 420px;
+
+    .login-container {
       width: 100%;
+      max-width: 420px;
     }
-    .form-control {
-      border-radius: 50px;
-      padding: 0.7rem 1rem;
+
+    .login-card {
+      background: white;
+      border-radius: 16px;
+      padding: 35px 30px;
+      box-shadow: 0 15px 50px rgba(0, 0, 0, 0.2);
+      animation: slideUp 0.5s ease-out;
     }
-    .btn-school {
-      background: linear-gradient(90deg, #2a5298, #1e3c72);
-      color: #fff;
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .login-logo {
+      display: inline-block;
+      margin-bottom: 20px;
+    }
+
+    .login-logo img {
+      max-width: 100px;
+      height: auto;
+      display: block;
+    }
+
+    .login-header h5 {
+      font-size: 13px;
+      color: #7f8c8d;
+      margin: 0;
+      font-weight: 500;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
       font-weight: 600;
-      border-radius: 50px;
+      color: #2c3e50;
+      margin-bottom: 6px;
+    }
+
+    .form-control {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      transition: all 0.3s ease;
+      background-color: #f8f9fa;
+    }
+
+    .form-control:focus {
+      border-color: #3498db;
+      background-color: white;
+      box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.15);
+      outline: none;
+    }
+
+    .alert {
+      border-radius: 8px;
+      border: none;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+      font-size: 13px;
+      animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .alert-danger {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 6px;
+    }
+
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(52, 152, 219, 0.3);
+    }
+
+    .btn-login:active {
+      transform: translateY(0);
+    }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid #ecf0f1;
+    }
+
+    .login-footer p {
+      font-size: 13px;
+      color: #7f8c8d;
+      margin: 0;
+    }
+
+    .login-footer a {
+      color: #3498db;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .login-footer a:hover {
+      color: #2980b9;
+      text-decoration: underline;
     }
   </style>
 </head>
 <body>
 
-<div class="login-card">
+<div class="login-container">
+  <div class="login-card">
+    <!-- Header with Logo -->
+    <div class="login-header">
+      <div class="login-logo">
+        <img src="../assets/images/logo.png" alt="Business Logo">
+      </div>
+      <h5>Secure Login</h5>
+    </div>
 
-  <div class="text-center mb-3">
-    <h4>School Management System</h4>
-    <p class="text-muted">Secure Login</p>
+    <!-- Error Message -->
+    <?php if (!empty($error)): ?>
+      <div class="alert alert-danger">
+        <i class="bi bi-exclamation-circle"></i> <?= htmlspecialchars($error) ?>
+      </div>
+    <?php endif; ?>
+
+    <!-- Form -->
+    <form method="POST">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" class="form-control" placeholder="Enter your username" required>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" class="form-control" placeholder="Enter your password" required>
+      </div>
+
+      <button type="submit" class="btn-login">Login</button>
+    </form>
+
+    <!-- Footer -->
+    <div class="login-footer">
+      <p>Don't have an account? <a href="register.php">Register here</a></p>
+    </div>
   </div>
-
-  <?php if (!empty($error)): ?>
-    <div class="alert alert-danger text-center">
-      <?= htmlspecialchars($error); ?>
-    </div>
-  <?php endif; ?>
-
-  <form method="POST">
-    <div class="mb-3">
-      <label class="fw-semibold">Username</label>
-      <input type="text" name="username" class="form-control" required>
-    </div>
-
-    <div class="mb-3">
-      <label class="fw-semibold">Password</label>
-      <input type="password" name="password" class="form-control" required>
-    </div>
-
-    <button class="btn btn-school w-100">Login</button>
-  </form>
-
-  <div class="text-center mt-3">
-    <p>Don't have an account? <a href="register.php">Register</a></p>
-  </div>
-
 </div>
 
 </body>
