@@ -12,6 +12,21 @@ $notifResult = $notifStmt->get_result();
 $notifRow = $notifResult->fetch_assoc();
 $unreadCount = $notifRow['unread_count'] ?? 0;
 $notifStmt->close();
+
+// Get recent unread notifications for modal (max 5)
+$recentNotifQuery = "SELECT id, title, message, type, created_at FROM notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5";
+$recentNotifStmt = $mysqli->prepare($recentNotifQuery);
+$recentNotifStmt->bind_param("i", $_SESSION['user_id']);
+$recentNotifStmt->execute();
+$recentNotifResult = $recentNotifStmt->get_result();
+$recentNotifications = $recentNotifResult->fetch_all(MYSQLI_ASSOC);
+$recentNotifStmt->close();
+
+// Check if user just logged in (first page load in session)
+$justLoggedIn = !isset($_SESSION['notif_shown']) && !empty($recentNotifications);
+if ($justLoggedIn) {
+    $_SESSION['notif_shown'] = true;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -28,6 +43,10 @@ $notifStmt->close();
         <link rel="stylesheet" href="../../assets/css/tuition.css">
     <?php elseif ($title === "Admit Students"): ?>
         <link rel="stylesheet" href="../../assets/css/admitStudents.css">
+    <?php elseif ($title === "Tuition Audit"): ?>
+        <link rel="stylesheet" href="../../assets/css/audit.css">
+    <?php elseif ($title === "Student Payments"): ?>
+        <link rel="stylesheet" href="../../assets/css/studentPayments.css">
     <?php endif; ?>
     <style>
         * {
@@ -140,6 +159,196 @@ $notifStmt->close();
         .notification-badge.hidden {
             display: none;
         }
+
+        /* Notification Modal Styles */
+        .notification-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.4s ease;
+        }
+
+        .notification-modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .notification-modal-content {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 500px;
+            max-height: 600px;
+            display: flex;
+            flex-direction: column;
+            transform: scale(0.9) translateY(-30px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .notification-modal-overlay.show .notification-modal-content {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+
+        .notification-modal-header {
+            background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .notification-modal-header h5 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .notification-modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .notification-modal-close:hover {
+            transform: rotate(90deg);
+        }
+
+        .notification-modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .notification-item-modal {
+            background: #f8f9fa;
+            border-left: 4px solid #17a2b8;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .notification-item-modal:hover {
+            background: #e3f2fd;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .notification-item-modal:last-child {
+            margin-bottom: 0;
+        }
+
+        .notification-item-modal-title {
+            font-weight: 700;
+            color: #2c3e50;
+            font-size: 14px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .notification-item-modal-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .type-warning {
+            background-color: #ffc107;
+            color: #333;
+        }
+
+        .type-info {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .notification-item-modal-message {
+            color: #666;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+
+        .notification-item-modal-time {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .notification-modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+            border-radius: 0 0 12px 12px;
+            background: #f8f9fa;
+        }
+
+        .notification-modal-footer button {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .btn-close-modal {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-close-modal:hover {
+            background-color: #5a6268;
+        }
+
+        .btn-view-all {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .btn-view-all:hover {
+            background-color: #138496;
+        }
+
+        .notification-modal-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+
+        .notification-modal-empty i {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body>
@@ -167,6 +376,45 @@ $notifStmt->close();
             </div>
         </div>
     </nav>
+
+    <!-- Notification Modal -->
+    <div class="notification-modal-overlay <?= $justLoggedIn ? 'show' : '' ?>" id="notificationModal">
+        <div class="notification-modal-content">
+            <div class="notification-modal-header">
+                <h5><i class="bi bi-bell-fill"></i> New Notifications</h5>
+                <button class="notification-modal-close" onclick="closeNotificationModal()">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="notification-modal-body">
+                <?php if (empty($recentNotifications)): ?>
+                    <div class="notification-modal-empty">
+                        <i class="bi bi-bell-slash"></i>
+                        <p>No new notifications</p>
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($recentNotifications as $notif): ?>
+                        <div class="notification-item-modal">
+                            <div class="notification-item-modal-title">
+                                <?= htmlspecialchars($notif['title']) ?>
+                                <span class="notification-item-modal-badge type-<?= htmlspecialchars($notif['type']) ?>">
+                                    <?= ucfirst(htmlspecialchars($notif['type'])) ?>
+                                </span>
+                            </div>
+                            <p class="notification-item-modal-message"><?= htmlspecialchars($notif['message']) ?></p>
+                            <div class="notification-item-modal-time">
+                                <i class="bi bi-clock"></i> <?= date('Y-m-d H:i', strtotime($notif['created_at'])) ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+            <div class="notification-modal-footer">
+                <button class="btn-close-modal" onclick="closeNotificationModal()">Close</button>
+                <button class="btn-view-all" onclick="goToNotifications()">View All</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Main Container -->
     <div class="container mt-4">
