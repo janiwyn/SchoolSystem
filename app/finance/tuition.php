@@ -62,9 +62,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_tuition'])) {
     }
 }
 
-// Check for success message from redirect
+// Handle edit form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_tuition'])) {
+    $tuition_id = intval($_POST['tuition_id']);
+    $year = trim($_POST['year']);
+    $class_name = trim($_POST['class_name']);
+    $term = trim($_POST['term']);
+    $amount = trim($_POST['amount']);
+
+    if (!$year || !$class_name || !$term || !$amount) {
+        $error = "All fields are required";
+    } elseif (!is_numeric($year) || $year < 2000 || $year > 2100) {
+        $error = "Please enter a valid year";
+    } elseif (!is_numeric($amount) || $amount <= 0) {
+        $error = "Please enter a valid amount";
+    } else {
+        // Get or create class
+        $checkClassStmt = $mysqli->prepare("SELECT id FROM classes WHERE class_name = ?");
+        $checkClassStmt->bind_param("s", $class_name);
+        $checkClassStmt->execute();
+        $classResult = $checkClassStmt->get_result();
+        
+        if ($classResult->num_rows > 0) {
+            $classRow = $classResult->fetch_assoc();
+            $class_id = $classRow['id'];
+        } else {
+            $insertClassStmt = $mysqli->prepare("INSERT INTO classes (class_name) VALUES (?)");
+            $insertClassStmt->bind_param("s", $class_name);
+            $insertClassStmt->execute();
+            $class_id = $mysqli->insert_id;
+            $insertClassStmt->close();
+        }
+        $checkClassStmt->close();
+
+        // Update tuition record
+        $stmt = $mysqli->prepare("UPDATE fee_structure SET class_id = ?, term = ?, amount = ? WHERE id = ?");
+        if ($stmt) {
+            $stmt->bind_param("isdi", $class_id, $term, $amount, $tuition_id);
+            if ($stmt->execute()) {
+                // Redirect to prevent form resubmission - BEFORE layout include
+                header("Location: tuition.php?updated=1");
+                exit();
+            } else {
+                $error = "Error updating tuition: " . $stmt->error;
+            }
+            $stmt->close();
+        }
+    }
+}
+
+// Check for success/update messages
 if (isset($_GET['success']) && $_GET['success'] == 1) {
     $message = "Tuition record added successfully!";
+}
+
+if (isset($_GET['updated']) && $_GET['updated'] == 1) {
+    $message = "Tuition record updated successfully!";
+}
+
+if (isset($_GET['deleted']) && $_GET['deleted'] == 1) {
+    $message = "Tuition record deleted successfully!";
 }
 
 // Include layout AFTER all header operations
@@ -243,6 +300,7 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                             <th>Term</th>
                             <th>Expected Tuition</th>
                             <th>Recorded By</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -254,6 +312,16 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                                 <td><?= htmlspecialchars($tuition['term']) ?></td>
                                 <td><?= number_format($tuition['amount'], 2) ?></td>
                                 <td><?= htmlspecialchars($tuition['recorded_by'] ?? 'System') ?></td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $tuition['id'] ?>, <?= $tuition['year'] ?>, '<?= htmlspecialchars($tuition['class_name']) ?>', '<?= htmlspecialchars($tuition['term']) ?>', <?= $tuition['amount'] ?>)" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
+                                            Edit
+                                        </button>
+                                        <a href="deleteTuition.php?id=<?= $tuition['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure you want to delete this record?')" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
+                                            Delete
+                                        </a>
+                                    </div>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -262,5 +330,57 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
         <?php endif; ?>
     </div>
 </div>
+
+<!-- Edit Tuition Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header form-header text-white">
+                <h5 class="modal-title">Edit Tuition Record</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" class="modal-body">
+                <input type="hidden" name="edit_tuition" value="1">
+                <input type="hidden" name="tuition_id" id="editTuitionId">
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Year</label>
+                        <input type="text" name="year" id="editYear" class="form-control" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Class</label>
+                        <input type="text" name="class_name" id="editClassName" class="form-control" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Term</label>
+                        <select name="term" id="editTerm" class="form-control" required>
+                            <option value="">Select Term</option>
+                            <option value="Term 1">Term 1</option>
+                            <option value="Term 2">Term 2</option>
+                            <option value="Term 3">Term 3</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Expected Tuition</label>
+                        <input type="number" name="amount" id="editAmount" class="form-control" step="0.01" min="0" required>
+                    </div>
+                </div>
+
+                <div class="modal-footer mt-4">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-form-submit">
+                        <i class="bi bi-check-circle"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="../../assets/js/tuition.js"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>
