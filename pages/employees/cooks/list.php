@@ -28,13 +28,14 @@ $result = $stmt->get_result();
     <title>Cooks</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- Bootstrap -->
+    <!-- Bootstrap & Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 
     <style>
         body {
             background: #f4fbff;
+            font-family: "Segoe UI", sans-serif;
         }
 
         .page-title {
@@ -44,47 +45,61 @@ $result = $stmt->get_result();
 
         .cook-card {
             border: none;
-            border-radius: 12px;
+            border-radius: 18px;
             background: #ffffff;
-            box-shadow: 0 8px 18px rgba(13,110,253,0.08);
-            transition: transform .2s ease, box-shadow .2s ease;
+            box-shadow: 0 15px 40px rgba(13,110,253,0.12);
+            transition: transform .3s ease, box-shadow .3s ease;
+            padding: 25px 15px;
         }
 
         .cook-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 25px rgba(13,110,253,0.15);
+            transform: translateY(-6px);
+            box-shadow: 0 18px 50px rgba(13,110,253,0.2);
         }
 
         .cook-photo {
-            width: 90px;
-            height: 90px;
+            width: 120px;
+            height: 120px;
             object-fit: cover;
             border-radius: 50%;
-            border: 3px solid #e7f3ff;
+            border: 5px solid #e7f3ff;
+            margin-bottom: 15px;
         }
 
         .badge-blue {
             background: #e7f3ff;
             color: #0d6efd;
             font-weight: 500;
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 0.85rem;
         }
 
         .search-box {
             border-radius: 10px;
             border: 1px solid #cfe2ff;
         }
+
+        .btn-outline-info,
+        .btn-outline-warning,
+        .btn-outline-danger {
+            border-radius: 8px;
+            padding: 5px 12px;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 
 <body>
 
-<div class="container py-4">
+<div class="container py-5">
 
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h4 class="page-title mb-0">
             <i class="bi bi-people-fill"></i> Cooks
         </h4>
+        <a href="add.php" class="btn btn-success"><i class="bi bi-person-plus-fill"></i> Add Cook</a>
     </div>
 
     <!-- Search -->
@@ -94,6 +109,7 @@ $result = $stmt->get_result();
             <input type="text" name="search" class="form-control search-box"
                    placeholder="Search by ID or name"
                    value="<?= htmlspecialchars($search) ?>">
+            <button class="btn btn-primary"><i class="bi bi-search"></i> Search</button>
         </div>
     </form>
 
@@ -103,17 +119,14 @@ $result = $stmt->get_result();
         <?php if ($result->num_rows > 0): ?>
             <?php while ($row = $result->fetch_assoc()): ?>
                 <div class="col-xl-3 col-lg-4 col-md-6">
-                    <div class="card cook-card h-100 text-center p-3">
+                    <div class="card cook-card h-100 text-center">
+                      <img src="uploads/<?= $row['photo'] ?: 'default.png' ?>"
+                         alt="Cook Photo"
+                         class="cook-photo mx-auto d-block">
 
-                        <div class="mb-3">
-                            <img src="../../../<?= htmlspecialchars($row['photo']) ?>"
-                                 class="cook-photo"
-                                 alt="Cook Photo">
-                        </div>
-
-                        <h6 class="fw-bold mb-1">
+                        <h5 class="fw-bold mb-1">
                             <?= htmlspecialchars($row['first_name'] . ' ' . $row['last_name']) ?>
-                        </h6>
+                        </h5>
 
                         <span class="badge badge-blue mb-2">
                             <?= htmlspecialchars($row['section']) ?>
@@ -128,13 +141,13 @@ $result = $stmt->get_result();
                         </p>
 
                         <div class="d-flex justify-content-center gap-2 mt-auto">
-                            <a href="view.php?id=<?= $row['id'] ?>" class="btn btn-outline-info btn-sm">
+                            <a href="view_cook.php?id=<?= $row['id'] ?>" class="btn btn-outline-info btn-sm">
                                 <i class="bi bi-eye"></i>
                             </a>
-                            <a href="edit.php?id=<?= $row['id'] ?>" class="btn btn-outline-warning btn-sm">
+                            <a href="edit_cook.php?id=<?= $row['id'] ?>" class="btn btn-outline-warning btn-sm">
                                 <i class="bi bi-pencil"></i>
                             </a>
-                            <a href="delete.php?id=<?= $row['id'] ?>"
+                            <a href="delete_cook.php?id=<?= $row['id'] ?>"
                                class="btn btn-outline-danger btn-sm"
                                onclick="return confirm('Delete this cook?')">
                                 <i class="bi bi-trash"></i>

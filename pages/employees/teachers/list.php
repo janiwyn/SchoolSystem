@@ -182,7 +182,7 @@ $result = $stmt->get_result();
 
                                 <td class="text-center">
                                     <div class="d-flex gap-1 justify-content-center">
-                                        <a href="view.php?id=<?= $t['teacher_id'] ?>"
+                                        <a href="view.php?id=<?= $t['id'] ?>"
                                            class="btn btn-sm btn-outline-info">
                                             <i class="bi bi-eye"></i>
                                         </a>

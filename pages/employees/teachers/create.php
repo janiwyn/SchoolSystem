@@ -1,7 +1,7 @@
 <?php
-require_once __DIR__ . '/../../../app/config/db.php';
-require_once __DIR__ . '/../../../app/auth/auth.php';
-require_once __DIR__ . '../../../../app/helper/layout.php';
+require_once __DIR__ . '/../../../config/db.php';
+require_once __DIR__ . '/../../../auth/auth.php';
+require_once __DIR__ . '/../helper/layout.php';
 require_role(['admin']);
 
 $error = $success = '';
@@ -123,7 +123,7 @@ if (move_uploaded_file($_FILES['photo']['tmp_name'], $target)) {
         <nav aria-label="breadcrumb" class="mb-4">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item">
-                    <a href="../../../app/admin/dashboard.php">Home</a>
+                    <a href="../../../admin/dashboard.php">Home</a>
                 </li>
                 <li class="breadcrumb-item active">All Teachers</li>
             </ol>
@@ -216,5 +216,6 @@ if (move_uploaded_file($_FILES['photo']['tmp_name'], $target)) {
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

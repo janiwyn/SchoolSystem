@@ -84,12 +84,12 @@ $dashboardLink = $dashboardLinks[$role] ?? 'finance/dashboard.php';
                             </a>
                         </li>
 
-                        <li class="nav-item">
+                        <!-- <li class="nav-item">
                             <a href="../teachers/view.php"
                                class="nav-link text-white">
                                 📋 View Teacher
                             </a>
-                        </li>
+                        </li> -->
 
                         <li class="nav-item">
                             <a href="../teachers/payments.php"
@@ -115,9 +115,9 @@ $dashboardLink = $dashboardLinks[$role] ?? 'finance/dashboard.php';
             <li class="nav-item">
                 <a href="../cooks/create.php" class="nav-link text-white">➕ Add Cook</a>
             </li>
-            <li class="nav-item">
+            <!-- <li class="nav-item">
                 <a href="../cooks/view.php" class="nav-link text-white">📋 View Cook</a>
-            </li>
+            </li> -->
             <li class="nav-item">
                 <a href="../cooks/payments.php" class="nav-link text-white">💰 Payments</a>
             </li>

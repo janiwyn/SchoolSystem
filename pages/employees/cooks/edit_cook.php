@@ -7,40 +7,41 @@ require_role(['admin']);
 $error = '';
 $success = '';
 
-// Check if ID is provided
+// Get cook ID from URL
 if (!isset($_GET['id']) || empty($_GET['id'])) {
-    die("Teacher ID is missing.");
+    die("Cook ID is missing.");
 }
-$teacher_id = intval($_GET['id']);
+$cook_id = intval($_GET['id']);
 
-// Fetch teacher
-$stmt = $mysqli->prepare("SELECT * FROM teachers WHERE id = ?");
-$stmt->bind_param("i", $teacher_id);
+// Fetch cook
+$stmt = $mysqli->prepare("SELECT * FROM cooks WHERE id = ?");
+$stmt->bind_param("i", $cook_id);
 $stmt->execute();
 $result = $stmt->get_result();
-$teacher = $result->fetch_assoc();
+$cook = $result->fetch_assoc();
 $stmt->close();
 
-if (!$teacher) {
-    die("Teacher not found.");
+// Stop if cook not found
+if (!$cook) {
+    die("Cook not found.");
 }
+
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $first_name = trim($_POST['first_name']);
-    $last_name  = trim($_POST['last_name']);
-    $gender     = $_POST['gender'];
-    $dob        = $_POST['dob'];
-    $email      = $_POST['email'];
-    $phone      = $_POST['phone'];
-    $class      = $_POST['class'];
-    $section    = $_POST['section'];
-    $subject    = $_POST['subject'];
-    $address    = $_POST['address'];
-    $bio        = $_POST['bio'];
+    $fname = trim($_POST['first_name']);
+    $lname = trim($_POST['last_name']);
+    $gender = $_POST['gender'];
+    // $id_no = trim($_POST['id_no']);
+    $email = trim($_POST['email']);
+    $phone = trim($_POST['phone']);
+    $section = trim($_POST['section']);
+    $address = trim($_POST['address']);
+    $bio = trim($_POST['bio']);
+    $photo = '';
 
     // Update photo if uploaded
-    $photo = $teacher['photo'];
+    $photo = $cook['photo'];
     if (!empty($_FILES['photo']['name'])) {
         $targetDir = "uploads/";
         $photo = time() . "_" . basename($_FILES['photo']['name']);
@@ -48,18 +49,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $stmt = $mysqli->prepare(
-        "UPDATE teachers SET first_name=?, last_name=?, gender=?, dob=?, email=?, phone=?, class=?, section=?, subject=?, address=?, bio=?, photo=? WHERE id=?"
+        "UPDATE cooks SET first_name=?, last_name=?, gender=?, id_no=?, email=?, phone=?, section=?, address=?, bio=?, photo=? WHERE id=?"
     );
     $stmt->bind_param(
-        "ssssssssssssi",
-        $first_name, $last_name, $gender, $dob, $email, $phone,
-        $class, $section, $subject, $address, $bio, $photo, $teacher_id
+        "ssssssssssi",
+        $fname, $lname, $gender, $id_no, $email, $phone,
+        $section, $address, $bio, $photo, $cook_id
     );
 
     if ($stmt->execute()) {
-        $success = "Teacher updated successfully.";
+        $success = "Cook updated successfully.";
     } else {
-        $error = "Error updating teacher: " . $stmt->error;
+        $error = "Error updating cook: " . $stmt->error;
     }
     $stmt->close();
 }
@@ -70,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($title ?? 'Edit Teacher') ?></title>
+    <title><?= htmlspecialchars($title ?? 'Edit Cook') ?></title>
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -175,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </a>
                     </li>
                     <li class="breadcrumb-item active" aria-current="page">
-                        Teachers
+                        Cooks
                     </li>
                 </ol>
             </nav>
@@ -183,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <!-- Title -->
         <h4 class="page-title mb-4">
-            <i class="bi bi-pencil-square"></i> Edit Teacher
+            <i class="bi bi-pencil-square"></i> Edit Cook
         </h4>
 
         <!-- Alerts -->
@@ -203,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="col-md-6">
                     <input class="form-control"
                            name="first_name"
-                           value="<?= htmlspecialchars($teacher['first_name']) ?>"
+                           value="<?= htmlspecialchars($cook['first_name']) ?>"
                            placeholder="First Name"
                            required>
                 </div>
@@ -211,58 +212,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="col-md-6">
                     <input class="form-control"
                            name="last_name"
-                           value="<?= htmlspecialchars($teacher['last_name']) ?>"
+                           value="<?= htmlspecialchars($cook['last_name']) ?>"
                            placeholder="Last Name"
                            required>
                 </div>
 
                 <div class="col-md-6">
                     <select name="gender" class="form-select">
-                        <option value="Male" <?= $teacher['gender']=='Male'?'selected':'' ?>>Male</option>
-                        <option value="Female" <?= $teacher['gender']=='Female'?'selected':'' ?>>Female</option>
+                        <option value="Male" <?= $cook['gender']=='Male'?'selected':'' ?>>Male</option>
+                        <option value="Female" <?= $cook['gender']=='Female'?'selected':'' ?>>Female</option>
                     </select>
-                </div>
-
-                <div class="col-md-6">
-                    <input type="date"
-                           name="dob"
-                           value="<?= htmlspecialchars($teacher['dob']) ?>"
-                           class="form-control">
                 </div>
 
                 <div class="col-md-6">
                     <input name="email"
                            class="form-control"
-                           value="<?= htmlspecialchars($teacher['email']) ?>"
+                           value="<?= htmlspecialchars($cook['email']) ?>"
                            placeholder="Email">
                 </div>
 
                 <div class="col-md-6">
                     <input name="phone"
                            class="form-control"
-                           value="<?= htmlspecialchars($teacher['phone']) ?>"
+                           value="<?= htmlspecialchars($cook['phone']) ?>"
                            placeholder="Phone">
-                </div>
-
-                <div class="col-md-6">
-                    <input name="class"
-                           class="form-control"
-                           value="<?= htmlspecialchars($teacher['class']) ?>"
-                           placeholder="Class">
-                </div>
+        </div>
 
                 <div class="col-md-6">
                     <input name="section"
                            class="form-control"
-                           value="<?= htmlspecialchars($teacher['section']) ?>"
+                           value="<?= htmlspecialchars($cook['section']) ?>"
                            placeholder="Section">
-                </div>
-
-                <div class="col-md-6">
-                    <input name="subject"
-                           class="form-control"
-                           value="<?= htmlspecialchars($teacher['subject']) ?>"
-                           placeholder="Subject">
                 </div>
 
                 <div class="col-md-6">
@@ -273,20 +253,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <textarea name="address"
                               class="form-control"
                               rows="3"
-                              placeholder="Address"><?= htmlspecialchars($teacher['address']) ?></textarea>
+                              placeholder="Address"><?= htmlspecialchars($cook['address']) ?></textarea>
                 </div>
 
                 <div class="col-12">
                     <textarea name="bio"
                               class="form-control"
                               rows="3"
-                              placeholder="Short Bio"><?= htmlspecialchars($teacher['bio']) ?></textarea>
+                              placeholder="Short Bio"><?= htmlspecialchars($cook['bio']) ?></textarea>
                 </div>
 
                 <!-- Buttons -->
                 <div class="col-12 d-flex gap-3 mt-4">
                     <button class="btn btn-primary">
-                        <i class="bi bi-save"></i> Update Teacher
+                        <i class="bi bi-save"></i> Update Cook
                     </button>
 
                     <a href="list.php" class="btn btn-outline-secondary">
