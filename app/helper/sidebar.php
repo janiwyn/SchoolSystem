@@ -11,6 +11,7 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
 
 <aside class="sidebar">
     <div class="sidebar-header">
+        <img src="../../assets/images/logo.png" alt="School Logo" class="sidebar-logo">
         <h5 class="mb-0">School System</h5>
     </div>
     
@@ -41,6 +42,11 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
         <a href="../finance/studentPayments.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'studentPayments.php' ? 'active' : '' ?>">
             <i class="bi bi-credit-card"></i>
             <span>Student Payments</span>
+        </a>
+        
+        <a href="../finance/audit.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'audit.php' ? 'active' : '' ?>">
+            <i class="bi bi-shield-lock-fill"></i>
+            <span>Audit</span>
         </a>
         
         <!-- Employees Dropdown -->
@@ -109,16 +115,6 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
                 <span>Security Guards</span>
             </a>
         </div>
-
-        <a href="payroll.php" class="nav-item">
-            <i class="bi bi-file-earmark-text"></i>
-            <span>Payroll</span>
-        </a>
-        
-        <a href="audit.php" class="nav-item">
-            <i class="bi bi-shield-lock-fill"></i>
-            <span>Audit</span>
-        </a>
     </nav>
 
     <style>
@@ -148,6 +144,22 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
 
         .nav-item[data-bs-toggle="collapse"][aria-expanded="true"] .bi-chevron-down {
             transform: rotate(-180deg);
+        }
+
+        .sidebar-logo {
+            width: 60px;
+            height: 60px;
+            margin-right: 15px;
+            object-fit: contain;
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
         }
     </style>
 </aside>

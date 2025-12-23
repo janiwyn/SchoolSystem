@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
         $error = "Invalid payment information";
     } else {
         // Get current payment record
-        $paymentStmt = $mysqli->prepare("SELECT balance FROM student_payments WHERE id = ?");
+        $paymentStmt = $mysqli->prepare("SELECT balance, amount_paid, student_id, admission_no, full_name, status_approved FROM student_payments WHERE id = ?");
         $paymentStmt->bind_param("i", $payment_id);
         $paymentStmt->execute();
         $paymentResult = $paymentStmt->get_result();
@@ -93,12 +93,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
         } else if ($additional_amount > $paymentRow['balance']) {
             $error = "Payment amount exceeds remaining balance";
         } else {
-            // Update payment record
-            $new_balance = $paymentRow['balance'] - $additional_amount;
-            $updateStmt = $mysqli->prepare("UPDATE student_payments SET amount_paid = amount_paid + ?, balance = ? WHERE id = ?");
-            $updateStmt->bind_param("ddi", $additional_amount, $new_balance, $payment_id);
+            $original_balance = $paymentRow['balance'];
+            $original_amount_paid = $paymentRow['amount_paid'];
+            $previous_status = $paymentRow['status_approved'];
+            $new_balance = $original_balance - $additional_amount;
+            $new_amount_paid = $original_amount_paid + $additional_amount;
+            
+            // Update payment record - change status to unapproved for top-up approval
+            $new_status = 'unapproved';
+            
+            $updateStmt = $mysqli->prepare("UPDATE student_payments SET amount_paid = ?, balance = ?, status_approved = ? WHERE id = ?");
+            $updateStmt->bind_param("ddsi", $new_amount_paid, $new_balance, $new_status, $payment_id);
             
             if ($updateStmt->execute()) {
+                // Log the balance top-up with previous status
+                // Types: i=payment_id, i=student_id, s=admission_no, s=full_name, d=original_balance, d=topup_amount, d=new_balance, s=previous_status
+                $logStmt = $mysqli->prepare("INSERT INTO student_payment_topups (payment_id, student_id, admission_no, full_name, original_balance, topup_amount, new_balance, status_approved, previous_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'unapproved', ?)");
+                $logStmt->bind_param("iissddds", $payment_id, $paymentRow['student_id'], $paymentRow['admission_no'], $paymentRow['full_name'], $original_balance, $additional_amount, $new_balance, $previous_status);
+                $logStmt->execute();
+                $logStmt->close();
+                
                 header("Location: studentPayments.php?success=1");
                 exit();
             } else {
