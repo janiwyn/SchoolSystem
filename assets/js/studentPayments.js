@@ -23,40 +23,49 @@ function togglePaymentForm() {
 function populateStudentData() {
     const select = document.getElementById('studentSelect');
     const option = select.options[select.selectedIndex];
-    
+
     if (option.value === '') {
         // Clear all fields
         document.getElementById('fullName').value = '';
         document.getElementById('gender').value = '';
         document.getElementById('className').value = '';
         document.getElementById('dayBoarding').value = '';
-        document.getElementById('term').value = '';
         document.getElementById('expectedTuition').value = '';
         document.getElementById('admissionFee').value = '';
         document.getElementById('uniformFee').value = '';
         document.getElementById('parentContact').value = '';
         document.getElementById('parentEmail').value = '';
+        document.getElementById('studentStatus').value = '';
         return;
     }
-    
+
     // Populate fields from data attributes
-    document.getElementById('fullName').value = option.dataset.first + ' ' + option.dataset.last;
-    document.getElementById('gender').value = option.dataset.gender;
-    document.getElementById('className').value = option.dataset.class;
-    document.getElementById('dayBoarding').value = option.dataset.boarding;
-    document.getElementById('admissionFee').value = option.dataset.admissionFee;
-    document.getElementById('uniformFee').value = option.dataset.uniformFee;
-    document.getElementById('parentContact').value = option.dataset.contact;
-    document.getElementById('parentEmail').value = option.dataset.email;
+    const firstName = option.getAttribute('data-first');
+    const lastName = option.getAttribute('data-last');
+    const fullName = firstName + ' ' + lastName;
+
+    document.getElementById('fullName').value = fullName;
+    document.getElementById('gender').value = option.getAttribute('data-gender');
+    document.getElementById('className').value = option.getAttribute('data-class');
+    document.getElementById('dayBoarding').value = option.getAttribute('data-boarding');
+    document.getElementById('expectedTuition').value = option.getAttribute('data-admission-fee') || 0;
+    document.getElementById('admissionFee').value = option.getAttribute('data-admission-fee');
+    document.getElementById('uniformFee').value = option.getAttribute('data-uniform-fee');
+    document.getElementById('parentContact').value = option.getAttribute('data-contact');
+    document.getElementById('parentEmail').value = option.getAttribute('data-email');
     
-    // Get expected tuition and term from server
-    fetch(`../api/getStudentTuition.php?class_id=${option.dataset.class}`)
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('expectedTuition').value = data.tuition || 0;
-            document.getElementById('term').value = data.term || '';
-        })
-        .catch(error => console.error('Error:', error));
+    // Display status with styling
+    const status = option.getAttribute('data-status');
+    const statusField = document.getElementById('studentStatus');
+    statusField.value = status.charAt(0).toUpperCase() + status.slice(1);
+    
+    if (status === 'unapproved') {
+        statusField.style.backgroundColor = '#fff3cd';
+        statusField.style.color = '#856404';
+    } else {
+        statusField.style.backgroundColor = '';
+        statusField.style.color = '';
+    }
 }
 
 function setPaymentId(paymentId, balance) {

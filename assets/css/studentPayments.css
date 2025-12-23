@@ -283,3 +283,21 @@
     color: white;
     text-decoration: none;
 }
+
+.btn-invoice {
+    display: inline-block;
+    background-color: #e74c3c;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-invoice:hover {
+    background-color: #c0392b;
+    color: white;
+    text-decoration: none;
+}

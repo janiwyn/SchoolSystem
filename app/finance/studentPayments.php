@@ -206,12 +206,12 @@ WHERE $filterWhere";
 $totalsResult = $mysqli->query($totalsQuery);
 $totals = $totalsResult->fetch_assoc();
 
-// Get approved students for dropdown
+// Get approved students for dropdown - MODIFIED to include unapproved students
 $approvedStudentsQuery = "SELECT 
     id, admission_no, first_name, last_name, gender, class_id, day_boarding, 
-    admission_fee, uniform_fee, parent_contact, parent_email
+    admission_fee, uniform_fee, parent_contact, parent_email, status
 FROM admit_students
-WHERE status = 'approved'
+WHERE status IN ('approved', 'unapproved')
 ORDER BY first_name ASC";
 
 $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
@@ -225,9 +225,10 @@ $approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
 
 // Debug: Check if students were found
 if (empty($approved_students)) {
-    // If no approved students, fetch ALL students to help with debugging
+    // If no students, fetch ALL students to help with debugging
     $debugQuery = "SELECT COUNT(*) as total, 
-                          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count
+                          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
+                          SUM(CASE WHEN status = 'unapproved' THEN 1 ELSE 0 END) as unapproved_count
                    FROM admit_students";
     $debugResult = $mysqli->query($debugQuery);
     $debugRow = $debugResult->fetch_assoc();
@@ -273,20 +274,33 @@ if (empty($approved_students)) {
                                 data-admission-fee="<?= $student['admission_fee'] ?>"
                                 data-uniform-fee="<?= $student['uniform_fee'] ?>"
                                 data-contact="<?= htmlspecialchars($student['parent_contact']) ?>"
-                                data-email="<?= htmlspecialchars($student['parent_email']) ?>">
+                                data-email="<?= htmlspecialchars($student['parent_email']) ?>"
+                                data-status="<?= htmlspecialchars($student['status']) ?>">
                                 <?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?> (<?= htmlspecialchars($student['admission_no']) ?>)
+                                <?php if ($student['status'] === 'unapproved'): ?>
+                                    <span style="color: #f39c12;">● Pending Approval</span>
+                                <?php endif; ?>
                             </option>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <option value="">No approved students available</option>
+                        <option value="">No students available</option>
                     <?php endif; ?>
                 </select>
+                <small class="text-muted d-block mt-2">
+                    <i class="bi bi-info-circle"></i> You can record payments for both approved and unapproved students
+                </small>
             </div>
             
             <!-- Auto-filled Student Information -->
             <div class="col-md-6">
                 <label class="form-label">Student Name</label>
                 <input type="text" id="fullName" class="form-control readonly-field" readonly>
+            </div>
+
+            <!-- Student Status Badge -->
+            <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <input type="text" id="studentStatus" class="form-control readonly-field" readonly>
             </div>
             
             <div class="col-md-3">
@@ -494,14 +508,16 @@ if (empty($approved_students)) {
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <?php if ($payment['balance'] == 0 && $payment['status_approved'] === 'approved'): ?>
-                                        <!-- Receipt Button -->
+                                    <?php if ($payment['balance'] == 0): ?>
+                                        <!-- Receipt Button - for fully paid (any approval status) -->
                                         <a href="print-receipt.php?id=<?= $payment['id'] ?>" class="btn-receipt" target="_blank" title="Print Receipt">
                                             <i class="bi bi-receipt"></i> Receipt
                                         </a>
                                     <?php elseif ($payment['balance'] > 0): ?>
-                                        <!-- Invoice Button -->
-                                        <span class="badge bg-warning text-dark">Invoice Pending</span>
+                                        <!-- Invoice Button - for unpaid balance (any approval status) -->
+                                        <a href="print-invoice.php?id=<?= $payment['id'] ?>" class="btn-invoice" target="_blank" title="Print Invoice">
+                                            <i class="bi bi-file-text"></i> Invoice
+                                        </a>
                                     <?php endif; ?>
                                 </td>
                             </tr>
