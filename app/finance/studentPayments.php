@@ -450,6 +450,7 @@ if (empty($approved_students)) {
                             <th>Pay Status</th>
                             <th>Approval Status</th>
                             <th>Actions</th>
+                            <th>Invoice/Receipt</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -490,6 +491,17 @@ if (empty($approved_students)) {
                                         </button>
                                     <?php else: ?>
                                         <span>-</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if ($payment['balance'] == 0 && $payment['status_approved'] === 'approved'): ?>
+                                        <!-- Receipt Button -->
+                                        <a href="print-receipt.php?id=<?= $payment['id'] ?>" class="btn-receipt" target="_blank" title="Print Receipt">
+                                            <i class="bi bi-receipt"></i> Receipt
+                                        </a>
+                                    <?php elseif ($payment['balance'] > 0): ?>
+                                        <!-- Invoice Button -->
+                                        <span class="badge bg-warning text-dark">Invoice Pending</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>

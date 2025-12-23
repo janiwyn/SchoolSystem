@@ -40,7 +40,9 @@ $endDateTime = new DateTime($endDate);
 while ($currentDate <= $endDateTime) {
     $dateRange[$currentDate->format('Y-m-d')] = [
         'expected' => 0,
-        'received' => 0
+        'received' => 0,
+        'admitted' => 0,
+        'expenses' => 0
     ];
     $currentDate->modify('+1 day');
 }
@@ -58,28 +60,72 @@ ORDER BY payment_date ASC";
 $chartResult = $mysqli->query($chartQuery);
 $chartData = $chartResult->fetch_all(MYSQLI_ASSOC);
 
+// Get student admissions data
+$admissionsQuery = "SELECT 
+    DATE(created_at) as admission_date,
+    COUNT(*) as admitted_count
+FROM admit_students
+WHERE created_at >= '$startDate' AND created_at <= '$endDate' AND status = 'approved'
+GROUP BY DATE(created_at)
+ORDER BY created_at ASC";
+
+$admissionsResult = $mysqli->query($admissionsQuery);
+$admissionsData = $admissionsResult->fetch_all(MYSQLI_ASSOC);
+
+// Get expenses data
+$expensesQuery = "SELECT 
+    DATE(created_at) as expense_date,
+    SUM(amount) as total_expenses
+FROM expenses
+WHERE created_at >= '$startDate' AND created_at <= '$endDate'
+GROUP BY DATE(created_at)
+ORDER BY created_at ASC";
+
+$expensesResult = $mysqli->query($expensesQuery);
+$expensesData = $expensesResult->fetch_all(MYSQLI_ASSOC);
+
 // Populate data into dateRange
 foreach ($chartData as $row) {
     $dateRange[$row['chart_date']] = [
         'expected' => (float)$row['expected'],
-        'received' => (float)$row['received']
+        'received' => (float)$row['received'],
+        'admitted' => $dateRange[$row['chart_date']]['admitted'] ?? 0,
+        'expenses' => $dateRange[$row['chart_date']]['expenses'] ?? 0
     ];
 }
 
-// Prepare data for chart with all dates
+foreach ($admissionsData as $row) {
+    if (isset($dateRange[$row['admission_date']])) {
+        $dateRange[$row['admission_date']]['admitted'] = (int)$row['admitted_count'];
+    }
+}
+
+foreach ($expensesData as $row) {
+    if (isset($dateRange[$row['expense_date']])) {
+        $dateRange[$row['expense_date']]['expenses'] = (float)$row['total_expenses'];
+    }
+}
+
+// Prepare data for charts
 $months = [];
 $expectedData = [];
 $receivedData = [];
+$admittedData = [];
+$expensesData = [];
 
 foreach ($dateRange as $date => $data) {
     $months[] = date('M d', strtotime($date));
     $expectedData[] = $data['expected'];
     $receivedData[] = $data['received'];
+    $admittedData[] = $data['admitted'];
+    $expensesData[] = $data['expenses'];
 }
 
 $monthsJson = json_encode($months);
 $expectedJson = json_encode($expectedData);
 $receivedJson = json_encode($receivedData);
+$admittedJson = json_encode($admittedData);
+$expensesJson = json_encode($expensesData);
 ?>
 
 <style>
@@ -242,13 +288,21 @@ $receivedJson = json_encode($receivedData);
         background-color: #27ae60;
     }
 
+    .legend-color.admitted {
+        background-color: #9b59b6;
+    }
+
+    .legend-color.expenses {
+        background-color: #e74c3c;
+    }
+
     .legend-label {
         font-size: 14px;
         font-weight: 600;
         color: #2c3e50;
     }
 
-    #tuitionChart {
+    #tuitionChart, #admissionsChart, #expensesChart {
         max-height: 400px;
     }
 </style>
@@ -318,7 +372,7 @@ $receivedJson = json_encode($receivedData);
 <!-- Chart Filter Bar -->
 <div class="chart-filter-bar">
     <div class="filter-label">
-        <i class="bi bi-funnel"></i> Filter Chart:
+        <i class="bi bi-funnel"></i> Filter Charts:
     </div>
     <div class="filter-buttons">
         <a href="?days=7" class="filter-btn <?= $days === 7 ? 'active' : '' ?>">Last 7 Days</a>
@@ -329,7 +383,7 @@ $receivedJson = json_encode($receivedData);
     </div>
 </div>
 
-<!-- Chart Section -->
+<!-- Tuition Analysis Chart -->
 <div class="chart-container">
     <div class="chart-header">
         <h4>Tuition Analysis</h4>
@@ -348,6 +402,40 @@ $receivedJson = json_encode($receivedData);
     </div>
 
     <canvas id="tuitionChart"></canvas>
+</div>
+
+<!-- Student Admissions Chart -->
+<div class="chart-container" style="margin-top: 30px;">
+    <div class="chart-header">
+        <h4>Student Admissions</h4>
+        <p>Number of Students Admitted Per Day (Last <?= $days ?> Days)</p>
+    </div>
+
+    <div class="chart-legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #9b59b6;"></div>
+            <div class="legend-label">Students Admitted</div>
+        </div>
+    </div>
+
+    <canvas id="admissionsChart"></canvas>
+</div>
+
+<!-- Expenses Chart -->
+<div class="chart-container" style="margin-top: 30px;">
+    <div class="chart-header">
+        <h4>Expenses Tracking</h4>
+        <p>Total Expenses Per Day (Last <?= $days ?> Days)</p>
+    </div>
+
+    <div class="chart-legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #e74c3c;"></div>
+            <div class="legend-label">Total Expenses</div>
+        </div>
+    </div>
+
+    <canvas id="expensesChart"></canvas>
 </div>
 
 <!-- Chart.js Library -->
@@ -389,6 +477,180 @@ $receivedJson = json_encode($receivedData);
                     tension: 0.4,
                     pointRadius: 5,
                     pointBackgroundColor: '#27ae60',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 7,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    borderColor: '#ddd',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0
+                            }).format(context.parsed.y);
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0
+                            }).format(value);
+                        },
+                        font: {
+                            size: 12
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)',
+                        drawBorder: false
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false,
+                        drawBorder: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Admissions Chart Data
+    const admittedData = <?= $admittedJson ?>;
+
+    const ctx2 = document.getElementById('admissionsChart').getContext('2d');
+    const admissionsChart = new Chart(ctx2, {
+        type: 'line',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    label: 'Students Admitted',
+                    data: admittedData,
+                    borderColor: '#9b59b6',
+                    backgroundColor: 'rgba(155, 89, 182, 0.05)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#9b59b6',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 7,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    borderColor: '#ddd',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y + ' students';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return Math.round(value);
+                        },
+                        font: {
+                            size: 12
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)',
+                        drawBorder: false
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false,
+                        drawBorder: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Expenses Chart Data
+    const expensesData = <?= $expensesJson ?>;
+
+    const ctx3 = document.getElementById('expensesChart').getContext('2d');
+    const expensesChart = new Chart(ctx3, {
+        type: 'line',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    label: 'Total Expenses',
+                    data: expensesData,
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#e74c3c',
                     pointBorderColor: '#fff',
                     pointBorderWidth: 2,
                     pointHoverRadius: 7,

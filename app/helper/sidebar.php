@@ -12,7 +12,7 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
 <aside class="sidebar">
     <div class="sidebar-header">
         <img src="../../assets/images/logo.png" alt="School Logo" class="sidebar-logo">
-        <h5 class="mb-0">School System</h5>
+        <h5 class="mb-0" style="font-size: 16.5px;">Bornwell Academy</h5>
     </div>
     
     <nav class="sidebar-nav">
