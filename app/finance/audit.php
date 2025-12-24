@@ -62,7 +62,85 @@ WHERE $dateFilter";
 
 $grandResult = $mysqli->query($grandTotalQuery);
 $grandTotals = $grandResult->fetch_assoc();
+
+// Get total expenses
+$expensesQuery = "SELECT 
+    SUM(amount) as total_expenses,
+    COUNT(*) as expense_count
+FROM expenses
+WHERE DATE(date) BETWEEN '$date_from' AND '$date_to' AND status = 'approved'";
+
+$expensesResult = $mysqli->query($expensesQuery);
+$expensesTotals = $expensesResult->fetch_assoc();
+
+// Get detailed expenses for dropdown
+$expensesDetailQuery = "SELECT 
+    category,
+    item,
+    amount,
+    date,
+    recorded_by
+FROM expenses
+WHERE DATE(date) BETWEEN '$date_from' AND '$date_to' AND status = 'approved'
+ORDER BY date DESC";
+
+$expensesDetailResult = $mysqli->query($expensesDetailQuery);
+$expensesDetail = $expensesDetailResult->fetch_all(MYSQLI_ASSOC);
+
+// Calculate Net Income = Grand Received - Total Expenses
+$netIncome = ($grandTotals['grand_received'] ?? 0) - ($expensesTotals['total_expenses'] ?? 0);
+
+// Get grand balance from audit data (sum of all balances)
+$grandBalance = $grandTotals['grand_balance'] ?? 0;
 ?>
+
+<!-- Stat Cards -->
+<div class="row g-4 mb-4">
+    <!-- Net Income Card (Green) -->
+    <div class="col-md-12 col-lg-4">
+        <div class="card audit-stat-card green">
+            <div class="card-body audit-stat-body">
+                <div class="audit-stat-content">
+                    <div class="audit-stat-label">Net Income</div>
+                    <div class="audit-stat-value"><?= number_format($netIncome, 2) ?></div>
+                </div>
+                <div class="audit-stat-icon">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Amount Received Card (Orange) -->
+    <div class="col-md-12 col-lg-4">
+        <div class="card audit-stat-card orange">
+            <div class="card-body audit-stat-body">
+                <div class="audit-stat-content">
+                    <div class="audit-stat-label">Total Received</div>
+                    <div class="audit-stat-value"><?= number_format($grandTotals['grand_received'] ?? 0, 2) ?></div>
+                </div>
+                <div class="audit-stat-icon">
+                    <i class="bi bi-cash-coin"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Expenses Card (Red) -->
+    <div class="col-md-12 col-lg-4">
+        <div class="card audit-stat-card red">
+            <div class="card-body audit-stat-body">
+                <div class="audit-stat-content">
+                    <div class="audit-stat-label">Total Expenses</div>
+                    <div class="audit-stat-value"><?= number_format($expensesTotals['total_expenses'] ?? 0, 2) ?></div>
+                </div>
+                <div class="audit-stat-icon">
+                    <i class="bi bi-calculator"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Filter Section -->
 <div class="card filter-card">
@@ -114,7 +192,7 @@ $grandTotals = $grandResult->fetch_assoc();
                 <i class="bi bi-info-circle"></i> No data found for the selected period.
             </div>
         <?php else: ?>
-            <div class="table-container">
+            <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                         <tr>
@@ -144,12 +222,64 @@ $grandTotals = $grandResult->fetch_assoc();
                             </tr>
                         <?php endforeach; ?>
                         
-                        <!-- Grand Totals Row -->
-                        <tr class="table-totals">
-                            <td colspan="2" class="text-end fw-bold">GRAND TOTALS:</td>
+                        <!-- Expenses Dropdown Row -->
+                        <tr class="expenses-dropdown-row" onclick="toggleExpensesDropdown(event)">
+                            <td colspan="5" style="cursor: pointer; background-color: #f0f8ff; padding: 12px; font-weight: 600;">
+                                <i class="bi bi-chevron-right" id="expensesToggleIcon" style="transition: transform 0.3s; display: inline-block;"></i>
+                                Expenses (<?= $expensesTotals['expense_count'] ?? 0 ?> items)
+                                <span style="float: right; color: #e74c3c;">-<?= number_format($expensesTotals['total_expenses'] ?? 0, 2) ?></span>
+                            </td>
+                        </tr>
+
+                        <!-- Expenses Detail Rows (Hidden by default) -->
+                        <tr id="expensesDetailContainer" style="display: none;">
+                            <td colspan="5" style="padding: 0; background-color: #f9f9f9;">
+                                <div class="expenses-detail-table" style="padding: 15px;">
+                                    <table class="table table-sm" style="margin-bottom: 0;">
+                                        <thead>
+                                            <tr style="background-color: #fff3cd;">
+                                                <th>Date</th>
+                                                <th>Category</th>
+                                                <th>Item</th>
+                                                <th>Amount</th>
+                                                <th>Recorded By</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php if (empty($expensesDetail)): ?>
+                                                <tr>
+                                                    <td colspan="5" class="text-center text-muted">No expenses recorded</td>
+                                                </tr>
+                                            <?php else: ?>
+                                                <?php foreach ($expensesDetail as $expense): 
+                                                    $userQuery = "SELECT name FROM users WHERE id = ?";
+                                                    $userStmt = $mysqli->prepare($userQuery);
+                                                    $userStmt->bind_param("i", $expense['recorded_by']);
+                                                    $userStmt->execute();
+                                                    $userName = $userStmt->get_result()->fetch_assoc()['name'] ?? 'N/A';
+                                                    $userStmt->close();
+                                                ?>
+                                                    <tr>
+                                                        <td><?= date('Y-m-d', strtotime($expense['date'])) ?></td>
+                                                        <td><?= htmlspecialchars($expense['category']) ?></td>
+                                                        <td><?= htmlspecialchars($expense['item']) ?></td>
+                                                        <td><?= number_format($expense['amount'], 2) ?></td>
+                                                        <td><?= htmlspecialchars($userName) ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <!-- Net Income Row -->
+                        <tr class="table-totals" style="background-color: #e8f4e8;">
+                            <td colspan="2" class="text-end fw-bold">NET INCOME:</td>
                             <td class="totals-expected"><?= number_format($grandTotals['grand_expected'] ?? 0, 2) ?></td>
-                            <td class="totals-received"><?= number_format($grandTotals['grand_received'] ?? 0, 2) ?></td>
-                            <td class="totals-balance"><?= number_format($grandTotals['grand_balance'] ?? 0, 2) ?></td>
+                            <td class="totals-received"><?= number_format($netIncome, 2) ?></td>
+                            <td style="color: #28a745; font-weight: 700;"><?= number_format($grandBalance, 2) ?></td>
                         </tr>
                     </tbody>
                 </table>
@@ -159,6 +289,22 @@ $grandTotals = $grandResult->fetch_assoc();
 </div>
 
 <link rel="stylesheet" href="../../assets/css/audit.css">
-<script src="../../assets/js/audit.js"></script>
+
+<!-- Load script INLINE to ensure function is available -->
+<script>
+function toggleExpensesDropdown(event) {
+    event.stopPropagation();
+    const container = document.getElementById('expensesDetailContainer');
+    const icon = document.getElementById('expensesToggleIcon');
+    
+    if (container.style.display === 'none') {
+        container.style.display = 'table-row';
+        icon.style.transform = 'rotate(90deg)';
+    } else {
+        container.style.display = 'none';
+        icon.style.transform = 'rotate(0deg)';
+    }
+}
+</script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

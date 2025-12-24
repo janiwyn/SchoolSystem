@@ -154,3 +154,147 @@
 .date-group td {
     padding: 12px;
 }
+
+.expenses-dropdown-row {
+    background-color: #f0f8ff !important;
+    cursor: pointer;
+}
+
+.expenses-dropdown-row:hover {
+    background-color: #e3f2fd !important;
+}
+
+.expenses-detail-table {
+    padding: 15px 0;
+}
+
+.expenses-detail-table .table {
+    font-size: 12px;
+}
+
+.expenses-detail-table thead tr {
+    background-color: #fff3cd;
+}
+
+.expenses-detail-table tbody tr:hover {
+    background-color: #fffef0;
+}
+
+.audit-stat-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    display: flex;
+    align-items: stretch;
+    height: 110px;
+}
+
+.audit-stat-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+}
+
+/* stronger selectors to override .card defaults */
+.card.audit-stat-card {
+    /* ensure our bg overrides bootstrap */
+    background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%) !important;
+    color: inherit;
+    border: 1px solid rgba(0,0,0,0.04);
+    /* keep previous shadow/size behavior */
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* color variants with higher specificity */
+.card.audit-stat-card.green {
+    background: linear-gradient(135deg, #27ae60 0%, #229954 100%) !important;
+    color: white !important;
+}
+
+.card.audit-stat-card.orange {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%) !important;
+    color: white !important;
+}
+
+.card.audit-stat-card.red {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%) !important;
+    color: white !important;
+}
+
+/* ensure inner text uses white on colored cards */
+.card.audit-stat-card .audit-stat-label,
+.card.audit-stat-card .audit-stat-value {
+    color: rgba(255,255,255,0.98) !important;
+}
+
+/* make the icon larger and more visible (matches screenshot spacing) */
+.audit-stat-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 18px;
+}
+
+.audit-stat-icon i {
+    font-size: 28px;
+    opacity: 0.32;
+}
+
+/* fallback plain-white style if not using color variants (matches screenshot) */
+.card.audit-stat-card.plain {
+    background: #ffffff !important;
+    color: #2c3e50 !important;
+}
+
+.card.audit-stat-card.plain .audit-stat-icon {
+    background: transparent;
+}
+
+.audit-stat-body {
+    padding: 22px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.audit-stat-content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.audit-stat-label {
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0.95;
+    margin-bottom: 8px;
+    color: rgba(255,255,255,0.95);
+}
+
+.audit-stat-value {
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1;
+    color: rgba(255,255,255,0.98);
+    letter-spacing: 0.5px;
+}
+
+/* responsive: stack on small screens */
+@media (max-width: 767px) {
+    .audit-stat-card {
+        height: auto;
+    }
+    .audit-stat-body {
+        padding: 18px;
+        flex-direction: row;
+    }
+    .audit-stat-value {
+        font-size: 28px;
+    }
+}
