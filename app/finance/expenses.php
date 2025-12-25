@@ -11,9 +11,19 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_expense'])) {
     $category = trim($_POST['category']);
     $item = trim($_POST['item']);
-    $quantity = floatval($_POST['quantity']);
     $amount = floatval($_POST['amount']);
     $date = trim($_POST['date']);
+    
+    // Only process quantity and unit_price for Cooks category
+    $quantity = 0;
+    $unit_price = 0;
+    $expected = 0;
+    
+    if ($category === 'Cooks') {
+        $quantity = floatval($_POST['quantity']);
+        $unit_price = floatval($_POST['unit_price']);
+        $expected = $quantity * $unit_price;
+    }
 
     if (!$category || !$item || !$date || !$amount) {
         $error = "Category, Item, Amount, and Date are required";
@@ -21,10 +31,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_expense'])) {
         $error = "Amount must be greater than zero";
     } else {
         $user_id = $_SESSION['user_id'];
-        $stmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, amount, date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
+        $stmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
         
         if ($stmt) {
-            $stmt->bind_param("ssddsi", $category, $item, $quantity, $amount, $date, $user_id);
+            $stmt->bind_param("ssddddsi", $category, $item, $quantity, $unit_price, $expected, $amount, $date, $user_id);
             if ($stmt->execute()) {
                 $message = "Expense recorded successfully!";
                 // Clear form fields
@@ -40,6 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_expense'])) {
 // Include layout AFTER header operations
 require_once __DIR__ . '/../helper/layout.php';
 
+// Get active tab
+$active_tab = $_GET['tab'] ?? 'salaries';
+
 // Build filter query
 $filterWhere = "1=1";
 $date_from = $_GET['date_from'] ?? '';
@@ -50,6 +63,17 @@ if ($date_from) {
 }
 if ($date_to) {
     $filterWhere .= " AND DATE(expenses.date) <= '" . $mysqli->real_escape_string($date_to) . "'";
+}
+
+// Add category filter based on active tab
+if ($active_tab === 'salaries') {
+    $filterWhere .= " AND expenses.category = 'Salaries'";
+} elseif ($active_tab === 'cooks') {
+    $filterWhere .= " AND expenses.category = 'Cooks'";
+} elseif ($active_tab === 'utilities') {
+    $filterWhere .= " AND expenses.category = 'Utilities'";
+} elseif ($active_tab === 'administrative') {
+    $filterWhere .= " AND expenses.category = 'Administrative'";
 }
 
 // Pagination setup
@@ -70,6 +94,8 @@ $query = "SELECT
     expenses.category,
     expenses.item,
     expenses.quantity,
+    expenses.unit_price,
+    expenses.expected,
     expenses.amount,
     expenses.date,
     expenses.status,
@@ -118,20 +144,35 @@ $totals = $totalsResult->fetch_assoc();
             <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
 
-        <form method="POST" class="row g-3">
+        <form method="POST" class="row g-3" id="expenseForm">
             <div class="col-md-4">
                 <label class="form-label">Category</label>
-                <input type="text" name="category" class="form-control" placeholder="e.g., Supplies, Maintenance" required>
+                <select name="category" id="category" class="form-control" required onchange="handleCategoryChange()">
+                    <option value="">Select Category</option>
+                    <option value="Cooks">Cooks (Food)</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Administrative">Administrative</option>
+                </select>
             </div>
 
             <div class="col-md-4">
                 <label class="form-label">Item</label>
-                <input type="text" name="item" class="form-control" placeholder="e.g., Whiteboard Markers" required>
+                <input type="text" name="item" class="form-control" placeholder="e.g., Rice, Electricity, Office Supplies" required>
             </div>
 
             <div class="col-md-4">
                 <label class="form-label">Quantity</label>
-                <input type="number" name="quantity" class="form-control" step="0.01" min="0" placeholder="0" value="0">
+                <input type="number" name="quantity" id="quantity" class="form-control" step="0.01" min="0" placeholder="0" value="0" oninput="calculateExpected()">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Unit Price</label>
+                <input type="number" name="unit_price" id="unit_price" class="form-control" step="0.01" min="0" placeholder="0.00" value="0" oninput="calculateExpected()">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Expected</label>
+                <input type="number" name="expected" id="expected" class="form-control readonly-field" step="0.01" placeholder="0.00" value="0.00" readonly style="background-color: #e9ecef;">
             </div>
 
             <div class="col-md-4">
@@ -157,6 +198,7 @@ $totals = $totalsResult->fetch_assoc();
 <div class="card filter-card">
     <div class="card-body">
         <form method="GET">
+            <input type="hidden" name="tab" value="<?= htmlspecialchars($active_tab) ?>">
             <div class="filter-row">
                 <div class="filter-group">
                     <label>Date From</label>
@@ -173,13 +215,35 @@ $totals = $totalsResult->fetch_assoc();
                         <button type="submit" class="btn-filter">
                             <i class="bi bi-funnel"></i> Filter
                         </button>
-                        <a href="expenses.php" class="btn-reset">
+                        <a href="expenses.php?tab=<?= htmlspecialchars($active_tab) ?>" class="btn-reset">
                             <i class="bi bi-arrow-clockwise"></i>
                         </a>
                     </div>
                 </div>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Expense Tabs -->
+<div class="expense-tabs-container">
+    <div class="expense-tabs">
+        <a href="?tab=salaries<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
+           class="expense-tab-btn <?= $active_tab === 'salaries' ? 'active' : '' ?>">
+            <i class="bi bi-person-badge"></i> Salaries
+        </a>
+        <a href="?tab=cooks<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
+           class="expense-tab-btn <?= $active_tab === 'cooks' ? 'active' : '' ?>">
+            <i class="bi bi-egg-fried"></i> Cooks
+        </a>
+        <a href="?tab=utilities<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
+           class="expense-tab-btn <?= $active_tab === 'utilities' ? 'active' : '' ?>">
+            <i class="bi bi-lightning-charge"></i> Utilities
+        </a>
+        <a href="?tab=administrative<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
+           class="expense-tab-btn <?= $active_tab === 'administrative' ? 'active' : '' ?>">
+            <i class="bi bi-briefcase"></i> Administrative
+        </a>
     </div>
 </div>
 
@@ -198,10 +262,11 @@ $totals = $totalsResult->fetch_assoc();
                             <th>Category</th>
                             <th>Item</th>
                             <th>Quantity</th>
-                            <th>Amount ($)</th>
+                            <th>Unit Price</th>
+                            <th>Expected</th>
+                            <th>Amount Paid</th>
                             <th>Recorded By</th>
                             <th>Status</th>
-                            <th>Recorded Date</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -211,6 +276,8 @@ $totals = $totalsResult->fetch_assoc();
                                 <td><?= htmlspecialchars($expense['category']) ?></td>
                                 <td><?= htmlspecialchars($expense['item']) ?></td>
                                 <td><?= number_format($expense['quantity'], 2) ?></td>
+                                <td><?= number_format($expense['unit_price'], 2) ?></td>
+                                <td><?= number_format($expense['expected'], 2) ?></td>
                                 <td><?= number_format($expense['amount'], 2) ?></td>
                                 <td><?= htmlspecialchars($expense['recorded_by'] ?? 'System') ?></td>
                                 <td>
@@ -220,15 +287,14 @@ $totals = $totalsResult->fetch_assoc();
                                         <span class="badge bg-warning text-dark">Unapproved</span>
                                     <?php endif; ?>
                                 </td>
-                                <td><?= date('Y-m-d H:i', strtotime($expense['created_at'])) ?></td>
                             </tr>
                         <?php endforeach; ?>
                         
                         <!-- Totals Row -->
                         <tr class="table-totals">
-                            <td colspan="4" class="text-end fw-bold">TOTALS:</td>
+                            <td colspan="6" class="text-end fw-bold">TOTALS:</td>
                             <td><?= number_format($totals['total_amount'] ?? 0, 2) ?></td>
-                            <td colspan="3"></td>
+                            <td colspan="2"></td>
                         </tr>
                     </tbody>
                 </table>
