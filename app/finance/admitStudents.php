@@ -34,12 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
     $admission_fee = trim($_POST['admission_fee']);
     $uniform_fee = trim($_POST['uniform_fee']);
     $parent_contact = trim($_POST['parent_contact']);
-    $email = trim($_POST['parent_email']);
-    $admission_date = trim($_POST['admission_date']);
+    $email = trim($_POST['parent_email']); // Optional - can be empty
 
-    if (!$first_name || !$last_name || !$gender || !$class_id || !$day_boarding || !$admission_fee || !$uniform_fee || !$parent_contact || !$email || !$admission_date) {
+    // If email is empty, set it to NULL
+    if (empty($email)) {
+        $email = null;
+    }
+
+    // Validate required fields (email is optional)
+    if (!$first_name || !$last_name || !$gender || !$class_id || !$day_boarding || !$admission_fee || !$uniform_fee || !$parent_contact) {
         $error = "All required fields must be filled";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    } elseif ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        // Only validate email if it's provided
         $error = "Please enter a valid email address";
     } elseif (!is_numeric($admission_fee) || $admission_fee <= 0) {
         $error = "Please enter a valid admission fee";
@@ -69,10 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
         }
 
         if (!$error) {
-            // Insert into admit_students table with unapproved status
+            // Insert into admit_students table with APPROVED status
             $user_id = $_SESSION['user_id'] ?? null;
             
-            // Verify user_id is valid
             if (!$user_id) {
                 $error = "User session error. Please log in again.";
             } else {
@@ -85,13 +90,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
                 if ($userCheckResult->num_rows === 0) {
                     $error = "Invalid user. Please log in again.";
                 } else {
-                    $status = 'unapproved';
-                    $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, parent_email, student_image, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    $status = 'approved'; // Auto-approved
+                    
+                    // Prepare statement based on whether email is NULL
+                    if ($email === null) {
+                        $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, parent_email, student_image, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NOW())");
+                        // 12 parameters: admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, image_path, status, user_id
+                        $stmt->bind_param("ssssissdsssi", $admission_no, $first_name, $last_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $image_path, $status, $user_id);
+                    } else {
+                        $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, parent_email, student_image, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                        // 13 parameters: admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, email, image_path, status, user_id
+                        $stmt->bind_param("ssssissdssssi", $admission_no, $first_name, $last_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $email, $image_path, $status, $user_id);
+                    }
+                    
                     if ($stmt) {
-                        // Fixed: Correct type string with correct number of variables
-                        // Types: s=string, i=integer, d=double
-                        // admission_no(s), first_name(s), last_name(s), gender(s), class_id(i), day_boarding(s), admission_fee(d), uniform_fee(d), parent_contact(s), parent_email(s), student_image(s), status(s), created_by(i)
-                        $stmt->bind_param("ssssissddsssi", $admission_no, $first_name, $last_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $email, $image_path, $status, $user_id);
                         if ($stmt->execute()) {
                             // Redirect to prevent form resubmission
                             header("Location: admitStudents.php?success=1");
@@ -100,6 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
                             $error = "Error admitting student: " . $stmt->error;
                         }
                         $stmt->close();
+                    } else {
+                        $error = "Database error: " . $mysqli->error;
                     }
                 }
                 $checkUserStmt->close();
@@ -241,6 +255,8 @@ $studentsResult = $mysqli->query($studentsQuery);
 $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
 ?>
 
+<!DOCTYPE html>
+
 <!-- Toggle Button for Admit Student Form -->
 <div class="mb-3">
     <button type="button" class="btn-toggle-form" onclick="toggleAdmitForm()">
@@ -310,14 +326,15 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                 <input type="number" name="uniform_fee" class="form-control" step="0.01" min="0" placeholder="0.00" required>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-6">
                 <label class="form-label">Parent Contact</label>
-                <input type="text" name="parent_contact" class="form-control" placeholder="Phone number" required>
+                <input type="text" name="parent_contact" class="form-control" placeholder="e.g., 0774323232" required>
+                <small class="text-muted">Enter phone number with leading zeros (e.g., 0774323232)</small>
             </div>
 
             <div class="col-md-6">
-                <label class="form-label">Parent Email</label>
-                <input type="email" name="parent_email" class="form-control" placeholder="parent@email.com" required>
+                <label class="form-label">Parent Email <span class="text-muted">(Optional)</span></label>
+                <input type="email" name="parent_email" class="form-control" placeholder="parent@example.com">
             </div>
 
             <div class="col-md-3">

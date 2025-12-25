@@ -3,36 +3,7 @@ $title = "Pending Requests";
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../middleware/role.php';
 
-// Only admin can access this page
 requireRole(['admin']);
-
-// Handle approval for admitted students
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_student'])) {
-    $student_id = intval($_POST['student_id']);
-    $stmt = $mysqli->prepare("UPDATE admit_students SET status = 'approved' WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $student_id);
-        if ($stmt->execute()) {
-            header("Location: pendingrequest.php?tab=admitted_students&approved=1");
-            exit();
-        }
-        $stmt->close();
-    }
-}
-
-// Handle rejection for admitted students
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_student'])) {
-    $student_id = intval($_POST['student_id']);
-    $stmt = $mysqli->prepare("DELETE FROM admit_students WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $student_id);
-        if ($stmt->execute()) {
-            header("Location: pendingrequest.php?tab=admitted_students&rejected=1");
-            exit();
-        }
-        $stmt->close();
-    }
-}
 
 // Handle approvals and rejections for student payments
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_payment'])) {
@@ -243,63 +214,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_payroll'])) {
 // Include layout AFTER all operations
 require_once __DIR__ . '/../helper/layout.php';
 
-// Get active tab and subtab
-$active_tab = $_GET['tab'] ?? 'admitted_students';
-$active_subtab = $_GET['subtab'] ?? 'payments';
+// Get active tab - default to student_payments instead of admitted_students
+$activeTab = $_GET['tab'] ?? 'student_payments';
 
-// Get unapproved admitted students
-$admittedQuery = "SELECT 
-    admit_students.id,
-    admit_students.admission_no,
-    admit_students.first_name,
-    admit_students.last_name,
-    admit_students.gender,
-    c.class_name,
-    admit_students.day_boarding,
-    admit_students.admission_fee,
-    admit_students.uniform_fee,
-    admit_students.parent_contact,
-    admit_students.parent_email,
-    admit_students.status,
-    admit_students.created_at
-FROM admit_students
-LEFT JOIN classes c ON admit_students.class_id = c.id
-WHERE admit_students.status = 'unapproved'
-ORDER BY admit_students.created_at DESC";
-
-$admittedResult = $mysqli->query($admittedQuery);
-$admitted_students = $admittedResult->fetch_all(MYSQLI_ASSOC);
-
-// Get unapproved student payments (excluding those with pending top-ups)
+// Get unapproved student payments
 $paymentsQuery = "SELECT 
-    sp.id, sp.admission_no, sp.full_name, sp.day_boarding, sp.gender, sp.class_name, sp.term,
-    sp.expected_tuition, sp.amount_paid, sp.balance, sp.admission_fee, sp.uniform_fee,
-    sp.parent_contact, sp.parent_email, sp.payment_date, sp.created_at, sp.status_approved
+    sp.id,
+    sp.student_id,
+    CONCAT(a.first_name, ' ', a.last_name) as student_name,
+    a.admission_no,
+    sp.class_name,
+    sp.expected_tuition,
+    sp.amount_paid,
+    sp.balance,
+    sp.payment_date,
+    sp.created_at
 FROM student_payments sp
-WHERE sp.status_approved = 'unapproved' 
-AND sp.id NOT IN (
-    SELECT DISTINCT payment_id FROM student_payment_topups 
-    WHERE status_approved = 'unapproved'
-)
+LEFT JOIN admit_students a ON sp.student_id = a.id
+WHERE sp.status_approved = 'unapproved' AND sp.id NOT IN (SELECT DISTINCT payment_id FROM student_payment_topups WHERE status_approved = 'unapproved')
 ORDER BY sp.created_at DESC";
 
 $paymentsResult = $mysqli->query($paymentsQuery);
 $unapproved_payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
 
-// Get pending balance top-ups
+// Get unapproved balance top-ups
 $topupsQuery = "SELECT 
-    id, payment_id, student_id, admission_no, full_name, 
-    original_balance, topup_amount, new_balance, status_approved, created_at
-FROM student_payment_topups
-WHERE status_approved = 'unapproved'
-ORDER BY created_at DESC";
+    spt.id,
+    spt.payment_id,
+    spt.student_id,
+    CONCAT(a.first_name, ' ', a.last_name) as student_name,
+    a.admission_no,
+    sp.class_name,
+    spt.topup_amount,
+    spt.original_balance,
+    spt.new_balance,
+    spt.created_at
+FROM student_payment_topups spt
+LEFT JOIN admit_students a ON spt.student_id = a.id
+LEFT JOIN student_payments sp ON spt.payment_id = sp.id
+WHERE spt.status_approved = 'unapproved'
+ORDER BY spt.created_at DESC";
 
 $topupsResult = $mysqli->query($topupsQuery);
-$pending_topups = $topupsResult->fetch_all(MYSQLI_ASSOC);
+$unapproved_topups = $topupsResult->fetch_all(MYSQLI_ASSOC);
 
 // Get unapproved expenses
 $expensesQuery = "SELECT 
-    id, category, item, amount, date, recorded_by, status, created_at
+    id, category, item, amount, date, created_at, recorded_by
 FROM expenses
 WHERE status = 'unapproved'
 ORDER BY created_at DESC";
@@ -316,123 +277,56 @@ ORDER BY created_at DESC";
 
 $salariesResult = $mysqli->query($salariesQuery);
 $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
-
-$message = '';
-if (isset($_GET['approved']) && $_GET['approved'] == 1) {
-    $message = "Record approved successfully!";
-}
-if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
-    $message = "Record rejected successfully!";
-}
 ?>
 
-<!-- Message Display -->
-<?php if (!empty($message)): ?>
-    <div class="alert alert-success mb-4"><?= htmlspecialchars($message) ?></div>
+<!-- Success message -->
+<?php if (isset($_GET['success'])): ?>
+    <div class="alert alert-success mb-4">
+        <i class="bi bi-check-circle"></i> Action completed successfully!
+    </div>
 <?php endif; ?>
 
-<!-- Pending Request Tabs -->
+<?php if (isset($error)): ?>
+    <div class="alert alert-danger mb-4">
+        <i class="bi bi-exclamation-circle"></i> <?= htmlspecialchars($error) ?>
+    </div>
+<?php endif; ?>
+
+<!-- Pending Requests Tabs -->
 <div class="pending-tabs">
-    <a href="?tab=admitted_students" class="pending-tab-btn <?= $active_tab === 'admitted_students' ? 'active' : '' ?>">
-        <i class="bi bi-person-check"></i> Admitted Students
-    </a>
-    <a href="?tab=student_payments" class="pending-tab-btn <?= $active_tab === 'student_payments' ? 'active' : '' ?>">
+    <a href="?tab=student_payments" class="pending-tab-btn <?= $activeTab === 'student_payments' ? 'active' : '' ?>">
         <i class="bi bi-credit-card"></i> Student Payments
     </a>
-    <a href="?tab=expenses" class="pending-tab-btn <?= $active_tab === 'expenses' ? 'active' : '' ?>">
+    <a href="?tab=expenses" class="pending-tab-btn <?= $activeTab === 'expenses' ? 'active' : '' ?>">
         <i class="bi bi-receipt"></i> Expenses
     </a>
-    <a href="?tab=salaries" class="pending-tab-btn <?= $active_tab === 'salaries' ? 'active' : '' ?>">
+    <a href="?tab=salaries" class="pending-tab-btn <?= $activeTab === 'salaries' ? 'active' : '' ?>">
         <i class="bi bi-cash-stack"></i> Salaries
     </a>
 </div>
 
-<!-- Tab 1: Admitted Students -->
-<div class="tab-content <?= $active_tab === 'admitted_students' ? 'active' : '' ?>" id="admitted_students-tab">
-    <div class="card shadow-sm border-0">
-        <div class="card-header pending-card-header text-white">
-            <h5 class="mb-0">Pending Admitted Students</h5>
-        </div>
-        <div class="card-body">
-            <?php if (empty($admitted_students)): ?>
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> No pending student admissions.
-                </div>
-            <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-striped">
-                        <thead>
-                            <tr>
-                                <th>Adm No</th>
-                                <th>Name</th>
-                                <th>Gender</th>
-                                <th>Class</th>
-                                <th>Type</th>
-                                <th>Fees</th>
-                                <th>Parent Contact</th>
-                                <th>Date</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($admitted_students as $student): ?>
-                                <tr>
-                                    <td><?= htmlspecialchars($student['admission_no']) ?></td>
-                                    <td><?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?></td>
-                                    <td><?= htmlspecialchars($student['gender']) ?></td>
-                                    <td><?= htmlspecialchars($student['class_name'] ?? 'N/A') ?></td>
-                                    <td><span class="badge bg-info"><?= htmlspecialchars($student['day_boarding']) ?></span></td>
-                                    <td><?= number_format($student['admission_fee'] + $student['uniform_fee'], 2) ?></td>
-                                    <td><?= htmlspecialchars($student['parent_contact']) ?></td>
-                                    <td><?= date('Y-m-d', strtotime($student['created_at'])) ?></td>
-                                    <td>
-                                        <div class="action-button-group">
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="student_id" value="<?= $student['id'] ?>">
-                                                <button type="submit" name="approve_student" class="btn-approve" onclick="return confirm('Approve this student?')">
-                                                    <i class="bi bi-check-circle"></i> Approve
-                                                </button>
-                                            </form>
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="student_id" value="<?= $student['id'] ?>">
-                                                <button type="submit" name="reject_student" class="btn-reject" onclick="return confirm('Reject this student?')">
-                                                    <i class="bi bi-x-circle"></i> Reject
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
-        </div>
+<!-- Student Payments Tab -->
+<div id="student_payments-tab" class="tab-content <?= $activeTab === 'student_payments' ? 'active' : '' ?>">
+    <!-- Sub-tabs for Payments and Balance Top-ups -->
+    <div class="sub-tabs">
+        <button class="sub-tab-btn active" onclick="switchSubTab('payments')">
+            <i class="bi bi-credit-card"></i> School Payments
+        </button>
+        <button class="sub-tab-btn" onclick="switchSubTab('topups')">
+            <i class="bi bi-cash-coin"></i> Balance Top-ups
+        </button>
     </div>
-</div>
 
-<!-- Tab 2: Student Payments (with sub-tabs) -->
-<div class="tab-content <?= $active_tab === 'student_payments' ? 'active' : '' ?>" id="student_payments-tab">
-    <div class="card shadow-sm border-0">
-        <div class="card-header pending-card-header text-white">
-            <h5 class="mb-0">Pending Student Payments</h5>
-        </div>
-        <div class="card-body">
-            <!-- Sub-tabs -->
-            <div class="sub-tabs">
-                <button type="button" class="sub-tab-btn <?= $active_subtab === 'payments' ? 'active' : '' ?>" onclick="switchSubTab('payments')">
-                    <i class="bi bi-credit-card"></i> Payments
-                </button>
-                <button type="button" class="sub-tab-btn <?= $active_subtab === 'topups' ? 'active' : '' ?>" onclick="switchSubTab('topups')">
-                    <i class="bi bi-arrow-up-circle"></i> Balance Top-ups
-                </button>
+    <!-- School Payments Sub-tab -->
+    <div id="payments-content" class="sub-tab-content active">
+        <div class="card">
+            <div class="card-header pending-card-header text-white">
+                <h5 class="mb-0">Unapproved School Payments</h5>
             </div>
-
-            <!-- Sub-tab 1: Payments -->
-            <div class="sub-tab-content <?= $active_subtab === 'payments' ? 'active' : '' ?>" id="payments-content">
+            <div class="card-body">
                 <?php if (empty($unapproved_payments)): ?>
                     <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> No pending student payment approvals.
+                        <i class="bi bi-info-circle"></i> No unapproved payments pending.
                     </div>
                 <?php else: ?>
                     <div class="table-responsive">
@@ -457,7 +351,7 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
                                 <?php foreach ($unapproved_payments as $payment): ?>
                                     <tr>
                                         <td><?= htmlspecialchars($payment['admission_no']) ?></td>
-                                        <td><?= htmlspecialchars($payment['full_name']) ?></td>
+                                        <td><?= htmlspecialchars($payment['student_name']) ?></td>
                                         <td><?= htmlspecialchars($payment['class_name']) ?></td>
                                         <td><?= htmlspecialchars($payment['term']) ?></td>
                                         <td><span class="badge bg-info"><?= htmlspecialchars($payment['day_boarding']) ?></span></td>
@@ -490,12 +384,19 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
                     </div>
                 <?php endif; ?>
             </div>
+        </div>
+    </div>
 
-            <!-- Sub-tab 2: Balance Top-ups -->
-            <div class="sub-tab-content <?= $active_subtab === 'topups' ? 'active' : '' ?>" id="topups-content">
-                <?php if (empty($pending_topups)): ?>
+    <!-- Balance Top-ups Sub-tab -->
+    <div id="topups-content" class="sub-tab-content">
+        <div class="card">
+            <div class="card-header pending-card-header text-white">
+                <h5 class="mb-0">Unapproved Balance Top-ups</h5>
+            </div>
+            <div class="card-body">
+                <?php if (empty($unapproved_topups)): ?>
                     <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> No pending balance top-ups.
+                        <i class="bi bi-info-circle"></i> No unapproved balance top-ups pending.
                     </div>
                 <?php else: ?>
                     <div class="table-responsive">
@@ -512,10 +413,10 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($pending_topups as $topup): ?>
+                                <?php foreach ($unapproved_topups as $topup): ?>
                                     <tr>
                                         <td><?= htmlspecialchars($topup['admission_no']) ?></td>
-                                        <td><?= htmlspecialchars($topup['full_name']) ?></td>
+                                        <td><?= htmlspecialchars($topup['student_name']) ?></td>
                                         <td><?= number_format($topup['original_balance'], 2) ?></td>
                                         <td><?= number_format($topup['topup_amount'], 2) ?></td>
                                         <td><?= number_format($topup['new_balance'], 2) ?></td>
@@ -548,7 +449,7 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
 </div>
 
 <!-- Tab 3: Expenses -->
-<div class="tab-content <?= $active_tab === 'expenses' ? 'active' : '' ?>" id="expenses-tab">
+<div class="tab-content <?= $activeTab === 'expenses' ? 'active' : '' ?>" id="expenses-tab">
     <div class="card shadow-sm border-0">
         <div class="card-header pending-card-header text-white">
             <h5 class="mb-0">Pending Expenses</h5>
@@ -618,7 +519,7 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
 </div>
 
 <!-- Tab 4: Salaries -->
-<div class="tab-content <?= $active_tab === 'salaries' ? 'active' : '' ?>" id="salaries-tab">
+<div class="tab-content <?= $activeTab === 'salaries' ? 'active' : '' ?>" id="salaries-tab">
     <div class="card shadow-sm border-0">
         <div class="card-header pending-card-header text-white">
             <h5 class="mb-0">Unapproved Salaries (Payroll)</h5>
