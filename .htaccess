@@ -1,0 +1,33 @@
+# Prevent directory browsing
+Options -Indexes
+
+# Protect sensitive files
+<FilesMatch "\.(env|sql|log|bak)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Redirect to public/login.php if accessing root
+DirectoryIndex public/login.php
+
+# Custom error pages (optional)
+ErrorDocument 404 /public/404.php
+ErrorDocument 403 /public/403.php
+
+# Enable PHP error reporting (disable in production)
+php_flag display_errors Off
+php_flag log_errors On
+php_value error_log /home/your_username/public_html/error_log
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# File upload size limits
+php_value upload_max_filesize 10M
+php_value post_max_size 10M
+php_value max_execution_time 300
+php_value max_input_time 300

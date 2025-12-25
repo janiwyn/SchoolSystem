@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../config/security.php';
+
 session_start();
 
 function isLoggedIn(){
