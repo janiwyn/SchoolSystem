@@ -131,31 +131,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_topup'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_expense'])) {
     $expense_id = intval($_POST['expense_id']);
     $stmt = $mysqli->prepare("UPDATE expenses SET status = 'approved' WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $expense_id);
-        if ($stmt->execute()) {
-            header("Location: pendingrequest.php?tab=expenses&approved=1");
-            exit();
-        }
-        $stmt->close();
-    }
+    $stmt->bind_param("i", $expense_id);
+    $stmt->execute();
+    $stmt->close();
+    header("Location: pendingrequest.php?tab=expenses&success=1");
+    exit();
 }
 
 // Handle rejection for expenses
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_expense'])) {
     $expense_id = intval($_POST['expense_id']);
     $stmt = $mysqli->prepare("DELETE FROM expenses WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $expense_id);
-        if ($stmt->execute()) {
-            header("Location: pendingrequest.php?tab=expenses&rejected=1");
-            exit();
+    $stmt->bind_param("i", $expense_id);
+    $stmt->execute();
+    $stmt->close();
+    header("Location: pendingrequest.php?tab=expenses&success=1");
+    exit();
+}
+
+// Handle approval/rejection for payroll/salaries
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_payroll'])) {
+    $payroll_id = intval($_POST['payroll_id']);
+    
+    // Start transaction to ensure both updates succeed
+    $mysqli->begin_transaction();
+    
+    try {
+        // Update payroll status to approved
+        $stmt = $mysqli->prepare("UPDATE payroll SET status = 'approved' WHERE id = ?");
+        $stmt->bind_param("i", $payroll_id);
+        if (!$stmt->execute()) {
+            throw new Exception("Error updating payroll: " . $stmt->error);
         }
         $stmt->close();
+        
+        // Get payroll details to find matching expense
+        $payrollStmt = $mysqli->prepare("SELECT name, salary FROM payroll WHERE id = ?");
+        $payrollStmt->bind_param("i", $payroll_id);
+        $payrollStmt->execute();
+        $payrollResult = $payrollStmt->get_result();
+        $payroll = $payrollResult->fetch_assoc();
+        $payrollStmt->close();
+        
+        if ($payroll) {
+            // Update corresponding expense record to approved
+            $expenseStmt = $mysqli->prepare("UPDATE expenses SET status = 'approved' WHERE category = 'Salaries' AND item = ? AND amount = ?");
+            $expenseStmt->bind_param("sd", $payroll['name'], $payroll['salary']);
+            if (!$expenseStmt->execute()) {
+                throw new Exception("Error updating expense: " . $expenseStmt->error);
+            }
+            $expenseStmt->close();
+        }
+        
+        // Commit transaction
+        $mysqli->commit();
+        
+        header("Location: pendingrequest.php?tab=salaries&success=1");
+        exit();
+    } catch (Exception $e) {
+        // Rollback on error
+        $mysqli->rollback();
+        $error = $e->getMessage();
     }
 }
 
-// Include layout AFTER all header operations
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_payroll'])) {
+    $payroll_id = intval($_POST['payroll_id']);
+    
+    // Start transaction
+    $mysqli->begin_transaction();
+    
+    try {
+        // Get payroll details before deletion
+        $payrollStmt = $mysqli->prepare("SELECT name, salary FROM payroll WHERE id = ?");
+        $payrollStmt->bind_param("i", $payroll_id);
+        $payrollStmt->execute();
+        $payrollResult = $payrollStmt->get_result();
+        $payroll = $payrollResult->fetch_assoc();
+        $payrollStmt->close();
+        
+        // Delete payroll
+        $stmt = $mysqli->prepare("DELETE FROM payroll WHERE id = ?");
+        $stmt->bind_param("i", $payroll_id);
+        if (!$stmt->execute()) {
+            throw new Exception("Error deleting payroll: " . $stmt->error);
+        }
+        $stmt->close();
+        
+        // Delete corresponding expense record
+        if ($payroll) {
+            $expenseStmt = $mysqli->prepare("DELETE FROM expenses WHERE category = 'Salaries' AND item = ? AND amount = ?");
+            $expenseStmt->bind_param("sd", $payroll['name'], $payroll['salary']);
+            if (!$expenseStmt->execute()) {
+                throw new Exception("Error deleting expense: " . $expenseStmt->error);
+            }
+            $expenseStmt->close();
+        }
+        
+        // Commit transaction
+        $mysqli->commit();
+        
+        header("Location: pendingrequest.php?tab=salaries&success=1");
+        exit();
+    } catch (Exception $e) {
+        // Rollback on error
+        $mysqli->rollback();
+        $error = $e->getMessage();
+    }
+}
+
+// Include layout AFTER all operations
 require_once __DIR__ . '/../helper/layout.php';
 
 // Get active tab and subtab
@@ -222,6 +307,16 @@ ORDER BY created_at DESC";
 $expensesResult = $mysqli->query($expensesQuery);
 $unapproved_expenses = $expensesResult->fetch_all(MYSQLI_ASSOC);
 
+// Get unapproved payroll/salaries
+$salariesQuery = "SELECT 
+    id, name, department, salary, date, created_at
+FROM payroll
+WHERE status = 'unapproved'
+ORDER BY created_at DESC";
+
+$salariesResult = $mysqli->query($salariesQuery);
+$unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
+
 $message = '';
 if (isset($_GET['approved']) && $_GET['approved'] == 1) {
     $message = "Record approved successfully!";
@@ -239,13 +334,16 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
 <!-- Pending Request Tabs -->
 <div class="pending-tabs">
     <a href="?tab=admitted_students" class="pending-tab-btn <?= $active_tab === 'admitted_students' ? 'active' : '' ?>">
-        <i class="bi bi-people-fill"></i> Admitted Students
+        <i class="bi bi-person-check"></i> Admitted Students
     </a>
     <a href="?tab=student_payments" class="pending-tab-btn <?= $active_tab === 'student_payments' ? 'active' : '' ?>">
         <i class="bi bi-credit-card"></i> Student Payments
     </a>
     <a href="?tab=expenses" class="pending-tab-btn <?= $active_tab === 'expenses' ? 'active' : '' ?>">
         <i class="bi bi-receipt"></i> Expenses
+    </a>
+    <a href="?tab=salaries" class="pending-tab-btn <?= $active_tab === 'salaries' ? 'active' : '' ?>">
+        <i class="bi bi-cash-stack"></i> Salaries
     </a>
 </div>
 
@@ -504,6 +602,64 @@ if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
                                             <form method="POST" style="display: inline;">
                                                 <input type="hidden" name="expense_id" value="<?= $expense['id'] ?>">
                                                 <button type="submit" name="reject_expense" class="btn-reject" onclick="return confirm('Reject this expense?')">
+                                                    <i class="bi bi-x-circle"></i> Reject
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<!-- Tab 4: Salaries -->
+<div class="tab-content <?= $active_tab === 'salaries' ? 'active' : '' ?>" id="salaries-tab">
+    <div class="card shadow-sm border-0">
+        <div class="card-header pending-card-header text-white">
+            <h5 class="mb-0">Unapproved Salaries (Payroll)</h5>
+        </div>
+        <div class="card-body">
+            <?php if (empty($unapproved_salaries)): ?>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No unapproved salaries pending.
+                </div>
+            <?php else: ?>
+                <div class="table-container">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Department</th>
+                                <th>Salary</th>
+                                <th>Date</th>
+                                <th>Recorded Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($unapproved_salaries as $salary): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($salary['name']) ?></td>
+                                    <td><?= htmlspecialchars($salary['department']) ?></td>
+                                    <td><?= number_format($salary['salary'], 2) ?></td>
+                                    <td><?= date('Y-m-d', strtotime($salary['date'])) ?></td>
+                                    <td><?= date('Y-m-d H:i', strtotime($salary['created_at'])) ?></td>
+                                    <td>
+                                        <div class="action-button-group">
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="payroll_id" value="<?= $salary['id'] ?>">
+                                                <button type="submit" name="approve_payroll" class="btn-approve" onclick="return confirm('Approve this salary?')">
+                                                    <i class="bi bi-check-circle"></i> Approve
+                                                </button>
+                                            </form>
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="payroll_id" value="<?= $salary['id'] ?>">
+                                                <button type="submit" name="reject_payroll" class="btn-reject" onclick="return confirm('Reject this salary?')">
                                                     <i class="bi bi-x-circle"></i> Reject
                                                 </button>
                                             </form>

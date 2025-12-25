@@ -26,19 +26,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
         $error = "Salary must be greater than zero";
     } else {
         $user_id = $_SESSION['user_id'];
-        $stmt = $mysqli->prepare("INSERT INTO payroll (name, department, salary, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, NOW(), 'unapproved')");
         
-        if ($stmt) {
-            $stmt->bind_param("ssdsi", $name, $department, $salary, $date, $user_id);
-            if ($stmt->execute()) {
-                $stmt->close();
-                // Redirect to prevent form resubmission
-                header("Location: payroll.php?success=1");
-                exit();
+        // Start transaction
+        $mysqli->begin_transaction();
+        
+        try {
+            // Insert into payroll table
+            $stmt = $mysqli->prepare("INSERT INTO payroll (name, department, salary, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, NOW(), 'unapproved')");
+            
+            if ($stmt) {
+                $stmt->bind_param("sssdi", $name, $department, $salary, $date, $user_id);
+                if ($stmt->execute()) {
+                    $payroll_id = $mysqli->insert_id;
+                    $stmt->close();
+                    
+                    // Insert into expenses table automatically
+                    $category = 'Salaries';
+                    $item = $name; // Employee name goes in item column
+                    $quantity = 1; // Default quantity
+                    $unit_price = $salary; // Unit price is the salary
+                    $expected = $salary; // Expected = salary
+                    $status = 'unapproved'; // Same status as payroll
+                    
+                    $expenseStmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)");
+                    
+                    if ($expenseStmt) {
+                        $expenseStmt->bind_param("ssddddsss", $category, $item, $quantity, $unit_price, $expected, $salary, $date, $user_id, $status);
+                        if ($expenseStmt->execute()) {
+                            $expenseStmt->close();
+                            
+                            // Commit transaction
+                            $mysqli->commit();
+                            
+                            // Redirect to prevent form resubmission
+                            header("Location: payroll.php?success=1");
+                            exit();
+                        } else {
+                            throw new Exception("Error recording expense: " . $expenseStmt->error);
+                        }
+                    } else {
+                        throw new Exception("Error preparing expense statement: " . $mysqli->error);
+                    }
+                } else {
+                    throw new Exception("Error recording payroll: " . $stmt->error);
+                }
             } else {
-                $error = "Error recording payroll: " . $stmt->error;
+                throw new Exception("Error preparing payroll statement: " . $mysqli->error);
             }
-            $stmt->close();
+        } catch (Exception $e) {
+            // Rollback on error
+            $mysqli->rollback();
+            $error = $e->getMessage();
         }
     }
 }
@@ -48,19 +86,27 @@ require_once __DIR__ . '/../helper/layout.php';
 
 // Show success message if redirected
 if (isset($_GET['success']) && $_GET['success'] == 1) {
-    $message = "Payroll recorded successfully!";
+    $message = "Payroll recorded successfully! It has been automatically added to the Salaries expenses.";
 }
 
 // Build filter query
 $filterWhere = "1=1";
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
+$department = $_GET['department'] ?? '';
+$search = $_GET['search'] ?? '';
 
 if ($date_from) {
     $filterWhere .= " AND DATE(payroll.date) >= '" . $mysqli->real_escape_string($date_from) . "'";
 }
 if ($date_to) {
     $filterWhere .= " AND DATE(payroll.date) <= '" . $mysqli->real_escape_string($date_to) . "'";
+}
+if ($department) {
+    $filterWhere .= " AND payroll.department = '" . $mysqli->real_escape_string($department) . "'";
+}
+if ($search) {
+    $filterWhere .= " AND payroll.name LIKE '%" . $mysqli->real_escape_string($search) . "%'";
 }
 
 // Pagination setup
@@ -103,6 +149,11 @@ WHERE $filterWhere";
 
 $totalsResult = $mysqli->query($totalsQuery);
 $totals = $totalsResult->fetch_assoc();
+
+// Get all unique departments for dropdown
+$departmentsQuery = "SELECT DISTINCT department FROM payroll WHERE department IS NOT NULL AND department != '' ORDER BY department ASC";
+$departmentsResult = $mysqli->query($departmentsQuery);
+$departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
 ?>
 
 <!-- Toggle Button -->
@@ -177,6 +228,23 @@ $totals = $totalsResult->fetch_assoc();
     <div class="card-body">
         <form method="GET">
             <div class="filter-row">
+                <div class="filter-group">
+                    <label>Search by Name</label>
+                    <input type="text" name="search" class="form-control" placeholder="Enter employee name" value="<?= htmlspecialchars($search) ?>">
+                </div>
+
+                <div class="filter-group">
+                    <label>Department</label>
+                    <select name="department" class="form-control">
+                        <option value="">All Departments</option>
+                        <?php foreach ($departments as $dept): ?>
+                            <option value="<?= htmlspecialchars($dept['department']) ?>" <?= $department === $dept['department'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($dept['department']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
                 <div class="filter-group">
                     <label>Date From</label>
                     <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($date_from) ?>">
@@ -260,7 +328,7 @@ $totals = $totalsResult->fetch_assoc();
                 <nav aria-label="Page navigation" class="mt-4">
                     <ul class="pagination justify-content-center">
                         <li class="page-item <?= $current_page <= 1 ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
+                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($search ? '&search=' . urlencode($search) : '') . ($department ? '&department=' . urlencode($department) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
@@ -271,7 +339,7 @@ $totals = $totalsResult->fetch_assoc();
 
                         if ($start_page > 1): ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=1<?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">1</a>
+                                <a class="page-link" href="?page=1<?php echo ($search ? '&search=' . urlencode($search) : '') . ($department ? '&department=' . urlencode($department) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">1</a>
                             </li>
                             <?php if ($start_page > 2): ?>
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -280,7 +348,7 @@ $totals = $totalsResult->fetch_assoc();
 
                         <?php for ($page = $start_page; $page <= $end_page; $page++): ?>
                             <li class="page-item <?= $page === $current_page ? 'active' : '' ?>">
-                                <a class="page-link" href="?page=<?= $page ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
+                                <a class="page-link" href="?page=<?= $page ?><?php echo ($search ? '&search=' . urlencode($search) : '') . ($department ? '&department=' . urlencode($department) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
                                     <?= $page ?>
                                 </a>
                             </li>
@@ -291,12 +359,12 @@ $totals = $totalsResult->fetch_assoc();
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             <?php endif; ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>"><?= $total_pages ?></a>
+                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($search ? '&search=' . urlencode($search) : '') . ($department ? '&department=' . urlencode($department) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>"><?= $total_pages ?></a>
                             </li>
                         <?php endif; ?>
 
                         <li class="page-item <?= $current_page >= $total_pages ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
+                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($search ? '&search=' . urlencode($search) : '') . ($department ? '&department=' . urlencode($department) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
