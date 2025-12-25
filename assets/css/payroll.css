@@ -1,0 +1,218 @@
+.payroll-form-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.payroll-form-toggle h4 {
+    color: #17a2b8;
+    font-weight: 600;
+    margin: 0;
+}
+
+.btn-toggle-form {
+    background-color: #17a2b8;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-toggle-form:hover {
+    background-color: #138496;
+    color: white;
+}
+
+.btn-toggle-form i {
+    transition: transform 0.3s ease;
+    font-size: 16px;
+}
+
+.form-header {
+    background-color: #17a2b8 !important;
+}
+
+.btn-form-submit {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+    color: white;
+    font-weight: 600;
+    padding: 10px 24px;
+}
+
+.btn-form-submit:hover {
+    background-color: #138496;
+    border-color: #138496;
+    color: white;
+}
+
+.filter-card {
+    background: #f8f9fa;
+    border: none;
+    margin-bottom: 30px;
+}
+
+.filter-card .card-body {
+    padding: 25px;
+}
+
+.filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    align-items: flex-end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-group label {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.filter-group input,
+.filter-group select {
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    height: 40px;
+}
+
+.filter-group input:focus,
+.filter-group select:focus {
+    border-color: #17a2b8;
+    box-shadow: 0 0 0 0.2rem rgba(23, 162, 184, 0.25);
+}
+
+.filter-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-filter {
+    background-color: #17a2b8;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    height: 40px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.btn-filter:hover {
+    background-color: #138496;
+}
+
+.btn-reset {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    height: 40px;
+    width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.btn-reset:hover {
+    background-color: #5a6268;
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+.table {
+    margin: 0;
+    font-size: 13px;
+}
+
+.table thead th {
+    background-color: #17a2b8;
+    color: white;
+    font-weight: 600;
+    border: none;
+    padding: 12px;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+
+.table tbody td {
+    padding: 10px 12px;
+    border-color: #eee;
+    vertical-align: middle;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.table-totals {
+    background-color: #e8f4f8;
+    border-top: 3px solid #17a2b8;
+    border-bottom: 3px solid #17a2b8;
+    font-weight: 600;
+}
+
+.table-totals td {
+    padding: 14px 12px;
+    color: #17a2b8;
+    font-weight: 700;
+    vertical-align: middle;
+}
+
+.badge {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.btn {
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.pagination .page-link {
+    color: #17a2b8;
+    border-radius: 4px;
+    margin: 0 4px;
+}
+
+.pagination .active .page-link {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+}
+
+@media print {
+    .payroll-form-toggle,
+    .filter-card,
+    .btn-toggle-form,
+    .btn-filter,
+    .btn-reset,
+    .pagination,
+    .table-totals {
+        display: none !important;
+    }
+}

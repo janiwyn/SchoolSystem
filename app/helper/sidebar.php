@@ -54,72 +54,12 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             <span>Expenses</span>
         </a>
         
-        <!-- Employees Dropdown -->
-        <a href="#" class="nav-item" data-bs-toggle="collapse" data-bs-target="#employeesMenu">
-            <i class="bi bi-briefcase-fill"></i>
-            <span>Employees</span>
-            <i class="bi bi-chevron-down ms-auto"></i>
-        </a>
-
-        <div class="collapse ms-3" id="employeesMenu">
-            <!-- Teachers Submenu -->
-            <a href="#" class="nav-item nav-subitem" data-bs-toggle="collapse" data-bs-target="#teachersMenu">
-                <i class="bi bi-person-video3"></i>
-                <span>Teachers</span>
-                <i class="bi bi-chevron-down ms-auto"></i>
+        <?php if (in_array($_SESSION['role'], ['bursar', 'admin', 'principal'])): ?>
+            <a href="../finance/payroll.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'payroll.php' ? 'active' : '' ?>">
+                <i class="bi bi-cash-stack"></i>
+                <span>Payroll</span>
             </a>
-
-            <div class="collapse ms-3" id="teachersMenu">
-                <a href="../../pages/employees/teachers/list.php" class="nav-item nav-subitem-child">
-                    <i class="bi bi-list-ul"></i>
-                    <span>All Teachers</span>
-                </a>
-                <a href="../../pages/employees/teachers/create.php" class="nav-item nav-subitem-child">
-                    <i class="bi bi-plus-circle"></i>
-                    <span>Add Teacher</span>
-                </a>
-                <a href="../../pages/employees/teachers/view.php" class="nav-item nav-subitem-child">
-                    <i class="bi bi-eye"></i>
-                    <span>View Teacher</span>
-                </a>
-                <a href="../../pages/employees/teachers/payments.php" class="nav-item nav-subitem-child">
-                    <i class="bi bi-credit-card"></i>
-                    <span>Payments</span>
-                </a>
-            </div>
-
-            <!-- Cooks Submenu -->
-            <a href="#" class="nav-item nav-subitem" data-bs-toggle="collapse" data-bs-target="#cooksMenu">
-                <i class="bi bi-cup-hot"></i>
-                <span>Cooks</span>
-                <i class="bi bi-chevron-down ms-auto"></i>
-            </a>
-
-            <div class="collapse ms-3" id="cooksMenu">
-                <a href="../../pages/employees/cooks/list.php" class="nav-item nav-subitem-child">
-                    <i class="bi bi-list-ul"></i>
-                    <span>All Cooks</span>
-                </a>
-                <a href="../../pages/employees/cooks/create.php" class="nav-item nav-subitem-child">
-                    <i class="bi bi-plus-circle"></i>
-                    <span>Add Cook</span>
-                </a>
-                <a href="../../pages/employees/cooks/view.php" class="nav-item nav-subitem-child">
-                    <i class="bi bi-eye"></i>
-                    <span>View Cook</span>
-                </a>
-                <a href="../../pages/employees/cooks/payments.php" class="nav-item nav-subitem-child">
-                    <i class="bi bi-credit-card"></i>
-                    <span>Payments</span>
-                </a>
-            </div>
-
-            <!-- Security Guards Submenu -->
-            <a href="../../pages/employees/security/index.php" class="nav-item nav-subitem">
-                <i class="bi bi-shield-check"></i>
-                <span>Security Guards</span>
-            </a>
-        </div>
+        <?php endif; ?>
     </nav>
 
     <style>

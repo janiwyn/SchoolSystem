@@ -89,6 +89,74 @@
 
 .table-container {
     overflow-x: auto;
+    max-height: none; /* Remove default max-height */
+}
+
+/* Scrollable table wrapper for audit table */
+.audit-table-wrapper {
+    max-height: 800px; /* Adjust based on row height - approx 40 rows */
+    overflow-y: auto;
+    overflow-x: auto;
+    position: relative;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+/* Sticky header for scrollable table */
+.audit-table-wrapper thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: #17a2b8;
+}
+
+/* Scrollable expenses detail table */
+.expenses-detail-table {
+    padding: 15px;
+    max-height: 600px; /* Adjust for approx 40 rows */
+    overflow-y: auto;
+}
+
+.expenses-detail-table .table {
+    font-size: 12px;
+    margin-bottom: 0;
+}
+
+.expenses-detail-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background-color: #fff3cd;
+}
+
+/* Custom scrollbar styling */
+.audit-table-wrapper::-webkit-scrollbar,
+.expenses-detail-table::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.audit-table-wrapper::-webkit-scrollbar-track,
+.expenses-detail-table::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.audit-table-wrapper::-webkit-scrollbar-thumb,
+.expenses-detail-table::-webkit-scrollbar-thumb {
+    background: #17a2b8;
+    border-radius: 4px;
+}
+
+.audit-table-wrapper::-webkit-scrollbar-thumb:hover,
+.expenses-detail-table::-webkit-scrollbar-thumb:hover {
+    background: #138496;
+}
+
+/* Ensure table takes full width */
+.audit-table-wrapper .table {
+    margin-bottom: 0;
+    width: 100%;
 }
 
 .table {

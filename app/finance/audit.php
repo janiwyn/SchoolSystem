@@ -192,7 +192,8 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                 <i class="bi bi-info-circle"></i> No data found for the selected period.
             </div>
         <?php else: ?>
-            <div class="table-responsive">
+            <!-- Scrollable Audit Table Wrapper -->
+            <div class="audit-table-wrapper">
                 <table class="table table-striped">
                     <thead>
                         <tr>
@@ -234,7 +235,8 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                         <!-- Expenses Detail Rows (Hidden by default) -->
                         <tr id="expensesDetailContainer" style="display: none;">
                             <td colspan="5" style="padding: 0; background-color: #f9f9f9;">
-                                <div class="expenses-detail-table" style="padding: 15px;">
+                                <!-- Scrollable Expenses Detail Table -->
+                                <div class="expenses-detail-table">
                                     <table class="table table-sm" style="margin-bottom: 0;">
                                         <thead>
                                             <tr style="background-color: #fff3cd;">
@@ -274,8 +276,8 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                             </td>
                         </tr>
                         
-                        <!-- Net Income Row -->
-                        <tr class="table-totals" style="background-color: #e8f4e8;">
+                        <!-- Net Income Row (Grand Total - Expenses) -->
+                        <tr class="table-totals" style="background-color: #e8f4e8; position: sticky; bottom: 0; z-index: 5;">
                             <td colspan="2" class="text-end fw-bold">NET INCOME:</td>
                             <td class="totals-expected"><?= number_format($grandTotals['grand_expected'] ?? 0, 2) ?></td>
                             <td class="totals-received"><?= number_format($netIncome, 2) ?></td>
