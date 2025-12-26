@@ -12,7 +12,7 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
 <aside class="sidebar">
     <div class="sidebar-header">
         <img src="../../assets/images/logo.png" alt="School Logo" class="sidebar-logo">
-        <h5 class="mb-0" style="font-size: 16.5px;">Bornwell Academy</h5>
+        <h5 class="mb-0">Bornwell Academy</h5>
     </div>
     
     <nav class="sidebar-nav">
@@ -96,6 +96,7 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             height: 60px;
             margin-right: 15px;
             object-fit: contain;
+            flex-shrink: 0;
         }
 
         .sidebar-header {
@@ -105,6 +106,18 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             padding: 20px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
             text-align: center;
+            background-color: transparent;
+        }
+        
+        .sidebar-header h5 {
+            font-size: 16.5px !important;
+            margin: 0 !important;
+            color: white !important;
+            font-weight: 600 !important;
+            line-height: 1.3 !important;
+            text-align: left !important;
+            white-space: normal !important;
+            word-wrap: break-word !important;
         }
     </style>
 </aside>
