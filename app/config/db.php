@@ -6,10 +6,10 @@ if ($isProduction) {
     // Production settings (InfinityFree)
     // IMPORTANT: Get these values from InfinityFree Control Panel → MySQL Databases
     
-    $host = 'sql200.infinityfree.com';           // MySQL Hostname (NOT account label)
-    $db   = 'if0_12345678_school_system';        // Database Name (with if0_ prefix)
-    $user = 'if0_12345678';                      // Database Username (with if0_ prefix)
-    $password = 'YOUR_DATABASE_PASSWORD_HERE';    // Database Password (NOT account password)
+    $host = 'sql113.infinityfree.com';           // MySQL Hostname (NOT account label)
+    $db   = 'if0_40763730_school_system';        // Database Name (with if0_ prefix)
+    $user = 'if0_40763730';                      // Database Username (with if0_ prefix)
+    $password = '1P4z11p2g8jX';    // Database Password (NOT account password)
 } else {
     // Development settings (localhost)
     $host = 'localhost';

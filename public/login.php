@@ -68,6 +68,12 @@ $stmt->close();
 <head>
   <meta charset="UTF-8">
   <title>School System Login</title>
+  
+  <!-- Favicon - School Logo in Browser Tab -->
+  <link rel="icon" type="image/png" href="../assets/images/logo.png">
+  <link rel="shortcut icon" href="../assets/images/logo.png">
+  <link rel="apple-touch-icon" href="../assets/images/logo.png">
+  
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
 
