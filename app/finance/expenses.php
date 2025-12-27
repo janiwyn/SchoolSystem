@@ -246,7 +246,7 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
         </a>
         <a href="?tab=cooks<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
            class="expense-tab-btn <?= $active_tab === 'cooks' ? 'active' : '' ?>">
-            <i class="bi bi-egg-fried"></i> Cooks
+            <i class="bi bi-egg-fried"></i>Food
         </a>
         <a href="?tab=utilities<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
            class="expense-tab-btn <?= $active_tab === 'utilities' ? 'active' : '' ?>">

@@ -13,11 +13,15 @@ $classesQuery = "SELECT DISTINCT fs.class_id, c.class_name
 $classesResult = $mysqli->query($classesQuery);
 $classes = $classesResult->fetch_all(MYSQLI_ASSOC);
 
-// Generate next serial number
-function generateSerialNumber($mysqli) {
-    $query = "SELECT MAX(CAST(admission_no AS UNSIGNED)) as max_sn FROM admit_students";
-    $result = $mysqli->query($query);
+// Generate next serial number based on day/boarding type
+function generateSerialNumber($mysqli, $day_boarding) {
+    $query = "SELECT MAX(CAST(admission_no AS UNSIGNED)) as max_sn FROM admit_students WHERE day_boarding = ?";
+    $stmt = $mysqli->prepare($query);
+    $stmt->bind_param("s", $day_boarding);
+    $stmt->execute();
+    $result = $stmt->get_result();
     $row = $result->fetch_assoc();
+    $stmt->close();
     $nextSN = ($row['max_sn'] ?? 0) + 1;
     return $nextSN;
 }
@@ -42,8 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
     } elseif (!is_numeric($uniform_fee) || $uniform_fee <= 0) {
         $error = "Please enter a valid uniform fee";
     } else {
-        // Generate next serial number
-        $admission_no = generateSerialNumber($mysqli);
+        // Generate next serial number based on day/boarding type
+        $admission_no = generateSerialNumber($mysqli, $day_boarding);
 
         if (!$error) {
             $user_id = $_SESSION['user_id'] ?? null;
@@ -61,16 +65,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
                 } else {
                     $status = 'approved';
                     
-                    // Insert without last_name, parent_email, and student_image
-                    // Fixed: Changed 'i' to 's' for admission_no (it's a string)
                     $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                     
                     if ($stmt) {
-                        // Fixed type string: "sssissddsi" (admission_no is string, class_id is integer)
                         $stmt->bind_param("sssissddsi", $admission_no, $first_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $status, $user_id);
                         
                         if ($stmt->execute()) {
-                            header("Location: admitStudents.php?success=1");
+                            header("Location: admitStudents.php?success=1&day_boarding=" . urlencode($day_boarding));
                             exit();
                         } else {
                             $error = "Error admitting student: " . $stmt->error;
@@ -150,8 +151,8 @@ $class_filter = $_GET['class'] ?? '';
 $gender_filter = $_GET['gender'] ?? '';
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
-$day_boarding_filter = $_GET['day_boarding'] ?? 'Day'; // Default to Day students
-$sort_order = $_GET['sort'] ?? 'DESC'; // Default sort order
+$day_boarding_filter = $_GET['day_boarding'] ?? ''; // Remove default filter
+$sort_order = $_GET['sort'] ?? 'ASC'; // Changed default to ASC (ascending order)
 
 // Toggle sort order
 $next_sort_order = ($sort_order === 'ASC') ? 'DESC' : 'ASC';
@@ -275,7 +276,7 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                 <div class="col-md-3">
                     <label class="form-label">Day/Boarding</label>
                     <select name="day_boarding" class="form-control" required>
-                        <option value="">Select Option</option>
+                        <option value="">Selec</option>/option>
                         <option value="Day">Day</option>
                         <option value="Boarding">Boarding</option>
                     </select>
@@ -311,7 +312,6 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
 <div class="card filter-card">
     <div class="card-body">
         <form method="GET">
-            <input type="hidden" name="day_boarding" value="<?= htmlspecialchars($day_boarding_filter) ?>">
             <div class="filter-row">
                 <div class="filter-group">
                     <label>Search Student</label>
@@ -340,6 +340,15 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                 </div>
 
                 <div class="filter-group">
+                    <label>Day/Boarding</label>
+                    <select name="day_boarding" class="form-control">
+                        <option value="">All Students</option>
+                        <option value="Day" <?= $day_boarding_filter === 'Day' ? 'selected' : '' ?>>Day</option>
+                        <option value="Boarding" <?= $day_boarding_filter === 'Boarding' ? 'selected' : '' ?>>Boarding</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
                     <label>Date From</label>
                     <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($date_from) ?>">
                 </div>
@@ -364,26 +373,12 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
     </div>
 </div>
 
-<!-- Day/Boarding Tabs -->
-<div class="tabs-section mb-4">
-    <div class="btn-group" role="tablist">
-        <a href="?day_boarding=Day&page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" 
-           class="btn <?= $day_boarding_filter === 'Day' ? 'btn-primary' : 'btn-outline-primary' ?>" role="tab">
-            <i class="bi bi-person-check"></i> Day Students
-        </a>
-        <a href="?day_boarding=Boarding&page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" 
-           class="btn <?= $day_boarding_filter === 'Boarding' ? 'btn-primary' : 'btn-outline-primary' ?>" role="tab">
-            <i class="bi bi-house-fill"></i> Boarding Students
-        </a>
-    </div>
-</div>
-
-<!-- Admitted Students Table -->
+<!-- Admitted Students Table (All students in one table) -->
 <div class="card shadow-sm border-0">
     <div class="card-body">
         <?php if (empty($students)): ?>
             <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i> No <?= $day_boarding_filter ?> students found.
+                <i class="bi bi-info-circle"></i> No students found.
             </div>
         <?php else: ?>
             <div class="table-container">
@@ -391,7 +386,7 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                     <thead>
                         <tr>
                             <th>
-                                <a href="?day_boarding=<?= $day_boarding_filter ?>&sort=<?= $next_sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" style="text-decoration: none; color: white; display: flex; align-items: center; gap: 8px;">
+                                <a href="?sort=<?= $next_sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($day_boarding_filter ? '&day_boarding=' . $day_boarding_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" style="text-decoration: none; color: white; display: flex; align-items: center; gap: 8px;">
                                     SN
                                     <i class="bi <?= $sort_order === 'ASC' ? 'bi-sort-up' : 'bi-sort-down' ?>"></i>
                                 </a>
@@ -428,7 +423,6 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                                 <td>
                                     <div class="action-buttons">
                                         <?php if ($canAdmitStudent): ?>
-                                            <!-- Admin/Principal can edit/delete -->
                                             <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $student['id'] ?>, '<?= htmlspecialchars($student['first_name']) ?>', '<?= htmlspecialchars($student['gender']) ?>', <?= $student['admission_fee'] ?>, <?= $student['uniform_fee'] ?>, '<?= htmlspecialchars($student['parent_contact']) ?>', '<?= htmlspecialchars($student['day_boarding']) ?>', <?= $student['class_id'] ?>)">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
@@ -436,7 +430,6 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                                                 <i class="bi bi-trash"></i>
                                             </a>
                                         <?php else: ?>
-                                            <!-- Bursar cannot edit/delete -->
                                             <button type="button" class="btn-icon-edit-restricted" title="Edit" data-bs-toggle="modal" data-bs-target="#admitRestrictionModal">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
@@ -456,21 +449,19 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
             <?php if ($total_pages > 1): ?>
                 <nav aria-label="Page navigation" class="mt-4">
                     <ul class="pagination justify-content-center">
-                        <!-- Previous Button -->
                         <li class="page-item <?= $current_page <= 1 ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>" aria-label="Previous">
+                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($day_boarding_filter ? '&day_boarding=' . $day_boarding_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
 
-                        <!-- Page Numbers -->
                         <?php
                         $start_page = max(1, $current_page - 2);
                         $end_page = min($total_pages, $current_page + 2);
 
                         if ($start_page > 1): ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=1&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>">1</a>
+                                <a class="page-link" href="?page=1&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($day_boarding_filter ? '&day_boarding=' . $day_boarding_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">1</a>
                             </li>
                             <?php if ($start_page > 2): ?>
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -479,7 +470,7 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
 
                         <?php for ($page = $start_page; $page <= $end_page; $page++): ?>
                             <li class="page-item <?= $page === $current_page ? 'active' : '' ?>">
-                                <a class="page-link" href="?page=<?= $page ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>">
+                                <a class="page-link" href="?page=<?= $page ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($day_boarding_filter ? '&day_boarding=' . $day_boarding_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
                                     <?= $page ?>
                                 </a>
                             </li>
@@ -490,20 +481,18 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             <?php endif; ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=<?= $total_pages ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>"><?= $total_pages ?></a>
+                                <a class="page-link" href="?page=<?= $total_pages ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($day_boarding_filter ? '&day_boarding=' . $day_boarding_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>"><?= $total_pages ?></a>
                             </li>
                         <?php endif; ?>
 
-                        <!-- Next Button -->
                         <li class="page-item <?= $current_page >= $total_pages ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . '&day_boarding=' . $day_boarding_filter; ?>" aria-label="Next">
+                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?>&sort=<?= $sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($day_boarding_filter ? '&day_boarding=' . $day_boarding_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
                     </ul>
                 </nav>
 
-                <!-- Pagination Info -->
                 <div class="text-center mt-3">
                     <p class="text-muted" style="font-size: 13px;">
                         Showing <?= ($offset + 1) ?> to <?= min($offset + $records_per_page, $total_records) ?> of <?= $total_records ?> students
