@@ -13,15 +13,11 @@ $classesQuery = "SELECT DISTINCT fs.class_id, c.class_name
 $classesResult = $mysqli->query($classesQuery);
 $classes = $classesResult->fetch_all(MYSQLI_ASSOC);
 
-// Generate next serial number based on day/boarding type
-function generateSerialNumber($mysqli, $day_boarding) {
-    $query = "SELECT MAX(CAST(admission_no AS UNSIGNED)) as max_sn FROM admit_students WHERE day_boarding = ?";
-    $stmt = $mysqli->prepare($query);
-    $stmt->bind_param("s", $day_boarding);
-    $stmt->execute();
-    $result = $stmt->get_result();
+// Generate next serial number globally (no Day/Boarding split)
+function generateSerialNumber($mysqli) {
+    $query = "SELECT MAX(CAST(admission_no AS UNSIGNED)) as max_sn FROM admit_students";
+    $result = $mysqli->query($query);
     $row = $result->fetch_assoc();
-    $stmt->close();
     $nextSN = ($row['max_sn'] ?? 0) + 1;
     return $nextSN;
 }
@@ -38,16 +34,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
     $uniform_fee = trim($_POST['uniform_fee']);
     $parent_contact = trim($_POST['parent_contact']);
 
-    // Validate required fields
-    if (!$first_name || !$gender || !$class_id || !$day_boarding || !$admission_fee || !$uniform_fee || !$parent_contact) {
+    // Treat fees as optional: empty = 0
+    if ($admission_fee === '' || $admission_fee === null) {
+        $admission_fee = 0;
+    }
+    if ($uniform_fee === '' || $uniform_fee === null) {
+        $uniform_fee = 0;
+    }
+
+    // Validate required fields (fees NOT required)
+    if (!$first_name || !$gender || !$class_id || !$day_boarding || !$parent_contact) {
         $error = "All required fields must be filled";
-    } elseif (!is_numeric($admission_fee) || $admission_fee <= 0) {
-        $error = "Please enter a valid admission fee";
-    } elseif (!is_numeric($uniform_fee) || $uniform_fee <= 0) {
-        $error = "Please enter a valid uniform fee";
+    } elseif (!is_numeric($admission_fee) || $admission_fee < 0) {
+        $error = "Please enter a valid admission fee (0 or more)";
+    } elseif (!is_numeric($uniform_fee) || $uniform_fee < 0) {
+        $error = "Please enter a valid uniform fee (0 or more)";
     } else {
-        // Generate next serial number based on day/boarding type
-        $admission_no = generateSerialNumber($mysqli, $day_boarding);
+        // Generate next serial number (global sequence)
+        $admission_no = generateSerialNumber($mysqli);
 
         if (!$error) {
             $user_id = $_SESSION['user_id'] ?? null;
@@ -98,17 +102,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
     $uniform_fee = trim($_POST['uniform_fee']);
     $parent_contact = trim($_POST['parent_contact']);
 
-    if (!$first_name || !$gender || !$class_id || !$day_boarding || !$admission_fee || !$uniform_fee || !$parent_contact) {
+    // Treat fees as optional: empty = 0
+    if ($admission_fee === '' || $admission_fee === null) {
+        $admission_fee = 0;
+    }
+    if ($uniform_fee === '' || $uniform_fee === null) {
+        $uniform_fee = 0;
+    }
+
+    if (!$first_name || !$gender || !$class_id || !$day_boarding || !$parent_contact) {
         $error = "All required fields must be filled";
-    } elseif (!is_numeric($admission_fee) || $admission_fee <= 0) {
-        $error = "Please enter a valid admission fee";
-    } elseif (!is_numeric($uniform_fee) || $uniform_fee <= 0) {
-        $error = "Please enter a valid uniform fee";
+    } elseif (!is_numeric($admission_fee) || $admission_fee < 0) {
+        $error = "Please enter a valid admission fee (0 or more)";
+    } elseif (!is_numeric($uniform_fee) || $uniform_fee < 0) {
+        $error = "Please enter a valid uniform fee (0 or more)";
     } else {
-        // Fixed: Changed type string to match parameters correctly
         $stmt = $mysqli->prepare("UPDATE admit_students SET first_name = ?, gender = ?, class_id = ?, day_boarding = ?, admission_fee = ?, uniform_fee = ?, parent_contact = ?, status = ? WHERE id = ?");
         if ($stmt) {
-            // Fixed type string: "ssissddsi"
             $stmt->bind_param("ssissddsi", $first_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $student_id);
             if ($stmt->execute()) {
                 header("Location: admitStudents.php?updated=1");
@@ -276,7 +286,7 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                 <div class="col-md-3">
                     <label class="form-label">Day/Boarding</label>
                     <select name="day_boarding" class="form-control" required>
-                        <option value="">Selec</option>/option>
+                        <option value="">Select Option</option>
                         <option value="Day">Day</option>
                         <option value="Boarding">Boarding</option>
                     </select>
@@ -284,12 +294,12 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
 
                 <div class="col-md-3">
                     <label class="form-label">Admission Fee</label>
-                    <input type="number" name="admission_fee" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                    <input type="number" name="admission_fee" class="form-control" step="0.01" min="0" placeholder="0.00">
                 </div>
 
                 <div class="col-md-3">
                     <label class="form-label">Uniform Fee</label>
-                    <input type="number" name="uniform_fee" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                    <input type="number" name="uniform_fee" class="form-control" step="0.01" min="0" placeholder="0.00">
                 </div>
 
                 <div class="col-md-3">
@@ -552,12 +562,12 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
 
                         <div class="col-md-6">
                             <label class="form-label">Admission Fee</label>
-                            <input type="number" name="admission_fee" id="editAdmissionFee" class="form-control" step="0.01" min="0" required>
+                            <input type="number" name="admission_fee" id="editAdmissionFee" class="form-control" step="0.01" min="0">
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">Uniform Fee</label>
-                            <input type="number" name="uniform_fee" id="editUniformFee" class="form-control" step="0.01" min="0" required>
+                            <input type="number" name="uniform_fee" id="editUniformFee" class="form-control" step="0.01" min="0">
                         </div>
 
                         <div class="col-md-12">

@@ -133,11 +133,12 @@ require_once __DIR__ . '/../helper/layout.php';
 // Build filter query
 $filterWhere = "1=1";
 $search_filter = $_GET['search'] ?? '';
+$class_filter = $_GET['class'] ?? '';
+$term_filter = $_GET['term'] ?? '';
+$status_filter = $_GET['status'] ?? '';
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
-$term_filter = $_GET['term'] ?? '';
-$approval_filter = $_GET['approval'] ?? '';
-$pay_status_filter = $_GET['pay_status'] ?? '';
+$sort_order = $_GET['sort'] ?? 'ASC'; // Changed default to ASC (ascending order)
 
 if ($search_filter) {
     $searchTerm = '%' . $mysqli->real_escape_string($search_filter) . '%';
@@ -152,15 +153,11 @@ if ($date_to) {
 if ($term_filter) {
     $filterWhere .= " AND term = '" . $mysqli->real_escape_string($term_filter) . "'";
 }
-if ($approval_filter) {
-    $filterWhere .= " AND status_approved = '" . $mysqli->real_escape_string($approval_filter) . "'";
+if ($status_filter) {
+    $filterWhere .= " AND status_approved = '" . $mysqli->real_escape_string($status_filter) . "'";
 }
-if ($pay_status_filter) {
-    if ($pay_status_filter === 'paid') {
-        $filterWhere .= " AND balance = 0";
-    } elseif ($pay_status_filter === 'unpaid') {
-        $filterWhere .= " AND balance > 0";
-    }
+if ($class_filter) {
+    $filterWhere .= " AND class_id = '" . intval($class_filter) . "'";
 }
 
 // Pagination setup
@@ -182,7 +179,7 @@ $paymentsQuery = "SELECT
     parent_contact, parent_email, payment_date, created_at, status_approved
 FROM student_payments
 WHERE $filterWhere
-ORDER BY created_at DESC
+ORDER BY admission_no ASC
 LIMIT $offset, $records_per_page";
 
 $paymentsResult = $mysqli->query($paymentsQuery);

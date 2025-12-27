@@ -138,7 +138,7 @@ foreach ($dateRange as $date => $data) {
         <div class="card stat-card red">
             <div class="card-body stat-card-body">
                 <div class="stat-content">
-                    <div class="stat-label">Total Debts</div>
+                    <div class="stat-label">Unpaid tuition</div>
                     <div class="stat-value">$ <?= number_format($totalDebts, 0) ?></div>
                 </div>
                 <div class="stat-icon">
