@@ -60,6 +60,14 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
                 <span>Payroll</span>
             </a>
         <?php endif; ?>
+        
+        <!-- Manage Users - Only for Admin -->
+        <?php if ($role === 'admin'): ?>
+            <a href="../admin/manage_users.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'manage_users.php' ? 'active' : '' ?>">
+                <i class="bi bi-person-check-fill"></i>
+                <span>Manage Users</span>
+            </a>
+        <?php endif; ?>
     </nav>
 
     <style>

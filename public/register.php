@@ -31,12 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($checkResult->num_rows > 0) {
             $error = "Email already exists";
         } else {
-            // Insert new user
-            $stmt = $mysqli->prepare("INSERT INTO users (name, email, password, role, username) VALUES (?, ?, ?, ?, ?)");
+            // Insert new user with status = 0 (pending approval)
+            $status = 0; // Pending approval
+            $stmt = $mysqli->prepare("INSERT INTO users (name, email, password, role, username, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
             if ($stmt) {
-                $stmt->bind_param("sssss", $name, $email, $hash, $role, $username);
+                $stmt->bind_param("sssssi", $name, $email, $hash, $role, $username, $status);
                 if ($stmt->execute()) {
-                    $message = "Registration successful! You can now <a href='login.php' class='text-primary fw-bold'>login here</a>.";
+                    $message = "Registration successful! Your account is pending admin approval. You will receive notification once approved.";
                 } else {
                     $error = "Something went wrong: " . $stmt->error;
                 }

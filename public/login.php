@@ -12,48 +12,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($username && $password) {
 
-     // Fetch user
-$query = "SELECT id, name, username, password, role 
-          FROM users 
-          WHERE username = ? AND status = 1 
-          LIMIT 1";
+        // Fetch user - check status
+        $query = "SELECT id, name, username, password, role, status 
+                  FROM users 
+                  WHERE username = ? 
+                  LIMIT 1";
 
-$stmt = $mysqli->prepare($query);
-$stmt->bind_param("s", $username);
-$stmt->execute();
+        $stmt = $mysqli->prepare($query);
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
 
-$result = $stmt->get_result();
-$user = $result->fetch_assoc();
-
-$stmt->close();
+        $result = $stmt->get_result();
+        $user = $result->fetch_assoc();
+        $stmt->close();
 
         if ($user && password_verify($password, $user['password'])) {
+            // Check account status
+            if ($user['status'] == 0) {
+                $error = "Your account is pending admin approval. Please wait for approval.";
+            } elseif ($user['status'] == 2) {
+                $error = "Your account has been suspended. Please contact admin.";
+            } elseif ($user['status'] == 3) {
+                $error = "Your account registration was rejected. Please contact admin.";
+            } elseif ($user['status'] == 1) {
+                // Account is active - allow login
+                // Store session data
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['name']    = $user['name'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['role']    = strtolower(trim($user['role']));
 
-            // Store session data
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['name']    = $user['name'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['role']    = strtolower(trim($user['role']));
+                // Redirect based on role
+                switch ($_SESSION['role']) {
+                    case 'admin':
+                        header("Location: ../app/admin/dashboard.php");
+                        break;
 
-            // Redirect based on role
-            switch ($_SESSION['role']) {
-                case 'admin':
-                    header("Location: ../app/admin/dashboard.php");
-                    break;
+                    case 'principal':
+                        header("Location: ../app/principal/dashboard.php");
+                        break;
 
-                case 'principal':
-                    header("Location: ../app/principal/dashboard.php");
-                    break;
+                    case 'bursar':
+                        header("Location: ../app/finance/dashboard.php");
+                        break;
 
-                case 'bursar':
-                    header("Location: ../app/finance/dashboard.php");
-                    break;
+                    default:
+                        $error = "Unauthorized role";
+                }
+                exit;
 
-                default:
-                    $error = "Unauthorized role";
+            } else {
+                $error = "Invalid account status. Please contact admin.";
             }
-            exit;
-
         } else {
             $error = "Invalid username or password";
         }
