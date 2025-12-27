@@ -13,13 +13,13 @@ $classesQuery = "SELECT DISTINCT fs.class_id, c.class_name
 $classesResult = $mysqli->query($classesQuery);
 $classes = $classesResult->fetch_all(MYSQLI_ASSOC);
 
-// Get the highest admission number to generate next one
-function generateAdmissionNo($mysqli) {
-    $query = "SELECT MAX(CAST(SUBSTRING(admission_no, -3) AS UNSIGNED)) as max_no FROM admit_students WHERE admission_no LIKE 'ADM-%'";
+// Generate next serial number
+function generateSerialNumber($mysqli) {
+    $query = "SELECT MAX(CAST(admission_no AS UNSIGNED)) as max_sn FROM admit_students";
     $result = $mysqli->query($query);
     $row = $result->fetch_assoc();
-    $nextNo = ($row['max_no'] ?? 0) + 1;
-    return 'ADM-' . str_pad($nextNo, 3, '0', STR_PAD_LEFT);
+    $nextSN = ($row['max_sn'] ?? 0) + 1;
+    return $nextSN;
 }
 
 // Handle form submission
@@ -27,61 +27,30 @@ $message = '';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
     $first_name = trim($_POST['first_name']);
-    $last_name = trim($_POST['last_name']);
     $gender = trim($_POST['gender']);
     $class_id = trim($_POST['class_id']);
     $day_boarding = trim($_POST['day_boarding']);
     $admission_fee = trim($_POST['admission_fee']);
     $uniform_fee = trim($_POST['uniform_fee']);
     $parent_contact = trim($_POST['parent_contact']);
-    $email = trim($_POST['parent_email']); // Optional - can be empty
 
-    // If email is empty, set it to NULL
-    if (empty($email)) {
-        $email = null;
-    }
-
-    // Validate required fields (email is optional)
-    if (!$first_name || !$last_name || !$gender || !$class_id || !$day_boarding || !$admission_fee || !$uniform_fee || !$parent_contact) {
+    // Validate required fields
+    if (!$first_name || !$gender || !$class_id || !$day_boarding || !$admission_fee || !$uniform_fee || !$parent_contact) {
         $error = "All required fields must be filled";
-    } elseif ($email !== null && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        // Only validate email if it's provided
-        $error = "Please enter a valid email address";
     } elseif (!is_numeric($admission_fee) || $admission_fee <= 0) {
         $error = "Please enter a valid admission fee";
     } elseif (!is_numeric($uniform_fee) || $uniform_fee <= 0) {
         $error = "Please enter a valid uniform fee";
     } else {
-        // Generate unique admission number
-        $admission_no = generateAdmissionNo($mysqli);
-        
-        // Handle image upload (optional)
-        $image_path = NULL;
-        if (isset($_FILES['student_image']) && $_FILES['student_image']['size'] > 0) {
-            $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
-            if (in_array($_FILES['student_image']['type'], $allowed_types)) {
-                $upload_dir = __DIR__ . '/../../assets/images/students/';
-                if (!is_dir($upload_dir)) {
-                    mkdir($upload_dir, 0755, true);
-                }
-                $filename = 'student_' . time() . '_' . basename($_FILES['student_image']['name']);
-                if (move_uploaded_file($_FILES['student_image']['tmp_name'], $upload_dir . $filename)) {
-                    // Store relative path from project root
-                    $image_path = 'assets/images/students/' . $filename;
-                }
-            } else {
-                $error = "Invalid image file type. Only JPG, PNG, and GIF are allowed.";
-            }
-        }
+        // Generate next serial number
+        $admission_no = generateSerialNumber($mysqli);
 
         if (!$error) {
-            // Insert into admit_students table with APPROVED status
             $user_id = $_SESSION['user_id'] ?? null;
             
             if (!$user_id) {
                 $error = "User session error. Please log in again.";
             } else {
-                // Check if user exists
                 $checkUserStmt = $mysqli->prepare("SELECT id FROM users WHERE id = ?");
                 $checkUserStmt->bind_param("i", $user_id);
                 $checkUserStmt->execute();
@@ -90,22 +59,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
                 if ($userCheckResult->num_rows === 0) {
                     $error = "Invalid user. Please log in again.";
                 } else {
-                    $status = 'approved'; // Auto-approved
+                    $status = 'approved';
                     
-                    // Prepare statement based on whether email is NULL
-                    if ($email === null) {
-                        $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, parent_email, student_image, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NOW())");
-                        // 12 parameters: admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, image_path, status, user_id
-                        $stmt->bind_param("ssssissdsssi", $admission_no, $first_name, $last_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $image_path, $status, $user_id);
-                    } else {
-                        $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, parent_email, student_image, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-                        // 13 parameters: admission_no, first_name, last_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, email, image_path, status, user_id
-                        $stmt->bind_param("ssssissdssssi", $admission_no, $first_name, $last_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $email, $image_path, $status, $user_id);
-                    }
+                    // Insert without last_name, parent_email, and student_image
+                    // Fixed: Changed 'i' to 's' for admission_no (it's a string)
+                    $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                     
                     if ($stmt) {
+                        // Fixed type string: "sssissddsi" (admission_no is string, class_id is integer)
+                        $stmt->bind_param("sssissddsi", $admission_no, $first_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $status, $user_id);
+                        
                         if ($stmt->execute()) {
-                            // Redirect to prevent form resubmission
                             header("Location: admitStudents.php?success=1");
                             exit();
                         } else {
@@ -126,27 +90,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
     $student_id = intval($_POST['student_id']);
     $first_name = trim($_POST['first_name']);
-    $last_name = trim($_POST['last_name']);
     $gender = trim($_POST['gender']);
     $class_id = trim($_POST['class_id']);
     $day_boarding = trim($_POST['day_boarding']);
     $admission_fee = trim($_POST['admission_fee']);
     $uniform_fee = trim($_POST['uniform_fee']);
     $parent_contact = trim($_POST['parent_contact']);
-    $email = trim($_POST['parent_email']);
 
-    if (!$first_name || !$last_name || !$gender || !$class_id || !$day_boarding || !$admission_fee || !$uniform_fee || !$parent_contact || !$email) {
+    if (!$first_name || !$gender || !$class_id || !$day_boarding || !$admission_fee || !$uniform_fee || !$parent_contact) {
         $error = "All required fields must be filled";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = "Please enter a valid email address";
     } elseif (!is_numeric($admission_fee) || $admission_fee <= 0) {
         $error = "Please enter a valid admission fee";
     } elseif (!is_numeric($uniform_fee) || $uniform_fee <= 0) {
         $error = "Please enter a valid uniform fee";
     } else {
-        $stmt = $mysqli->prepare("UPDATE admit_students SET first_name = ?, last_name = ?, gender = ?, class_id = ?, day_boarding = ?, admission_fee = ?, uniform_fee = ?, parent_contact = ?, parent_email = ? WHERE id = ?");
+        // Fixed: Changed type string to match parameters correctly
+        $stmt = $mysqli->prepare("UPDATE admit_students SET first_name = ?, gender = ?, class_id = ?, day_boarding = ?, admission_fee = ?, uniform_fee = ?, parent_contact = ?, status = ? WHERE id = ?");
         if ($stmt) {
-            $stmt->bind_param("ssssissdsi", $first_name, $last_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $email, $student_id);
+            // Fixed type string: "ssissddsi"
+            $stmt->bind_param("ssissddsi", $first_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $student_id);
             if ($stmt->execute()) {
                 header("Location: admitStudents.php?updated=1");
                 exit();
@@ -196,7 +158,7 @@ $next_sort_order = ($sort_order === 'ASC') ? 'DESC' : 'ASC';
 
 if ($search_filter) {
     $searchTerm = '%' . $mysqli->real_escape_string($search_filter) . '%';
-    $filterWhere .= " AND (admit_students.first_name LIKE '$searchTerm' OR admit_students.last_name LIKE '$searchTerm' OR admit_students.admission_no LIKE '$searchTerm' OR admit_students.parent_email LIKE '$searchTerm')";
+    $filterWhere .= " AND (admit_students.first_name LIKE '$searchTerm' OR admit_students.admission_no LIKE '$searchTerm')";
 }
 if ($class_filter) {
     $filterWhere .= " AND admit_students.class_id = " . intval($class_filter);
@@ -231,24 +193,21 @@ $total_pages = ceil($total_records / $records_per_page);
 // Get admitted students - with filters, sorting and pagination
 $studentsQuery = "SELECT 
     admit_students.id,
-    admit_students.admission_no,
-    admit_students.first_name,
-    admit_students.last_name,
-    admit_students.gender,
-    admit_students.class_id,
+    admission_no,
+    first_name,
+    gender,
+    class_id,
     c.class_name,
-    admit_students.day_boarding,
-    admit_students.admission_fee,
-    admit_students.uniform_fee,
-    admit_students.parent_contact,
-    admit_students.parent_email,
-    admit_students.student_image,
-    admit_students.status,
-    admit_students.created_at
+    day_boarding,
+    admission_fee,
+    uniform_fee,
+    parent_contact,
+    status,
+    created_at
 FROM admit_students
 LEFT JOIN classes c ON admit_students.class_id = c.id
 WHERE $filterWhere
-ORDER BY admit_students.admission_no $sort_order
+ORDER BY CAST(admission_no AS UNSIGNED) $sort_order
 LIMIT $offset, $records_per_page";
 
 $studentsResult = $mysqli->query($studentsQuery);
@@ -278,26 +237,21 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
         <?php endif; ?>
 
         <form method="POST" enctype="multipart/form-data" class="row g-3">
-            <div class="col-md-3">
-                <label class="form-label">First Name</label>
-                <input type="text" name="first_name" class="form-control" placeholder="First name" required>
+            <div class="col-md-4">
+                <label class="form-label">Full Name</label>
+                <input type="text" name="first_name" class="form-control" placeholder="Student full name" required>
             </div>
 
-            <div class="col-md-3">
-                <label class="form-label">Last Name</label>
-                <input type="text" name="last_name" class="form-control" placeholder="Last name" required>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Sex</label>
+            <div class="col-md-4">
+                <label class="form-label">F/M</label>
                 <select name="gender" class="form-control" required>
-                    <option value="">Select Sex</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
+                    <option value="">Select</option>
+                    <option value="Male">M</option>
+                    <option value="Female">F</option>
                 </select>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <label class="form-label">Class</label>
                 <select name="class_id" class="form-control" required>
                     <option value="">Select Class</option>
@@ -326,26 +280,10 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                 <input type="number" name="uniform_fee" class="form-control" step="0.01" min="0" placeholder="0.00" required>
             </div>
 
-            <div class="col-md-6">
+            <div class="col-md-3">
                 <label class="form-label">Parent Contact</label>
                 <input type="text" name="parent_contact" class="form-control" placeholder="e.g., 0774323232" required>
-                <small class="text-muted">Enter phone number with leading zeros (e.g., 0774323232)</small>
-            </div>
-
-            <div class="col-md-6">
-                <label class="form-label">Parent Email <span class="text-muted">(Optional)</span></label>
-                <input type="email" name="parent_email" class="form-control" placeholder="parent@example.com">
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Admission Date</label>
-                <input type="date" name="admission_date" class="form-control" required>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Student Image (Optional)</label>
-                <input type="file" name="student_image" class="form-control" accept="image/*">
-                <small class="text-muted">JPG, PNG, GIF only</small>
+                <small class="text-muted">Enter phone number with leading zeros</small>
             </div>
 
             <div class="col-12">
@@ -365,7 +303,7 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
             <div class="filter-row">
                 <div class="filter-group">
                     <label>Search Student</label>
-                    <input type="text" name="search" class="form-control" placeholder="Name, Admission No, Email" value="<?= htmlspecialchars($search_filter) ?>">
+                    <input type="text" name="search" class="form-control" placeholder="Name, Admission No" value="<?= htmlspecialchars($search_filter) ?>">
                 </div>
 
                 <div class="filter-group">
@@ -442,19 +380,17 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                         <tr>
                             <th>
                                 <a href="?day_boarding=<?= $day_boarding_filter ?>&sort=<?= $next_sort_order ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($gender_filter ? '&gender=' . $gender_filter : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" style="text-decoration: none; color: white; display: flex; align-items: center; gap: 8px;">
-                                    Adm No
+                                    SN
                                     <i class="bi <?= $sort_order === 'ASC' ? 'bi-sort-up' : 'bi-sort-down' ?>"></i>
                                 </a>
                             </th>
                             <th>Name</th>
-                            <th>Sex</th>
+                            <th>F/M</th>
                             <th>Class</th>
                             <th>Day/Boarding</th>
-                            <th>Admission Fee</th>
-                            <th>Uniform Fee</th>
+                            <th>Adm Fee</th>
+                            <th>U Fee</th>
                             <th>Parent Contact</th>
-                            <th>Parent Email</th>
-                            <th>Image</th>
                             <th>Date</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -464,23 +400,13 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                         <?php foreach ($students as $student): ?>
                             <tr>
                                 <td><?= htmlspecialchars($student['admission_no']) ?></td>
-                                <td><?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?></td>
-                                <td><?= htmlspecialchars($student['gender']) ?></td>
+                                <td><?= htmlspecialchars($student['first_name']) ?></td>
+                                <td><?= $student['gender'] === 'Male' ? 'M' : 'F' ?></td>
                                 <td><?= htmlspecialchars($student['class_name'] ?? 'N/A') ?></td>
                                 <td><?= htmlspecialchars($student['day_boarding']) ?></td>
                                 <td><?= number_format($student['admission_fee'], 2) ?></td>
                                 <td><?= number_format($student['uniform_fee'], 2) ?></td>
                                 <td><?= htmlspecialchars($student['parent_contact']) ?></td>
-                                <td><?= htmlspecialchars($student['parent_email']) ?></td>
-                                <td>
-                                    <?php if ($student['student_image']): ?>
-                                        <button type="button" class="btn-icon-view" data-image="<?= htmlspecialchars($student['student_image']) ?>" data-bs-toggle="modal" data-bs-target="#imageModal" title="View Image">
-                                            <i class="bi bi-eye"></i>
-                                        </button>
-                                    <?php else: ?>
-                                        <span class="text-muted">No image</span>
-                                    <?php endif; ?>
-                                </td>
                                 <td><?= date('Y-m-d H:i', strtotime($student['created_at'])) ?></td>
                                 <td>
                                     <span class="badge <?= $student['status'] === 'approved' ? 'bg-success' : 'bg-danger' ?>">
@@ -489,7 +415,7 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                                 </td>
                                 <td>
                                     <div class="action-buttons">
-                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $student['id'] ?>, '<?= htmlspecialchars($student['first_name']) ?>', '<?= htmlspecialchars($student['last_name']) ?>', '<?= htmlspecialchars($student['gender']) ?>', <?= $student['admission_fee'] ?>, <?= $student['uniform_fee'] ?>, '<?= htmlspecialchars($student['parent_contact']) ?>', '<?= htmlspecialchars($student['parent_email']) ?>', '<?= htmlspecialchars($student['day_boarding']) ?>', <?= $student['class_id'] ?>)">
+                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $student['id'] ?>, '<?= htmlspecialchars($student['first_name']) ?>', '<?= htmlspecialchars($student['gender']) ?>', <?= $student['admission_fee'] ?>, <?= $student['uniform_fee'] ?>, '<?= htmlspecialchars($student['parent_contact']) ?>', '<?= htmlspecialchars($student['day_boarding']) ?>', <?= $student['class_id'] ?>)">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
                                         <a href="deleteStudent.php?id=<?= $student['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure?')">
@@ -565,21 +491,6 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
-<!-- Image Modal -->
-<div class="modal fade" id="imageModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Student Image</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body text-center">
-                <img id="modalImage" src="" alt="Student Image" class="img-fluid" style="max-height: 400px; max-width: 100%;">
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Edit Student Modal -->
 <div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -594,21 +505,16 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
 
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label">First Name</label>
+                        <label class="form-label">Full Name</label>
                         <input type="text" name="first_name" id="editFirstName" class="form-control" required>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Last Name</label>
-                        <input type="text" name="last_name" id="editLastName" class="form-control" required>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Sex</label>
+                        <label class="form-label">F/M</label>
                         <select name="gender" id="editGender" class="form-control" required>
-                            <option value="">Select Sex</option>
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
+                            <option value="">Select</option>
+                            <option value="Male">M</option>
+                            <option value="Female">F</option>
                         </select>
                     </div>
 
@@ -641,14 +547,9 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                         <input type="number" name="uniform_fee" id="editUniformFee" class="form-control" step="0.01" min="0" required>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-12">
                         <label class="form-label">Parent Contact</label>
                         <input type="text" name="parent_contact" id="editParentContact" class="form-control" required>
-                    </div>
-
-                    <div class="col-md-12">
-                        <label class="form-label">Parent Email</label>
-                        <input type="email" name="parent_email" id="editParentEmail" class="form-control" required>
                     </div>
                 </div>
 

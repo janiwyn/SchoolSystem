@@ -330,3 +330,11 @@ body {
     margin-bottom: 16px;
     opacity: 0.5;
 }
+
+/* Prevent text wrapping in all table cells */
+.table td,
+.table th {
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

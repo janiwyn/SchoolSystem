@@ -34,12 +34,16 @@
     text-transform: uppercase;
     font-size: 12px;
     letter-spacing: 0.5px;
+    white-space: nowrap; /* Prevent header text wrapping */
 }
 
 .table tbody td {
-    padding: 14px 12px;
+    padding: 10px 12px;
     border-color: #eee;
     vertical-align: middle;
+    white-space: nowrap; /* Prevent text wrapping */
+    overflow: hidden;
+    text-overflow: ellipsis; /* Show ... for very long text */
 }
 
 .table tbody tr:hover {

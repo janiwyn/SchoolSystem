@@ -20,15 +20,13 @@ function toggleAdmitForm() {
     }
 }
 
-function loadEditForm(id, firstName, lastName, gender, admissionFee, uniformFee, parentContact, parentEmail, dayBoarding, classId) {
+function loadEditForm(id, firstName, gender, admissionFee, uniformFee, parentContact, dayBoarding, classId) {
     document.getElementById('editStudentId').value = id;
     document.getElementById('editFirstName').value = firstName;
-    document.getElementById('editLastName').value = lastName;
     document.getElementById('editGender').value = gender;
     document.getElementById('editAdmissionFee').value = admissionFee;
     document.getElementById('editUniformFee').value = uniformFee;
     document.getElementById('editParentContact').value = parentContact;
-    document.getElementById('editParentEmail').value = parentEmail;
     document.getElementById('editDayBoarding').value = dayBoarding;
     document.getElementById('editClassId').value = classId;
 }
