@@ -117,14 +117,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
     } elseif (!is_numeric($uniform_fee) || $uniform_fee < 0) {
         $error = "Please enter a valid uniform fee (0 or more)";
     } else {
-        // Get FULL old data before update (for detailed logging)
-        $oldStmt = $mysqli->prepare("SELECT * FROM admit_students WHERE id = ?");
+        // Get FULL old data before update (for change diff)
         $oldData = null;
+        $oldStmt = $mysqli->prepare("SELECT * FROM admit_students WHERE id = ?");
         if ($oldStmt) {
             $oldStmt->bind_param("i", $student_id);
             $oldStmt->execute();
-            $oldResult = $oldStmt->get_result();
-            $oldData   = $oldResult->fetch_assoc();
+            $res = $oldStmt->get_result();
+            $oldData = $res->fetch_assoc();
             $oldStmt->close();
         }
 
@@ -149,10 +149,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
             );
             if ($stmt->execute()) {
 
-                // If principal edited, log EXACT changes into activity_logs
-                if (isset($_SESSION['role']) && $_SESSION['role'] === 'principal' && $oldData) {
+                // Re‑read CURRENT admission_no after update so SN matches what you see now
+                $currentSn = null;
+                $snStmt = $mysqli->prepare("SELECT admission_no FROM admit_students WHERE id = ?");
+                if ($snStmt) {
+                    $snStmt->bind_param("i", $student_id);
+                    $snStmt->execute();
+                    $snRes = $snStmt->get_result();
+                    $snRow = $snRes->fetch_assoc();
+                    $currentSn = $snRow['admission_no'] ?? null;
+                    $snStmt->close();
+                }
+
+                // Log detailed changes only for principal, using the CURRENT SN
+                if (isset($_SESSION['role']) && $_SESSION['role'] === 'principal' && $oldData && $currentSn !== null) {
                     $changes = [];
-                    // Compare each important field
+
                     if ($oldData['first_name'] !== $first_name) {
                         $changes[] = "Name: {$oldData['first_name']} → {$first_name}";
                     }
@@ -181,15 +193,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
                         $changes[] = "Parent Contact: {$oldData['parent_contact']} → {$parent_contact}";
                     }
 
-                    if (empty($changes)) {
-                        $changeSummary = "No field values actually changed.";
-                    } else {
-                        $changeSummary = implode("; ", $changes);
-                    }
+                    $snText = $currentSn; // THIS is the serial number you see now (after re‑ordering)
+                    $changeSummary = empty($changes)
+                        ? "No field values actually changed."
+                        : implode("; ", $changes);
 
-                    // Use only current name as entity_name, do NOT bake SN into it
+                    // entity_name just the name (SN can change over time)
                     $entityName = $first_name;
-                    $details = "Principal edited admitted student. Changes: {$changeSummary}";
+                    $details = "Principal edited admitted student SN {$snText}. Changes: {$changeSummary}";
                     $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
                     $logSql = "INSERT INTO activity_logs
@@ -197,7 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
                         VALUES (?, ?, ?, 'edit', 'admit_student', ?, ?, ?, ?, 0, NOW())";
                     $logStmt = $mysqli->prepare($logSql);
                     if ($logStmt) {
-                        // i,s,s,i,s,s,s  → "ississs"
+                        // i,s,s,i,s,s,s → "ississs"
                         $logStmt->bind_param(
                             "ississs",
                             $_SESSION['user_id'],
