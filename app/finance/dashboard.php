@@ -4,9 +4,12 @@ require_once __DIR__ . '/../helper/layout.php';
 
 // Get statistics for dashboard cards
 // Total Tuition Paid
-$tuitionQuery = "SELECT SUM(amount_paid) as total FROM student_payments WHERE status_approved = 'approved'";
-$tuitionResult = $mysqli->query($tuitionQuery);
-$totalTuitionPaid = $tuitionResult->fetch_assoc()['total'] ?? 0;
+$tuitionBaseQuery = "SELECT SUM(amount_paid) as total FROM student_payments"; // removed status filter
+$tuitionBaseResult = $mysqli->query($tuitionBaseQuery);
+$baseTuition = $tuitionBaseResult ? (float)($tuitionBaseResult->fetch_assoc()['total'] ?? 0) : 0;
+
+// Only use amount_paid from student_payments
+$totalTuitionPaid = $baseTuition;
 
 // Total Debts (Balance) - SUM of all balances
 $debtsQuery = "SELECT SUM(balance) as total FROM student_payments";

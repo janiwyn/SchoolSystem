@@ -14,9 +14,12 @@ $studentsResult = $mysqli->query($studentsQuery);
 $totalStudents = $studentsResult->fetch_assoc()['total'] ?? 0;
 
 // Total Tuition Collected
-$tuitionQuery = "SELECT SUM(amount_paid) as total FROM student_payments WHERE status_approved = 'approved'";
-$tuitionResult = $mysqli->query($tuitionQuery);
-$totalTuition = $tuitionResult->fetch_assoc()['total'] ?? 0;
+$tuitionBaseQuery = "SELECT SUM(amount_paid) as total FROM student_payments"; // removed status filter
+$tuitionBaseResult = $mysqli->query($tuitionBaseQuery);
+$baseTuition = $tuitionBaseResult ? (float)($tuitionBaseResult->fetch_assoc()['total'] ?? 0) : 0;
+
+// Only use amount_paid from student_payments
+$totalTuition = $baseTuition;
 
 // Pending Approvals
 $pendingQuery = "SELECT COUNT(*) as total FROM student_payments WHERE status_approved = 'unapproved' AND id NOT IN (SELECT DISTINCT payment_id FROM student_payment_topups WHERE status_approved = 'unapproved')";

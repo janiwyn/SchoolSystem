@@ -93,16 +93,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
 
 // Handle edit form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
-    $student_id = intval($_POST['student_id']);
-    $first_name = trim($_POST['first_name']);
-    $gender = trim($_POST['gender']);
-    $class_id = trim($_POST['class_id']);
-    $day_boarding = trim($_POST['day_boarding']);
+    $student_id    = intval($_POST['student_id']);
+    $first_name    = trim($_POST['first_name']);
+    $gender        = trim($_POST['gender']);
+    $class_id      = trim($_POST['class_id']);
+    $day_boarding  = trim($_POST['day_boarding']);
     $admission_fee = trim($_POST['admission_fee']);
-    $uniform_fee = trim($_POST['uniform_fee']);
+    $uniform_fee   = trim($_POST['uniform_fee']);
     $parent_contact = trim($_POST['parent_contact']);
 
-    // Treat fees as optional: empty = 0
+    // Make fees optional: empty = 0
     if ($admission_fee === '' || $admission_fee === null) {
         $admission_fee = 0;
     }
@@ -117,16 +117,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
     } elseif (!is_numeric($uniform_fee) || $uniform_fee < 0) {
         $error = "Please enter a valid uniform fee (0 or more)";
     } else {
-        $stmt = $mysqli->prepare("UPDATE admit_students SET first_name = ?, gender = ?, class_id = ?, day_boarding = ?, admission_fee = ?, uniform_fee = ?, parent_contact = ?, status = ? WHERE id = ?");
+        // Get FULL old data before update (for detailed logging)
+        $oldStmt = $mysqli->prepare("SELECT * FROM admit_students WHERE id = ?");
+        $oldData = null;
+        if ($oldStmt) {
+            $oldStmt->bind_param("i", $student_id);
+            $oldStmt->execute();
+            $oldResult = $oldStmt->get_result();
+            $oldData   = $oldResult->fetch_assoc();
+            $oldStmt->close();
+        }
+
+        $stmt = $mysqli->prepare(
+            "UPDATE admit_students 
+             SET first_name = ?, gender = ?, class_id = ?, day_boarding = ?, 
+                 admission_fee = ?, uniform_fee = ?, parent_contact = ?
+             WHERE id = ?"
+        );
         if ($stmt) {
-            $stmt->bind_param("ssissddsi", $first_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $student_id);
+            // ssissddi → s,s,i,s,d,d,s,i
+            $stmt->bind_param(
+                "ssissddi",
+                $first_name,
+                $gender,
+                $class_id,
+                $day_boarding,
+                $admission_fee,
+                $uniform_fee,
+                $parent_contact,
+                $student_id
+            );
             if ($stmt->execute()) {
+
+                // If principal edited, log EXACT changes into activity_logs
+                if (isset($_SESSION['role']) && $_SESSION['role'] === 'principal' && $oldData) {
+                    $changes = [];
+                    // Compare each important field
+                    if ($oldData['first_name'] !== $first_name) {
+                        $changes[] = "Name: {$oldData['first_name']} → {$first_name}";
+                    }
+                    if ($oldData['gender'] !== $gender) {
+                        $changes[] = "Gender: {$oldData['gender']} → {$gender}";
+                    }
+                    if ((string)$oldData['class_id'] !== (string)$class_id) {
+                        $changes[] = "Class ID: {$oldData['class_id']} → {$class_id}";
+                    }
+                    if ($oldData['day_boarding'] !== $day_boarding) {
+                        $changes[] = "Type (Day/Boarding): {$oldData['day_boarding']} → {$day_boarding}";
+                    }
+                    if ((float)$oldData['admission_fee'] != (float)$admission_fee) {
+                        $changes[] = "Admission Fee: ".
+                            number_format((float)$oldData['admission_fee'], 2).
+                            " → ".
+                            number_format((float)$admission_fee, 2);
+                    }
+                    if ((float)$oldData['uniform_fee'] != (float)$uniform_fee) {
+                        $changes[] = "Uniform Fee: ".
+                            number_format((float)$oldData['uniform_fee'], 2).
+                            " → ".
+                            number_format((float)$uniform_fee, 2);
+                    }
+                    if ($oldData['parent_contact'] !== $parent_contact) {
+                        $changes[] = "Parent Contact: {$oldData['parent_contact']} → {$parent_contact}";
+                    }
+
+                    if (empty($changes)) {
+                        $changeSummary = "No field values actually changed.";
+                    } else {
+                        $changeSummary = implode("; ", $changes);
+                    }
+
+                    // Use only current name as entity_name, do NOT bake SN into it
+                    $entityName = $first_name;
+                    $details = "Principal edited admitted student. Changes: {$changeSummary}";
+                    $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+
+                    $logSql = "INSERT INTO activity_logs
+                        (user_id, user_name, user_role, action, entity_type, entity_id, entity_name, details, ip_address, is_acknowledged, created_at)
+                        VALUES (?, ?, ?, 'edit', 'admit_student', ?, ?, ?, ?, 0, NOW())";
+                    $logStmt = $mysqli->prepare($logSql);
+                    if ($logStmt) {
+                        // i,s,s,i,s,s,s  → "ississs"
+                        $logStmt->bind_param(
+                            "ississs",
+                            $_SESSION['user_id'],
+                            $_SESSION['name'],
+                            $_SESSION['role'],
+                            $student_id,
+                            $entityName,
+                            $details,
+                            $ipAddress
+                        );
+                        $logStmt->execute();
+                        $logStmt->close();
+                    }
+                }
+
                 header("Location: admitStudents.php?updated=1");
                 exit();
             } else {
                 $error = "Error updating student: " . $stmt->error;
             }
             $stmt->close();
+        } else {
+            $error = "Database error: " . $mysqli->error;
         }
     }
 }
@@ -414,9 +508,11 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                         </tr>
                     </thead>
                     <tbody>
+                        <?php $sn = $offset + 1; // continuous SN across pages ?>
                         <?php foreach ($students as $student): ?>
                             <tr>
-                                <td><?= htmlspecialchars($student['admission_no']) ?></td>
+                                <td><?= $sn ?></td>
+                                <?php $sn++; ?>
                                 <td><?= htmlspecialchars($student['first_name']) ?></td>
                                 <td><?= $student['gender'] === 'Male' ? 'M' : 'F' ?></td>
                                 <td><?= htmlspecialchars($student['class_name'] ?? 'N/A') ?></td>

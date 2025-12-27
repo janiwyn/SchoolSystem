@@ -67,6 +67,12 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
                 <i class="bi bi-person-check-fill"></i>
                 <span>Manage Users</span>
             </a>
+            
+            <!-- Activity Log - Only for Admin -->
+            <a href="../../app/admin/activity_log.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'activity_log.php' ? 'active' : '' ?>">
+                <i class="bi bi-clock-history"></i>
+                <span>Activity Log</span>
+            </a>
         <?php endif; ?>
     </nav>
 
