@@ -388,3 +388,9 @@ function switchTab(tabName) {
 </script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>
+
+
+<!-- Username: superadmin
+Password: password
+Role: Admin
+Status: Active (1) -->
