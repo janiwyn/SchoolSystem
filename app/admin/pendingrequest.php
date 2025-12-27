@@ -217,25 +217,39 @@ require_once __DIR__ . '/../helper/layout.php';
 // Get active tab - default to student_payments instead of admitted_students
 $activeTab = $_GET['tab'] ?? 'student_payments';
 
-// Get unapproved student payments
-$paymentsQuery = "SELECT 
-    sp.id,
-    sp.student_id,
-    CONCAT(a.first_name, ' ', a.last_name) as student_name,
-    a.admission_no,
-    sp.class_name,
-    sp.expected_tuition,
-    sp.amount_paid,
-    sp.balance,
-    sp.payment_date,
-    sp.created_at
-FROM student_payments sp
-LEFT JOIN admit_students a ON sp.student_id = a.id
-WHERE sp.status_approved = 'unapproved' AND sp.id NOT IN (SELECT DISTINCT payment_id FROM student_payment_topups WHERE status_approved = 'unapproved')
-ORDER BY sp.created_at DESC";
+// ======================= UNAPPROVED SCHOOL PAYMENTS =======================
 
-$paymentsResult = $mysqli->query($paymentsQuery);
-$unapproved_payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
+// Get all unapproved school payments with full student info
+$schoolPaymentsQuery = "
+    SELECT
+        sp.id,
+        sp.admission_no,
+        sp.expected_tuition,
+        sp.amount_paid,
+        sp.balance,
+        sp.payment_date,
+        ast.first_name,
+        ast.gender,
+        ast.day_boarding,
+        ast.parent_contact,
+        c.class_name
+    FROM student_payments sp
+    LEFT JOIN admit_students ast
+        ON sp.admission_no = ast.admission_no
+    LEFT JOIN classes c
+        ON ast.class_id = c.id
+    WHERE sp.status_approved = 'unapproved'
+    ORDER BY sp.payment_date DESC
+";
+
+$schoolPaymentsResult = $mysqli->query($schoolPaymentsQuery);
+if (!$schoolPaymentsResult) {
+    // Optional: temporary debug to see SQL error
+    // echo "SQL error: " . $mysqli->error;
+    $unapprovedSchoolPayments = [];
+} else {
+    $unapprovedSchoolPayments = $schoolPaymentsResult->fetch_all(MYSQLI_ASSOC);
+}
 
 // Get unapproved balance top-ups
 $topupsQuery = "SELECT 
@@ -324,19 +338,18 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
                 <h5 class="mb-0">Unapproved School Payments</h5>
             </div>
             <div class="card-body">
-                <?php if (empty($unapproved_payments)): ?>
+                <?php if (empty($unapprovedSchoolPayments)): ?>
                     <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> No unapproved payments pending.
+                        <i class="bi bi-info-circle"></i> No unapproved school payments.
                     </div>
                 <?php else: ?>
-                    <div class="table-responsive">
+                    <div class="table-container">
                         <table class="table table-striped">
                             <thead>
                                 <tr>
-                                    <th>Adm No</th>
+                                    <th>SN</th>
                                     <th>Name</th>
                                     <th>Class</th>
-                                    <th>Term</th>
                                     <th>Type</th>
                                     <th>Gender</th>
                                     <th>Expected Tuition</th>
@@ -348,30 +361,50 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($unapproved_payments as $payment): ?>
+                                <?php foreach ($unapprovedSchoolPayments as $row): ?>
                                     <tr>
-                                        <td><?= htmlspecialchars($payment['admission_no']) ?></td>
-                                        <td><?= htmlspecialchars($payment['student_name']) ?></td>
-                                        <td><?= htmlspecialchars($payment['class_name']) ?></td>
-                                        <td><?= htmlspecialchars($payment['term']) ?></td>
-                                        <td><span class="badge bg-info"><?= htmlspecialchars($payment['day_boarding']) ?></span></td>
-                                        <td><?= htmlspecialchars($payment['gender']) ?></td>
-                                        <td><?= number_format($payment['expected_tuition'], 2) ?></td>
-                                        <td><?= number_format($payment['amount_paid'], 2) ?></td>
-                                        <td><?= number_format($payment['balance'], 2) ?></td>
-                                        <td><?= htmlspecialchars($payment['parent_contact']) ?></td>
-                                        <td><?= date('Y-m-d', strtotime($payment['payment_date'])) ?></td>
+                                        <!-- SN / Admission number from admit_students -->
+                                        <td><?= htmlspecialchars($row['admission_no']) ?></td>
+
+                                        <!-- Student name from admit_students -->
+                                        <td><?= htmlspecialchars($row['first_name']) ?></td>
+
+                                        <!-- Class from classes -->
+                                        <td><?= htmlspecialchars($row['class_name']) ?></td>
+
+                                        <!-- Day / Boarding from admit_students -->
+                                        <td><?= htmlspecialchars($row['day_boarding']) ?></td>
+
+                                        <!-- Gender from admit_students -->
+                                        <td><?= ($row['gender'] === 'Male' ? 'M' : 'F') ?></td>
+
+                                        <!-- Amounts from student_payments -->
+                                        <td><?= number_format((float)$row['expected_tuition'], 2) ?></td>
+                                        <td><?= number_format((float)$row['amount_paid'], 2) ?></td>
+                                        <td><?= number_format((float)$row['balance'], 2) ?></td>
+
+                                        <!-- Parent contact from admit_students -->
+                                        <td><?= htmlspecialchars($row['parent_contact']) ?></td>
+
+                                        <!-- Payment date from student_payments -->
+                                        <td><?= date('Y-m-d', strtotime($row['payment_date'])) ?></td>
+
+                                        <!-- Approve / Reject -->
                                         <td>
                                             <div class="action-button-group">
-                                                <form method="POST" style="display: inline;">
-                                                    <input type="hidden" name="payment_id" value="<?= $payment['id'] ?>">
-                                                    <button type="submit" name="approve_payment" class="btn-approve" onclick="return confirm('Approve this payment?')">
+                                                <form method="POST" style="display:inline;">
+                                                    <input type="hidden" name="payment_id" value="<?= (int)$row['id'] ?>">
+                                                    <button type="submit" name="approve_payment"
+                                                            class="btn-approve"
+                                                            onclick="return confirm('Approve this school payment?');">
                                                         <i class="bi bi-check-circle"></i> Approve
                                                     </button>
                                                 </form>
-                                                <form method="POST" style="display: inline;">
-                                                    <input type="hidden" name="payment_id" value="<?= $payment['id'] ?>">
-                                                    <button type="submit" name="reject_payment" class="btn-reject" onclick="return confirm('Reject this payment?')">
+                                                <form method="POST" style="display:inline;">
+                                                    <input type="hidden" name="payment_id" value="<?= (int)$row['id'] ?>">
+                                                    <button type="submit" name="reject_payment"
+                                                            class="btn-reject"
+                                                            onclick="return confirm('Reject this school payment?');">
                                                         <i class="bi bi-x-circle"></i> Reject
                                                     </button>
                                                 </form>
