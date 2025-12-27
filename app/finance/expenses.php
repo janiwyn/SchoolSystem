@@ -120,79 +120,91 @@ WHERE $filterWhere";
 
 $totalsResult = $mysqli->query($totalsQuery);
 $totals = $totalsResult->fetch_assoc();
+
+// Get current user role
+$userRole = $_SESSION['role'] ?? '';
+$canRecordExpense = in_array($userRole, ['admin', 'bursar']);
 ?>
 
-<!-- Toggle Button -->
-<div class="expense-form-toggle">
-    <h4 class="mb-0">Expense Management</h4>
-    <button type="button" class="btn-toggle-form" onclick="toggleExpenseForm()">
-        <i class="bi bi-chevron-down" id="toggleIcon"></i>
-        <span id="toggleText">Show Form</span>
-    </button>
+<!-- Toggle Button for Expense Form -->
+<div class="mb-3">
+    <?php if ($canRecordExpense): ?>
+        <button type="button" class="btn-toggle-form" onclick="toggleExpenseForm()">
+            <i class="bi bi-chevron-down" id="toggleIcon"></i>
+            <span id="toggleText">Show Form</span>
+        </button>
+    <?php else: ?>
+        <button type="button" class="btn-toggle-form" data-bs-toggle="modal" data-bs-target="#expenseRestrictionModal">
+            <i class="bi bi-chevron-down"></i>
+            <span>Show Form</span>
+        </button>
+    <?php endif; ?>
 </div>
 
-<!-- Add Expense Form (Hidden by default) -->
-<div class="card shadow-sm border-0 mb-4" id="expenseFormCard" style="display: none;">
-    <div class="card-header form-header text-white">
-        <h5 class="mb-0">Record Expense</h5>
+<!-- Expense Form (Collapsible) - Only show if user can record -->
+<?php if ($canRecordExpense): ?>
+    <div class="card shadow-sm border-0 mb-4" id="expenseFormCard" style="display: none;">
+        <div class="card-header form-header text-white">
+            <h5 class="mb-0">Record Expense</h5>
+        </div>
+        <div class="card-body">
+            <?php if (!empty($message)): ?>
+                <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+
+            <form method="POST" class="row g-3" id="expenseForm">
+                <div class="col-md-4">
+                    <label class="form-label">Category</label>
+                    <select name="category" id="category" class="form-control" required onchange="handleCategoryChange()">
+                        <option value="">Select Category</option>
+                        <option value="Cooks">Cooks (Food)</option>
+                        <option value="Utilities">Utilities</option>
+                        <option value="Administrative">Administrative</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Item</label>
+                    <input type="text" name="item" class="form-control" placeholder="e.g., Rice, Electricity, Office Supplies" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Quantity</label>
+                    <input type="number" name="quantity" id="quantity" class="form-control" step="0.01" min="0" placeholder="0" value="0" oninput="calculateExpected()">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Unit Price</label>
+                    <input type="number" name="unit_price" id="unit_price" class="form-control" step="0.01" min="0" placeholder="0.00" value="0" oninput="calculateExpected()">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Expected</label>
+                    <input type="number" name="expected" id="expected" class="form-control readonly-field" step="0.01" placeholder="0.00" value="0.00" readonly style="background-color: #e9ecef;">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Amount Paid ($)</label>
+                    <input type="number" name="amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Date</label>
+                    <input type="date" name="date" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                </div>
+
+                <div class="col-md-4" style="display: flex; align-items: flex-end;">
+                    <button type="submit" name="record_expense" class="btn btn-form-submit w-100">
+                        <i class="bi bi-plus-circle"></i> Record Expense
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-    <div class="card-body">
-        <?php if (!empty($message)): ?>
-            <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
-        <?php endif; ?>
-        <?php if (!empty($error)): ?>
-            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-        <?php endif; ?>
-
-        <form method="POST" class="row g-3" id="expenseForm">
-            <div class="col-md-4">
-                <label class="form-label">Category</label>
-                <select name="category" id="category" class="form-control" required onchange="handleCategoryChange()">
-                    <option value="">Select Category</option>
-                    <option value="Cooks">Cooks (Food)</option>
-                    <option value="Utilities">Utilities</option>
-                    <option value="Administrative">Administrative</option>
-                </select>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Item</label>
-                <input type="text" name="item" class="form-control" placeholder="e.g., Rice, Electricity, Office Supplies" required>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Quantity</label>
-                <input type="number" name="quantity" id="quantity" class="form-control" step="0.01" min="0" placeholder="0" value="0" oninput="calculateExpected()">
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Unit Price</label>
-                <input type="number" name="unit_price" id="unit_price" class="form-control" step="0.01" min="0" placeholder="0.00" value="0" oninput="calculateExpected()">
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Expected</label>
-                <input type="number" name="expected" id="expected" class="form-control readonly-field" step="0.01" placeholder="0.00" value="0.00" readonly style="background-color: #e9ecef;">
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Amount Paid ($)</label>
-                <input type="number" name="amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Date</label>
-                <input type="date" name="date" class="form-control" value="<?= date('Y-m-d') ?>" required>
-            </div>
-
-            <div class="col-md-4" style="display: flex; align-items: flex-end;">
-                <button type="submit" name="record_expense" class="btn btn-form-submit w-100">
-                    <i class="bi bi-plus-circle"></i> Record Expense
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
+<?php endif; ?>
 
 <!-- Filter Section -->
 <div class="card filter-card">
@@ -359,6 +371,35 @@ $totals = $totalsResult->fetch_assoc();
                 </div>
             <?php endif; ?>
         <?php endif; ?>
+    </div>
+</div>
+
+<!-- Restriction Modal for Principal -->
+<div class="modal fade" id="expenseRestrictionModal" tabindex="-1" aria-labelledby="expenseRestrictionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="expenseRestrictionModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Access Restricted
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
+                <h5 class="mb-3">Cannot Record Expense</h5>
+                <p class="text-muted mb-0">
+                    Only <strong>Admin</strong> and <strong>Bursar</strong> roles have permission to record expenses.
+                </p>
+                <p class="text-muted mt-2">
+                    As a <strong class="text-primary">Principal</strong>, you can view expense records but cannot create new ones.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 

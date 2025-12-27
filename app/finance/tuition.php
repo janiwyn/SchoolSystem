@@ -162,50 +162,68 @@ $filterClasses = $filterClassesResult->fetch_all(MYSQLI_ASSOC);
 $termsQuery = "SELECT DISTINCT term FROM fee_structure ORDER BY term ASC";
 $termsResult = $mysqli->query($termsQuery);
 $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
+
+// Get current user role
+$userRole = $_SESSION['role'] ?? '';
+$canAddTuition = ($userRole === 'admin');
+$canModifyTuition = ($userRole === 'admin');
 ?>
 
-<!-- Add Tuition Form -->
-<div class="card shadow-sm border-0 mb-4">
-    <div class="card-header form-header text-white">
-        <h5 class="mb-0">Add Tuition Record</h5>
+<!-- Add Tuition Form - Only show for Admin -->
+<?php if ($canAddTuition): ?>
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header form-header text-white">
+            <h5 class="mb-0">Add Tuition Record</h5>
+        </div>
+        <div class="card-body">
+            <?php if (!empty($message)): ?>
+                <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+
+            <form method="POST" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Class</label>
+                    <input type="text" name="class_name" class="form-control" placeholder="e.g., Form 1A" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Term</label>
+                    <select name="term" class="form-control" required>
+                        <option value="">Select Term</option>
+                        <option value="Term 1">Term 1</option>
+                        <option value="Term 2">Term 2</option>
+                        <option value="Term 3">Term 3</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Expected Tuition</label>
+                    <input type="number" name="amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+
+                <div class="col-12">
+                    <button type="submit" name="add_tuition" class="btn btn-form-submit">
+                        <i class="bi bi-plus-circle"></i> Add Tuition
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-    <div class="card-body">
-        <?php if (!empty($message)): ?>
-            <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
-        <?php endif; ?>
-        <?php if (!empty($error)): ?>
-            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-        <?php endif; ?>
-
-        <form method="POST" class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label">Class</label>
-                <input type="text" name="class_name" class="form-control" placeholder="e.g., Form 1A" required>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Term</label>
-                <select name="term" class="form-control" required>
-                    <option value="">Select Term</option>
-                    <option value="Term 1">Term 1</option>
-                    <option value="Term 2">Term 2</option>
-                    <option value="Term 3">Term 3</option>
-                </select>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Expected Tuition</label>
-                <input type="number" name="amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
-            </div>
-
-            <div class="col-12">
-                <button type="submit" name="add_tuition" class="btn btn-form-submit">
-                    <i class="bi bi-plus-circle"></i> Add Tuition
-                </button>
-            </div>
-        </form>
+<?php else: ?>
+    <!-- Restricted form card for Bursar/Principal -->
+    <div class="card shadow-sm border-0 mb-4" style="cursor: pointer; opacity: 0.7;" data-bs-toggle="modal" data-bs-target="#tuitionAddRestrictionModal">
+        <div class="card-header form-header text-white">
+            <h5 class="mb-0">Add Tuition Record <i class="bi bi-lock-fill ms-2"></i></h5>
+        </div>
+        <div class="card-body text-center py-5">
+            <i class="bi bi-shield-lock" style="font-size: 48px; color: #6c757d; margin-bottom: 15px;"></i>
+            <p class="text-muted mb-0">Only Admin can add tuition records. Click for details.</p>
+        </div>
     </div>
-</div>
+<?php endif; ?>
 
 <!-- Filter Section -->
 <div class="card filter-card">
@@ -279,12 +297,23 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                                 <td><?= htmlspecialchars($tuition['recorded_by'] ?? 'System') ?></td>
                                 <td>
                                     <div class="action-buttons">
-                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $tuition['id'] ?>, '<?= htmlspecialchars($tuition['class_name']) ?>', '<?= htmlspecialchars($tuition['term']) ?>', <?= $tuition['amount'] ?>)" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
-                                            Edit
-                                        </button>
-                                        <a href="deleteTuition.php?id=<?= $tuition['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure you want to delete this record?')" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
-                                            Delete
-                                        </a>
+                                        <?php if ($canModifyTuition): ?>
+                                            <!-- Admin can edit/delete -->
+                                            <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $tuition['id'] ?>, '<?= htmlspecialchars($tuition['class_name']) ?>', '<?= htmlspecialchars($tuition['term']) ?>', <?= $tuition['amount'] ?>)" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
+                                                Edit
+                                            </button>
+                                            <a href="deleteTuition.php?id=<?= $tuition['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure you want to delete this record?')" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
+                                                Delete
+                                            </a>
+                                        <?php else: ?>
+                                            <!-- Bursar/Principal cannot edit/delete -->
+                                            <button type="button" class="btn-icon-edit-restricted" title="Edit" data-bs-toggle="modal" data-bs-target="#tuitionRestrictionModal" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
+                                                Edit
+                                            </button>
+                                            <button type="button" class="btn-icon-delete-restricted" title="Delete" data-bs-toggle="modal" data-bs-target="#tuitionRestrictionModal" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
+                                                Delete
+                                            </button>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>
@@ -296,47 +325,107 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
-<!-- Edit Tuition Modal -->
-<div class="modal fade" id="editModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header form-header text-white">
-                <h5 class="modal-title">Edit Tuition Record</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<!-- Edit Tuition Modal - Only shown for Admin -->
+<?php if ($canModifyTuition): ?>
+    <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header form-header text-white">
+                    <h5 class="modal-title">Edit Tuition Record</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form method="POST" class="modal-body">
+                    <input type="hidden" name="edit_tuition" value="1">
+                    <input type="hidden" name="tuition_id" id="editTuitionId">
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Class</label>
+                            <input type="text" name="class_name" id="editClassName" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Term</label>
+                            <select name="term" id="editTerm" class="form-control" required>
+                                <option value="">Select Term</option>
+                                <option value="Term 1">Term 1</option>
+                                <option value="Term 2">Term 2</option>
+                                <option value="Term 3">Term 3</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label">Expected Tuition</label>
+                            <input type="number" name="amount" id="editAmount" class="form-control" step="0.01" min="0" required>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer mt-4">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-form-submit">
+                            <i class="bi bi-check-circle"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
             </div>
-            <form method="POST" class="modal-body">
-                <input type="hidden" name="edit_tuition" value="1">
-                <input type="hidden" name="tuition_id" id="editTuitionId">
+        </div>
+    </div>
+<?php endif; ?>
 
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Class</label>
-                        <input type="text" name="class_name" id="editClassName" class="form-control" required>
-                    </div>
+<!-- Restriction Modal for Add Tuition -->
+<div class="modal fade" id="tuitionAddRestrictionModal" tabindex="-1" aria-labelledby="tuitionAddRestrictionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="tuitionAddRestrictionModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Access Restricted
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
+                <h5 class="mb-3">Cannot Add Tuition Records</h5>
+                <p class="text-muted mb-0">
+                    Only <strong>Admin</strong> has permission to add new tuition records.
+                </p>
+                <p class="text-muted mt-2">
+                    As a <strong class="text-primary"><?= ucfirst($userRole) ?></strong>, you can view tuition records but cannot create new ones.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
-                    <div class="col-md-6">
-                        <label class="form-label">Term</label>
-                        <select name="term" id="editTerm" class="form-control" required>
-                            <option value="">Select Term</option>
-                            <option value="Term 1">Term 1</option>
-                            <option value="Term 2">Term 2</option>
-                            <option value="Term 3">Term 3</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-12">
-                        <label class="form-label">Expected Tuition</label>
-                        <input type="number" name="amount" id="editAmount" class="form-control" step="0.01" min="0" required>
-                    </div>
-                </div>
-
-                <div class="modal-footer mt-4">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-form-submit">
-                        <i class="bi bi-check-circle"></i> Save Changes
-                    </button>
-                </div>
-            </form>
+<!-- Restriction Modal for Bursar/Principal -->
+<div class="modal fade" id="tuitionRestrictionModal" tabindex="-1" aria-labelledby="tuitionRestrictionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="tuitionRestrictionModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Access Restricted
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
+                <h5 class="mb-3">Cannot Modify Tuition Records</h5>
+                <p class="text-muted mb-0">
+                    Only <strong>Admin</strong> has permission to edit or delete tuition records.
+                </p>
+                <p class="text-muted mt-2">
+                    As a <strong class="text-primary"><?= ucfirst($userRole) ?></strong>, you can view tuition records but cannot modify them.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
         </div>
     </div>
 </div>

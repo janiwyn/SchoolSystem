@@ -234,142 +234,154 @@ if (empty($approved_students)) {
     $debugRow = $debugResult->fetch_assoc();
     // You can log this or display a message if needed
 }
+
+// Get current user role
+$userRole = $_SESSION['role'] ?? '';
+$canRecordPayment = in_array($userRole, ['admin', 'bursar']);
 ?>
 
-<!-- Toggle Button for Record Payment Form -->
+<!-- Toggle Button for Record Student Payment Form -->
 <div class="mb-3">
-    <button type="button" class="btn-toggle-form" onclick="togglePaymentForm()">
-        <i class="bi bi-chevron-right"></i> Record Student Payment
-    </button>
+    <?php if ($canRecordPayment): ?>
+        <button type="button" class="btn-toggle-form" onclick="togglePaymentForm()">
+            <i class="bi bi-chevron-right"></i> Record Student Payment
+        </button>
+    <?php else: ?>
+        <button type="button" class="btn-toggle-form" data-bs-toggle="modal" data-bs-target="#restrictionModal">
+            <i class="bi bi-chevron-right"></i> Record Student Payment
+        </button>
+    <?php endif; ?>
 </div>
 
 <!-- Record Student Payment Form (Collapsible) -->
-<div class="card shadow-sm border-0 mb-4" id="paymentFormCard" style="display: none;">
-    <div class="card-header form-header text-white">
-        <h5 class="mb-0">Record Student Payment</h5>
-    </div>
-    <div class="card-body">
-        <?php if (!empty($message)): ?>
-            <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
-        <?php endif; ?>
-        <?php if (!empty($error)): ?>
-            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-        <?php endif; ?>
-        
-        <form method="POST" id="paymentForm" class="row g-3">
-            <!-- Student Selection -->
-            <div class="col-md-6">
-                <label class="form-label">Select Student</label>
-                <select name="student_id" id="studentSelect" class="form-control" required onchange="populateStudentData()">
-                    <option value="">-- Select Student --</option>
-                    <?php if (!empty($approved_students)): ?>
-                        <?php foreach ($approved_students as $student): ?>
-                            <option value="<?= $student['id'] ?>" 
-                                data-admission="<?= htmlspecialchars($student['admission_no']) ?>"
-                                data-first="<?= htmlspecialchars($student['first_name']) ?>"
-                                data-last="<?= htmlspecialchars($student['last_name']) ?>"
-                                data-gender="<?= htmlspecialchars($student['gender']) ?>"
-                                data-class="<?= $student['class_id'] ?>"
-                                data-boarding="<?= htmlspecialchars($student['day_boarding']) ?>"
-                                data-admission-fee="<?= $student['admission_fee'] ?>"
-                                data-uniform-fee="<?= $student['uniform_fee'] ?>"
-                                data-contact="<?= htmlspecialchars($student['parent_contact']) ?>"
-                                data-email="<?= htmlspecialchars($student['parent_email']) ?>"
-                                data-status="<?= htmlspecialchars($student['status']) ?>">
-                                <?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?> (<?= htmlspecialchars($student['admission_no']) ?>)
-                                <?php if ($student['status'] === 'unapproved'): ?>
-                                    <span style="color: #f39c12;">● Pending Approval</span>
-                                <?php endif; ?>
-                            </option>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <option value="">No students available</option>
-                    <?php endif; ?>
-                </select>
-                <small class="text-muted d-block mt-2">
-                    <i class="bi bi-info-circle"></i> You can record payments for both approved and unapproved students
-                </small>
-            </div>
+<?php if ($canRecordPayment): ?>
+    <div class="card shadow-sm border-0 mb-4" id="paymentFormCard" style="display: none;">
+        <div class="card-header form-header text-white">
+            <h5 class="mb-0">Record Student Payment</h5>
+        </div>
+        <div class="card-body">
+            <?php if (!empty($message)): ?>
+                <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
             
-            <!-- Auto-filled Student Information -->
-            <div class="col-md-6">
-                <label class="form-label">Student Name</label>
-                <input type="text" id="fullName" class="form-control readonly-field" readonly>
-            </div>
+            <form method="POST" id="paymentForm" class="row g-3">
+                <!-- Student Selection -->
+                <div class="col-md-6">
+                    <label class="form-label">Select Student</label>
+                    <select name="student_id" id="studentSelect" class="form-control" required onchange="populateStudentData()">
+                        <option value="">-- Select Student --</option>
+                        <?php if (!empty($approved_students)): ?>
+                            <?php foreach ($approved_students as $student): ?>
+                                <option value="<?= $student['id'] ?>" 
+                                    data-admission="<?= htmlspecialchars($student['admission_no']) ?>"
+                                    data-first="<?= htmlspecialchars($student['first_name']) ?>"
+                                    data-last="<?= htmlspecialchars($student['last_name']) ?>"
+                                    data-gender="<?= htmlspecialchars($student['gender']) ?>"
+                                    data-class="<?= $student['class_id'] ?>"
+                                    data-boarding="<?= htmlspecialchars($student['day_boarding']) ?>"
+                                    data-admission-fee="<?= $student['admission_fee'] ?>"
+                                    data-uniform-fee="<?= $student['uniform_fee'] ?>"
+                                    data-contact="<?= htmlspecialchars($student['parent_contact']) ?>"
+                                    data-email="<?= htmlspecialchars($student['parent_email']) ?>"
+                                    data-status="<?= htmlspecialchars($student['status']) ?>">
+                                    <?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?> (<?= htmlspecialchars($student['admission_no']) ?>)
+                                    <?php if ($student['status'] === 'unapproved'): ?>
+                                        <span style="color: #f39c12;">● Pending Approval</span>
+                                    <?php endif; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <option value="">No students available</option>
+                        <?php endif; ?>
+                    </select>
+                    <small class="text-muted d-block mt-2">
+                        <i class="bi bi-info-circle"></i> You can record payments for both approved and unapproved students
+                    </small>
+                </div>
+                
+                <!-- Auto-filled Student Information -->
+                <div class="col-md-6">
+                    <label class="form-label">Student Name</label>
+                    <input type="text" id="fullName" class="form-control readonly-field" readonly>
+                </div>
 
-            <!-- Student Status Badge -->
-            <div class="col-md-3">
-                <label class="form-label">Status</label>
-                <input type="text" id="studentStatus" class="form-control readonly-field" readonly>
-            </div>
-            
-            <div class="col-md-3">
-                <label class="form-label">Sex</label>
-                <input type="text" id="gender" class="form-control readonly-field" readonly>
-            </div>
-            
-            <div class="col-md-3">
-                <label class="form-label">Class</label>
-                <input type="text" id="className" class="form-control readonly-field" readonly>
-            </div>
-            
-            <div class="col-md-3">
-                <label class="form-label">Term</label>
-                <input type="text" name="term" id="term" class="form-control readonly-field" readonly>
-            </div>
-            
-            <div class="col-md-3">
-                <label class="form-label">Day/Boarding</label>
-                <input type="text" id="dayBoarding" class="form-control readonly-field" readonly>
-            </div>
-            
-            <div class="col-md-3">
-                <label class="form-label">Expected Tuition</label>
-                <input type="number" name="expected_tuition" id="expectedTuition" class="form-control readonly-field" step="0.01" readonly>
-            </div>
-            
-            <!-- Payment Information -->
-            <div class="col-md-3">
-                <label class="form-label">Amount Paid</label>
-                <input type="number" name="amount_paid" id="amountPaid" class="form-control" step="0.01" min="0" placeholder="0.00" required>
-            </div>
-            
-            <div class="col-md-3">
-                <label class="form-label">Admission Fee</label>
-                <input type="number" name="admission_fee" id="admissionFee" class="form-control readonly-field" step="0.01" readonly>
-            </div>
-            
-            <div class="col-md-3">
-                <label class="form-label">Uniform Fee</label>
-                <input type="number" name="uniform_fee" id="uniformFee" class="form-control readonly-field" step="0.01" readonly>
-            </div>
-            
-            <!-- Parent Information -->
-            <div class="col-md-6">
-                <label class="form-label">Parent Contact</label>
-                <input type="text" id="parentContact" class="form-control readonly-field" readonly>
-            </div>
-            
-            <div class="col-md-6">
-                <label class="form-label">Parent Email</label>
-                <input type="email" id="parentEmail" class="form-control readonly-field" readonly>
-            </div>
-            
-            <!-- Payment Date -->
-            <div class="col-md-3">
-                <label class="form-label">Payment Date</label>
-                <input type="date" name="payment_date" class="form-control" required>
-            </div>
-            
-            <!-- Submit Button -->
-            <div class="col-12">
-                <button type="submit" name="record_payment" class="btn btn-form-submit">
-                    <i class="bi bi-check-circle"></i> Record Payment
-                </button>
-            </div>
-        </form>
+                <!-- Student Status Badge -->
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <input type="text" id="studentStatus" class="form-control readonly-field" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Sex</label>
+                    <input type="text" id="gender" class="form-control readonly-field" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Class</label>
+                    <input type="text" id="className" class="form-control readonly-field" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Term</label>
+                    <input type="text" name="term" id="term" class="form-control readonly-field" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Day/Boarding</label>
+                    <input type="text" id="dayBoarding" class="form-control readonly-field" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Expected Tuition</label>
+                    <input type="number" name="expected_tuition" id="expectedTuition" class="form-control readonly-field" step="0.01" readonly>
+                </div>
+                
+                <!-- Payment Information -->
+                <div class="col-md-3">
+                    <label class="form-label">Amount Paid</label>
+                    <input type="number" name="amount_paid" id="amountPaid" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Admission Fee</label>
+                    <input type="number" name="admission_fee" id="admissionFee" class="form-control readonly-field" step="0.01" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Uniform Fee</label>
+                    <input type="number" name="uniform_fee" id="uniformFee" class="form-control readonly-field" step="0.01" readonly>
+                </div>
+                
+                <!-- Parent Information -->
+                <div class="col-md-6">
+                    <label class="form-label">Parent Contact</label>
+                    <input type="text" id="parentContact" class="form-control readonly-field" readonly>
+                </div>
+                
+                <div class="col-md-6">
+                    <label class="form-label">Parent Email</label>
+                    <input type="email" id="parentEmail" class="form-control readonly-field" readonly>
+                </div>
+                
+                <!-- Payment Date -->
+                <div class="col-md-3">
+                    <label class="form-label">Payment Date</label>
+                    <input type="date" name="payment_date" class="form-control" required>
+                </div>
+                
+                <!-- Submit Button -->
+                <div class="col-12">
+                    <button type="submit" name="record_payment" class="btn btn-form-submit">
+                        <i class="bi bi-check-circle"></i> Record Payment
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-</div>
+<?php endif; ?>
 
 <!-- Filter Section -->
 <div class="card filter-card">
@@ -627,6 +639,35 @@ if (empty($approved_students)) {
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Restriction Modal for Principal -->
+<div class="modal fade" id="restrictionModal" tabindex="-1" aria-labelledby="restrictionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="restrictionModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Access Restricted
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
+                <h5 class="mb-3">Cannot Record Student Payment</h5>
+                <p class="text-muted mb-0">
+                    Only <strong>Admin</strong> and <strong>Bursar</strong> roles have permission to record student payments.
+                </p>
+                <p class="text-muted mt-2">
+                    As a <strong class="text-primary">Principal</strong>, you can view payment records but cannot create new ones.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
         </div>
     </div>
 </div>

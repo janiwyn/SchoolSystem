@@ -301,3 +301,41 @@
     color: white;
     text-decoration: none;
 }
+
+/* Restriction Modal Styling */
+#restrictionModal .modal-header {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+}
+
+#restrictionModal .modal-body {
+    padding: 30px;
+}
+
+#restrictionModal .bi-shield-lock {
+    display: block;
+    margin: 0 auto 20px;
+}
+
+#restrictionModal h5 {
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+#restrictionModal .text-muted {
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+#restrictionModal .text-primary {
+    color: #17a2b8 !important;
+}
+
+/* Disabled button styling for principal */
+.btn-toggle-form[data-bs-toggle="modal"] {
+    cursor: pointer;
+}
+
+.btn-toggle-form[data-bs-toggle="modal"]:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}

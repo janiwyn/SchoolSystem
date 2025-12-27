@@ -217,46 +217,63 @@ require_once __DIR__ . '/../helper/layout.php';
 // Get active tab - default to student_payments instead of admitted_students
 $activeTab = $_GET['tab'] ?? 'student_payments';
 
-// Get unapproved student payments
-$paymentsQuery = "SELECT 
+// Get pending student payments (initial payments)
+$pendingPaymentsQuery = "SELECT 
     sp.id,
-    sp.student_id,
-    CONCAT(a.first_name, ' ', a.last_name) as student_name,
-    a.admission_no,
-    sp.class_name,
+    sp.admission_no,
+    COALESCE(ads.first_name, 'Unknown') as student_name,
+    COALESCE(ads.gender, 'N/A') as gender,
+    COALESCE(ads.parent_contact, 'N/A') as parent_contact,
+    c.class_name,
+    sp.term,
+    sp.payment_type,
     sp.expected_tuition,
     sp.amount_paid,
     sp.balance,
     sp.payment_date,
-    sp.created_at
+    sp.payment_method,
+    u.name as recorded_by
 FROM student_payments sp
-LEFT JOIN admit_students a ON sp.student_id = a.id
-WHERE sp.status_approved = 'unapproved' AND sp.id NOT IN (SELECT DISTINCT payment_id FROM student_payment_topups WHERE status_approved = 'unapproved')
-ORDER BY sp.created_at DESC";
+LEFT JOIN admit_students ads ON sp.admission_no = ads.admission_no
+LEFT JOIN classes c ON sp.class_id = c.id
+LEFT JOIN users u ON sp.recorded_by = u.id
+WHERE sp.status_approved = 'unapproved' 
+AND sp.id NOT IN (
+    SELECT DISTINCT payment_id 
+    FROM student_payment_topups 
+    WHERE status_approved = 'unapproved'
+)
+ORDER BY sp.payment_date DESC";
 
-$paymentsResult = $mysqli->query($paymentsQuery);
-$unapproved_payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
+$pendingPaymentsResult = $mysqli->query($pendingPaymentsQuery);
+$pendingPayments = $pendingPaymentsResult->fetch_all(MYSQLI_ASSOC);
 
-// Get unapproved balance top-ups
-$topupsQuery = "SELECT 
+// Get pending balance top-ups
+$pendingTopupsQuery = "SELECT 
     spt.id,
     spt.payment_id,
-    spt.student_id,
-    CONCAT(a.first_name, ' ', a.last_name) as student_name,
-    a.admission_no,
-    sp.class_name,
+    sp.admission_no,
+    COALESCE(ads.first_name, 'Unknown') as student_name,
+    COALESCE(ads.gender, 'N/A') as gender,
+    COALESCE(ads.parent_contact, 'N/A') as parent_contact,
+    c.class_name,
+    sp.term,
+    sp.payment_type,
     spt.topup_amount,
-    spt.original_balance,
     spt.new_balance,
-    spt.created_at
+    spt.topup_date,
+    spt.payment_method,
+    u.name as recorded_by
 FROM student_payment_topups spt
-LEFT JOIN admit_students a ON spt.student_id = a.id
 LEFT JOIN student_payments sp ON spt.payment_id = sp.id
+LEFT JOIN admit_students ads ON sp.admission_no = ads.admission_no
+LEFT JOIN classes c ON sp.class_id = c.id
+LEFT JOIN users u ON spt.recorded_by = u.id
 WHERE spt.status_approved = 'unapproved'
-ORDER BY spt.created_at DESC";
+ORDER BY spt.topup_date DESC";
 
-$topupsResult = $mysqli->query($topupsQuery);
-$unapproved_topups = $topupsResult->fetch_all(MYSQLI_ASSOC);
+$pendingTopupsResult = $mysqli->query($pendingTopupsQuery);
+$pendingTopups = $pendingTopupsResult->fetch_all(MYSQLI_ASSOC);
 
 // Get unapproved expenses
 $expensesQuery = "SELECT 
@@ -324,7 +341,7 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
                 <h5 class="mb-0">Unapproved School Payments</h5>
             </div>
             <div class="card-body">
-                <?php if (empty($unapproved_payments)): ?>
+                <?php if (empty($pendingPayments)): ?>
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle"></i> No unapproved payments pending.
                     </div>
@@ -335,44 +352,48 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
                                 <tr>
                                     <th>Adm No</th>
                                     <th>Name</th>
+                                    <th>Gender</th>
                                     <th>Class</th>
                                     <th>Term</th>
                                     <th>Type</th>
-                                    <th>Gender</th>
-                                    <th>Expected Tuition</th>
-                                    <th>Amount Paid</th>
+                                    <th>Expected</th>
+                                    <th>Paid</th>
                                     <th>Balance</th>
                                     <th>Parent Contact</th>
                                     <th>Date</th>
+                                    <th>Method</th>
+                                    <th>Recorded By</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($unapproved_payments as $payment): ?>
+                                <?php foreach ($pendingPayments as $payment): ?>
                                     <tr>
                                         <td><?= htmlspecialchars($payment['admission_no']) ?></td>
                                         <td><?= htmlspecialchars($payment['student_name']) ?></td>
-                                        <td><?= htmlspecialchars($payment['class_name']) ?></td>
-                                        <td><?= htmlspecialchars($payment['term']) ?></td>
-                                        <td><span class="badge bg-info"><?= htmlspecialchars($payment['day_boarding']) ?></span></td>
                                         <td><?= htmlspecialchars($payment['gender']) ?></td>
+                                        <td><?= htmlspecialchars($payment['class_name'] ?? 'N/A') ?></td>
+                                        <td><?= htmlspecialchars($payment['term']) ?></td>
+                                        <td><?= htmlspecialchars($payment['payment_type']) ?></td>
                                         <td><?= number_format($payment['expected_tuition'], 2) ?></td>
                                         <td><?= number_format($payment['amount_paid'], 2) ?></td>
                                         <td><?= number_format($payment['balance'], 2) ?></td>
                                         <td><?= htmlspecialchars($payment['parent_contact']) ?></td>
                                         <td><?= date('Y-m-d', strtotime($payment['payment_date'])) ?></td>
+                                        <td><?= htmlspecialchars($payment['payment_method']) ?></td>
+                                        <td><?= htmlspecialchars($payment['recorded_by'] ?? 'System') ?></td>
                                         <td>
                                             <div class="action-button-group">
                                                 <form method="POST" style="display: inline;">
                                                     <input type="hidden" name="payment_id" value="<?= $payment['id'] ?>">
                                                     <button type="submit" name="approve_payment" class="btn-approve" onclick="return confirm('Approve this payment?')">
-                                                        <i class="bi bi-check-circle"></i> Approve
+                                                        Approve
                                                     </button>
                                                 </form>
                                                 <form method="POST" style="display: inline;">
                                                     <input type="hidden" name="payment_id" value="<?= $payment['id'] ?>">
                                                     <button type="submit" name="reject_payment" class="btn-reject" onclick="return confirm('Reject this payment?')">
-                                                        <i class="bi bi-x-circle"></i> Reject
+                                                        Reject
                                                     </button>
                                                 </form>
                                             </div>
@@ -394,7 +415,7 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
                 <h5 class="mb-0">Unapproved Balance Top-ups</h5>
             </div>
             <div class="card-body">
-                <?php if (empty($unapproved_topups)): ?>
+                <?php if (empty($pendingTopups)): ?>
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle"></i> No unapproved balance top-ups pending.
                     </div>
@@ -405,34 +426,46 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
                                 <tr>
                                     <th>Adm No</th>
                                     <th>Name</th>
-                                    <th>Original Balance</th>
+                                    <th>Gender</th>
+                                    <th>Class</th>
+                                    <th>Term</th>
+                                    <th>Type</th>
                                     <th>Top-up Amount</th>
                                     <th>New Balance</th>
+                                    <th>Parent Contact</th>
                                     <th>Date</th>
+                                    <th>Method</th>
+                                    <th>Recorded By</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($unapproved_topups as $topup): ?>
+                                <?php foreach ($pendingTopups as $topup): ?>
                                     <tr>
                                         <td><?= htmlspecialchars($topup['admission_no']) ?></td>
                                         <td><?= htmlspecialchars($topup['student_name']) ?></td>
-                                        <td><?= number_format($topup['original_balance'], 2) ?></td>
+                                        <td><?= htmlspecialchars($topup['gender']) ?></td>
+                                        <td><?= htmlspecialchars($topup['class_name'] ?? 'N/A') ?></td>
+                                        <td><?= htmlspecialchars($topup['term']) ?></td>
+                                        <td><?= htmlspecialchars($topup['payment_type']) ?></td>
                                         <td><?= number_format($topup['topup_amount'], 2) ?></td>
                                         <td><?= number_format($topup['new_balance'], 2) ?></td>
-                                        <td><?= date('Y-m-d', strtotime($topup['created_at'])) ?></td>
+                                        <td><?= htmlspecialchars($topup['parent_contact']) ?></td>
+                                        <td><?= date('Y-m-d', strtotime($topup['topup_date'])) ?></td>
+                                        <td><?= htmlspecialchars($topup['payment_method']) ?></td>
+                                        <td><?= htmlspecialchars($topup['recorded_by'] ?? 'System') ?></td>
                                         <td>
                                             <div class="action-button-group">
                                                 <form method="POST" style="display: inline;">
                                                     <input type="hidden" name="topup_id" value="<?= $topup['id'] ?>">
                                                     <button type="submit" name="approve_topup" class="btn-approve" onclick="return confirm('Approve this top-up?')">
-                                                        <i class="bi bi-check-circle"></i> Approve
+                                                        Approve
                                                     </button>
                                                 </form>
                                                 <form method="POST" style="display: inline;">
                                                     <input type="hidden" name="topup_id" value="<?= $topup['id'] ?>">
-                                                    <button type="submit" name="reject_topup" class="btn-reject" onclick="return confirm('Reject this top-up? Balance will be reverted.')">
-                                                        <i class="bi bi-x-circle"></i> Reject
+                                                    <button type="submit" name="reject_topup" class="btn-reject" onclick="return confirm('Reject this top-up?')">
+                                                        Reject
                                                     </button>
                                                 </form>
                                             </div>

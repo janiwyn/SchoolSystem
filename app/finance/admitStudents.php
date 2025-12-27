@@ -212,88 +212,100 @@ LIMIT $offset, $records_per_page";
 
 $studentsResult = $mysqli->query($studentsQuery);
 $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
+
+// Get current user role
+$userRole = $_SESSION['role'] ?? '';
+$canAdmitStudent = in_array($userRole, ['admin', 'principal']);
 ?>
 
 <!DOCTYPE html>
 
 <!-- Toggle Button for Admit Student Form -->
 <div class="mb-3">
-    <button type="button" class="btn-toggle-form" onclick="toggleAdmitForm()">
-        <i class="bi bi-chevron-right"></i> Admit New Student
-    </button>
+    <?php if ($canAdmitStudent): ?>
+        <button type="button" class="btn-toggle-form" onclick="toggleAdmitForm()">
+            <i class="bi bi-chevron-right"></i> Admit New Student
+        </button>
+    <?php else: ?>
+        <button type="button" class="btn-toggle-form" data-bs-toggle="modal" data-bs-target="#admitRestrictionModal">
+            <i class="bi bi-chevron-right"></i> Admit New Student
+        </button>
+    <?php endif; ?>
 </div>
 
-<!-- Admit Student Form (Collapsible) -->
-<div class="card shadow-sm border-0 mb-4" id="admitFormCard" style="display: none;">
-    <div class="card-header form-header text-white">
-        <h5 class="mb-0">Admit New Student</h5>
+<!-- Admit Student Form (Collapsible) - Only show if user can admit -->
+<?php if ($canAdmitStudent): ?>
+    <div class="card shadow-sm border-0 mb-4" id="admitFormCard" style="display: none;">
+        <div class="card-header form-header text-white">
+            <h5 class="mb-0">Admit New Student</h5>
+        </div>
+        <div class="card-body">
+            <?php if (!empty($message)): ?>
+                <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+
+            <form method="POST" enctype="multipart/form-data" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" name="first_name" class="form-control" placeholder="Student full name" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">F/M</label>
+                    <select name="gender" class="form-control" required>
+                        <option value="">Select</option>
+                        <option value="Male">M</option>
+                        <option value="Female">F</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Class</label>
+                    <select name="class_id" class="form-control" required>
+                        <option value="">Select Class</option>
+                        <?php foreach ($classes as $class): ?>
+                            <option value="<?= $class['class_id'] ?>"><?= htmlspecialchars($class['class_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Day/Boarding</label>
+                    <select name="day_boarding" class="form-control" required>
+                        <option value="">Select Option</option>
+                        <option value="Day">Day</option>
+                        <option value="Boarding">Boarding</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Admission Fee</label>
+                    <input type="number" name="admission_fee" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Uniform Fee</label>
+                    <input type="number" name="uniform_fee" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Parent Contact</label>
+                    <input type="text" name="parent_contact" class="form-control" placeholder="e.g., 0774323232" required>
+                    <small class="text-muted">Enter phone number with leading zeros</small>
+                </div>
+
+                <div class="col-12">
+                    <button type="submit" name="admit_student" class="btn btn-form-submit">
+                        <i class="bi bi-person-plus"></i> Admit Student
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-    <div class="card-body">
-        <?php if (!empty($message)): ?>
-            <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
-        <?php endif; ?>
-        <?php if (!empty($error)): ?>
-            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-        <?php endif; ?>
-
-        <form method="POST" enctype="multipart/form-data" class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label">Full Name</label>
-                <input type="text" name="first_name" class="form-control" placeholder="Student full name" required>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">F/M</label>
-                <select name="gender" class="form-control" required>
-                    <option value="">Select</option>
-                    <option value="Male">M</option>
-                    <option value="Female">F</option>
-                </select>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Class</label>
-                <select name="class_id" class="form-control" required>
-                    <option value="">Select Class</option>
-                    <?php foreach ($classes as $class): ?>
-                        <option value="<?= $class['class_id'] ?>"><?= htmlspecialchars($class['class_name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Day/Boarding</label>
-                <select name="day_boarding" class="form-control" required>
-                    <option value="">Select Option</option>
-                    <option value="Day">Day</option>
-                    <option value="Boarding">Boarding</option>
-                </select>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Admission Fee</label>
-                <input type="number" name="admission_fee" class="form-control" step="0.01" min="0" placeholder="0.00" required>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Uniform Fee</label>
-                <input type="number" name="uniform_fee" class="form-control" step="0.01" min="0" placeholder="0.00" required>
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">Parent Contact</label>
-                <input type="text" name="parent_contact" class="form-control" placeholder="e.g., 0774323232" required>
-                <small class="text-muted">Enter phone number with leading zeros</small>
-            </div>
-
-            <div class="col-12">
-                <button type="submit" name="admit_student" class="btn btn-form-submit">
-                    <i class="bi bi-person-plus"></i> Admit Student
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
+<?php endif; ?>
 
 <!-- Filter Section -->
 <div class="card filter-card">
@@ -415,12 +427,23 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
                                 </td>
                                 <td>
                                     <div class="action-buttons">
-                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $student['id'] ?>, '<?= htmlspecialchars($student['first_name']) ?>', '<?= htmlspecialchars($student['gender']) ?>', <?= $student['admission_fee'] ?>, <?= $student['uniform_fee'] ?>, '<?= htmlspecialchars($student['parent_contact']) ?>', '<?= htmlspecialchars($student['day_boarding']) ?>', <?= $student['class_id'] ?>)">
-                                            <i class="bi bi-pencil-square"></i>
-                                        </button>
-                                        <a href="deleteStudent.php?id=<?= $student['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure?')">
-                                            <i class="bi bi-trash"></i>
-                                        </a>
+                                        <?php if ($canAdmitStudent): ?>
+                                            <!-- Admin/Principal can edit/delete -->
+                                            <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $student['id'] ?>, '<?= htmlspecialchars($student['first_name']) ?>', '<?= htmlspecialchars($student['gender']) ?>', <?= $student['admission_fee'] ?>, <?= $student['uniform_fee'] ?>, '<?= htmlspecialchars($student['parent_contact']) ?>', '<?= htmlspecialchars($student['day_boarding']) ?>', <?= $student['class_id'] ?>)">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
+                                            <a href="deleteStudent.php?id=<?= $student['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure?')">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        <?php else: ?>
+                                            <!-- Bursar cannot edit/delete -->
+                                            <button type="button" class="btn-icon-edit-restricted" title="Edit" data-bs-toggle="modal" data-bs-target="#admitRestrictionModal">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
+                                            <button type="button" class="btn-icon-delete-restricted" title="Delete" data-bs-toggle="modal" data-bs-target="#admitRestrictionModal">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>
@@ -491,75 +514,106 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
-<!-- Edit Student Modal -->
-<div class="modal fade" id="editModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header form-header text-white">
-                <h5 class="modal-title">Edit Student Information</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<!-- Edit Student Modal - Only shown for Admin/Principal -->
+<?php if ($canAdmitStudent): ?>
+    <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header form-header text-white">
+                    <h5 class="modal-title">Edit Student Information</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form method="POST" class="modal-body">
+                    <input type="hidden" name="edit_student" value="1">
+                    <input type="hidden" name="student_id" id="editStudentId">
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" name="first_name" id="editFirstName" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">F/M</label>
+                            <select name="gender" id="editGender" class="form-control" required>
+                                <option value="">Select</option>
+                                <option value="Male">M</option>
+                                <option value="Female">F</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Class</label>
+                            <select name="class_id" id="editClassId" class="form-control" required>
+                                <option value="">Select Class</option>
+                                <?php foreach ($classes as $class): ?>
+                                    <option value="<?= $class['class_id'] ?>"><?= htmlspecialchars($class['class_name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Day/Boarding</label>
+                            <select name="day_boarding" id="editDayBoarding" class="form-control" required>
+                                <option value="">Select Option</option>
+                                <option value="Day">Day</option>
+                                <option value="Boarding">Boarding</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Admission Fee</label>
+                            <input type="number" name="admission_fee" id="editAdmissionFee" class="form-control" step="0.01" min="0" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Uniform Fee</label>
+                            <input type="number" name="uniform_fee" id="editUniformFee" class="form-control" step="0.01" min="0" required>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label">Parent Contact</label>
+                            <input type="text" name="parent_contact" id="editParentContact" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer mt-4">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-form-submit">
+                            <i class="bi bi-check-circle"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
             </div>
-            <form method="POST" class="modal-body">
-                <input type="hidden" name="edit_student" value="1">
-                <input type="hidden" name="student_id" id="editStudentId">
+        </div>
+    </div>
+<?php endif; ?>
 
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="first_name" id="editFirstName" class="form-control" required>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">F/M</label>
-                        <select name="gender" id="editGender" class="form-control" required>
-                            <option value="">Select</option>
-                            <option value="Male">M</option>
-                            <option value="Female">F</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Class</label>
-                        <select name="class_id" id="editClassId" class="form-control" required>
-                            <option value="">Select Class</option>
-                            <?php foreach ($classes as $class): ?>
-                                <option value="<?= $class['class_id'] ?>"><?= htmlspecialchars($class['class_name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Day/Boarding</label>
-                        <select name="day_boarding" id="editDayBoarding" class="form-control" required>
-                            <option value="">Select Option</option>
-                            <option value="Day">Day</option>
-                            <option value="Boarding">Boarding</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Admission Fee</label>
-                        <input type="number" name="admission_fee" id="editAdmissionFee" class="form-control" step="0.01" min="0" required>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Uniform Fee</label>
-                        <input type="number" name="uniform_fee" id="editUniformFee" class="form-control" step="0.01" min="0" required>
-                    </div>
-
-                    <div class="col-md-12">
-                        <label class="form-label">Parent Contact</label>
-                        <input type="text" name="parent_contact" id="editParentContact" class="form-control" required>
-                    </div>
-                </div>
-
-                <div class="modal-footer mt-4">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-form-submit">
-                        <i class="bi bi-check-circle"></i> Save Changes
-                    </button>
-                </div>
-            </form>
+<!-- Restriction Modal for Bursar -->
+<div class="modal fade" id="admitRestrictionModal" tabindex="-1" aria-labelledby="admitRestrictionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="admitRestrictionModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Access Restricted
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
+                <h5 class="mb-3">Cannot Modify Student Admissions</h5>
+                <p class="text-muted mb-0">
+                    Only <strong>Admin</strong> and <strong>Principal</strong> have permission to admit, edit, or delete students.
+                </p>
+                <p class="text-muted mt-2">
+                    As a <strong class="text-primary">Bursar</strong>, you can view student records but cannot modify them.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
         </div>
     </div>
 </div>

@@ -81,6 +81,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
     }
 }
 
+// Get current user role
+$userRole = $_SESSION['role'] ?? '';
+$canRecordPayroll = in_array($userRole, ['admin', 'bursar']);
+
 // Include layout AFTER header operations
 require_once __DIR__ . '/../helper/layout.php';
 
@@ -156,72 +160,80 @@ $departmentsResult = $mysqli->query($departmentsQuery);
 $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
 ?>
 
-<!-- Toggle Button -->
-<div class="payroll-form-toggle">
-    <h4 class="mb-0">Payroll Management</h4>
-    <button type="button" class="btn-toggle-form" onclick="togglePayrollForm()">
-        <i class="bi bi-chevron-down" id="toggleIcon"></i>
-        <span id="toggleText">Show Form</span>
-    </button>
+<!-- Toggle Button for Payroll Form -->
+<div class="mb-3">
+    <?php if ($canRecordPayroll): ?>
+        <button type="button" class="btn-toggle-form" onclick="togglePayrollForm()">
+            <i class="bi bi-chevron-down" id="toggleIcon"></i>
+            <span id="toggleText">Show Form</span>
+        </button>
+    <?php else: ?>
+        <button type="button" class="btn-toggle-form" data-bs-toggle="modal" data-bs-target="#payrollRestrictionModal">
+            <i class="bi bi-chevron-down"></i>
+            <span>Show Form</span>
+        </button>
+    <?php endif; ?>
 </div>
 
-<!-- Add Payroll Form (Hidden by default) -->
-<div class="card shadow-sm border-0 mb-4" id="payrollFormCard" style="display: none;">
-    <div class="card-header form-header text-white">
-        <h5 class="mb-0">Record Payroll</h5>
+<!-- Payroll Form (Collapsible) - Only show if user can record -->
+<?php if ($canRecordPayroll): ?>
+    <div class="card shadow-sm border-0 mb-4" id="payrollFormCard" style="display: none;">
+        <div class="card-header form-header text-white">
+            <h5 class="mb-0">Record Payroll</h5>
+        </div>
+        <div class="card-body">
+            <?php if (!empty($message)): ?>
+                <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+
+            <form method="POST" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="Enter employee name" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Department</label>
+                    <select name="department" id="department" class="form-control" required onchange="handleDepartmentChange()">
+                        <option value="">Select Department</option>
+                        <option value="finance">Finance</option>
+                        <option value="teacher">Teacher</option>
+                        <option value="cleaner">Cleaner</option>
+                        <option value="security">Security</option>
+                        <option value="cook">Cook</option>
+                        <option value="driver">Driver</option>
+                        <option value="matron">Matron</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4" id="customDepartmentField" style="display: none;">
+                    <label class="form-label">Specify Department</label>
+                    <input type="text" name="custom_department" class="form-control" placeholder="Enter department name">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Salary</label>
+                    <input type="number" name="salary" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Date</label>
+                    <input type="date" name="date" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                </div>
+
+                <div class="col-md-4" style="display: flex; align-items: flex-end;">
+                    <button type="submit" name="record_payroll" class="btn btn-form-submit w-100">
+                        <i class="bi bi-plus-circle"></i> Record Payroll
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-    <div class="card-body">
-        <?php if (!empty($message)): ?>
-            <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
-        <?php endif; ?>
-        <?php if (!empty($error)): ?>
-            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-        <?php endif; ?>
-
-        <form method="POST" class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label">Name</label>
-                <input type="text" name="name" class="form-control" placeholder="Enter employee name" required>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Department</label>
-                <select name="department" id="department" class="form-control" required onchange="handleDepartmentChange()">
-                    <option value="">Select Department</option>
-                    <option value="finance">Finance</option>
-                    <option value="teacher">Teacher</option>
-                    <option value="cleaner">Cleaner</option>
-                    <option value="security">Security</option>
-                    <option value="cook">Cook</option>
-                    <option value="driver">Driver</option>
-                    <option value="matron">Matron</option>
-                    <option value="other">Other</option>
-                </select>
-            </div>
-
-            <div class="col-md-4" id="customDepartmentField" style="display: none;">
-                <label class="form-label">Specify Department</label>
-                <input type="text" name="custom_department" class="form-control" placeholder="Enter department name">
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Salary</label>
-                <input type="number" name="salary" class="form-control" step="0.01" min="0" placeholder="0.00" required>
-            </div>
-
-            <div class="col-md-4">
-                <label class="form-label">Date</label>
-                <input type="date" name="date" class="form-control" value="<?= date('Y-m-d') ?>" required>
-            </div>
-
-            <div class="col-md-4" style="display: flex; align-items: flex-end;">
-                <button type="submit" name="record_payroll" class="btn btn-form-submit w-100">
-                    <i class="bi bi-plus-circle"></i> Record Payroll
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
+<?php endif; ?>
 
 <!-- Filter Section -->
 <div class="card filter-card">
@@ -378,6 +390,35 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                 </div>
             <?php endif; ?>
         <?php endif; ?>
+    </div>
+</div>
+
+<!-- Restriction Modal for Principal -->
+<div class="modal fade" id="payrollRestrictionModal" tabindex="-1" aria-labelledby="payrollRestrictionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="payrollRestrictionModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Access Restricted
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
+                <h5 class="mb-3">Cannot Record Payroll</h5>
+                <p class="text-muted mb-0">
+                    Only <strong>Admin</strong> and <strong>Bursar</strong> roles have permission to record payroll.
+                </p>
+                <p class="text-muted mt-2">
+                    As a <strong class="text-primary">Principal</strong>, you can view payroll records but cannot create new ones.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
