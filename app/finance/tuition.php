@@ -14,15 +14,12 @@ $classes = $classesResult->fetch_all(MYSQLI_ASSOC);
 $message = '';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_tuition'])) {
-    $year = trim($_POST['year']);
     $class_name = trim($_POST['class_name']);
     $term = trim($_POST['term']);
     $amount = trim($_POST['amount']);
 
-    if (!$year || !$class_name || !$term || !$amount) {
+    if (!$class_name || !$term || !$amount) {
         $error = "All fields are required";
-    } elseif (!is_numeric($year) || $year < 2000 || $year > 2100) {
-        $error = "Please enter a valid year";
     } elseif (!is_numeric($amount) || $amount <= 0) {
         $error = "Please enter a valid amount";
     } else {
@@ -65,15 +62,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_tuition'])) {
 // Handle edit form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_tuition'])) {
     $tuition_id = intval($_POST['tuition_id']);
-    $year = trim($_POST['year']);
     $class_name = trim($_POST['class_name']);
     $term = trim($_POST['term']);
     $amount = trim($_POST['amount']);
 
-    if (!$year || !$class_name || !$term || !$amount) {
+    if (!$class_name || !$term || !$amount) {
         $error = "All fields are required";
-    } elseif (!is_numeric($year) || $year < 2000 || $year > 2100) {
-        $error = "Please enter a valid year";
     } elseif (!is_numeric($amount) || $amount <= 0) {
         $error = "Please enter a valid amount";
     } else {
@@ -127,15 +121,11 @@ if (isset($_GET['deleted']) && $_GET['deleted'] == 1) {
 // Include layout AFTER all header operations
 require_once __DIR__ . '/../helper/layout.php';
 
-// Build filter query
+// Build filter query (remove year filter)
 $filterWhere = "1=1";
-$year_filter = $_GET['year'] ?? '';
 $class_filter = $_GET['class'] ?? '';
 $term_filter = $_GET['term'] ?? '';
 
-if ($year_filter) {
-    $filterWhere .= " AND YEAR(fee_structure.created_at) = '" . intval($year_filter) . "'";
-}
 if ($class_filter) {
     $filterWhere .= " AND fee_structure.class_id = " . intval($class_filter);
 }
@@ -143,10 +133,9 @@ if ($term_filter) {
     $filterWhere .= " AND fee_structure.term = '" . $mysqli->real_escape_string($term_filter) . "'";
 }
 
-// Fetch tuition records with user and class info
+// Fetch tuition records with user and class info (remove year)
 $query = "SELECT 
     fee_structure.id,
-    YEAR(fee_structure.created_at) as year,
     classes.class_name,
     fee_structure.term,
     fee_structure.amount,
@@ -160,11 +149,6 @@ ORDER BY fee_structure.created_at DESC";
 
 $result = $mysqli->query($query);
 $tuitions = $result->fetch_all(MYSQLI_ASSOC);
-
-// Get unique years from fee_structure table
-$yearsQuery = "SELECT DISTINCT YEAR(created_at) as year FROM fee_structure ORDER BY year DESC";
-$yearsResult = $mysqli->query($yearsQuery);
-$years = $yearsResult->fetch_all(MYSQLI_ASSOC);
 
 // Get unique classes from fee_structure table
 $filterClassesQuery = "SELECT DISTINCT fs.class_id, c.class_name 
@@ -194,17 +178,12 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
         <?php endif; ?>
 
         <form method="POST" class="row g-3">
-            <div class="col-md-3">
-                <label class="form-label">Year</label>
-                <input type="text" name="year" class="form-control" value="<?= date('Y') ?>" placeholder="e.g., 2024" required>
-            </div>
-
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <label class="form-label">Class</label>
                 <input type="text" name="class_name" class="form-control" placeholder="e.g., Form 1A" required>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <label class="form-label">Term</label>
                 <select name="term" class="form-control" required>
                     <option value="">Select Term</option>
@@ -214,7 +193,7 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                 </select>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <label class="form-label">Expected Tuition</label>
                 <input type="number" name="amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
             </div>
@@ -233,18 +212,6 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
     <div class="card-body">
         <form method="GET">
             <div class="filter-row">
-                <div class="filter-group">
-                    <label>Year</label>
-                    <select name="year" class="form-control">
-                        <option value="">All Years</option>
-                        <?php foreach ($years as $y): ?>
-                            <option value="<?= $y['year'] ?>" <?= $year_filter == $y['year'] ? 'selected' : '' ?>>
-                                <?= $y['year'] ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
                 <div class="filter-group">
                     <label>Class</label>
                     <select name="class" class="form-control">
@@ -295,7 +262,6 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                     <thead>
                         <tr>
                             <th>Date & Time</th>
-                            <th>Year</th>
                             <th>Class</th>
                             <th>Term</th>
                             <th>Expected Tuition</th>
@@ -307,14 +273,13 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                         <?php foreach ($tuitions as $tuition): ?>
                             <tr>
                                 <td><?= date('Y-m-d H:i', strtotime($tuition['created_at'])) ?></td>
-                                <td><?= $tuition['year'] ?></td>
                                 <td><?= htmlspecialchars($tuition['class_name'] ?? 'N/A') ?></td>
                                 <td><?= htmlspecialchars($tuition['term']) ?></td>
                                 <td><?= number_format($tuition['amount'], 2) ?></td>
                                 <td><?= htmlspecialchars($tuition['recorded_by'] ?? 'System') ?></td>
                                 <td>
                                     <div class="action-buttons">
-                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $tuition['id'] ?>, <?= $tuition['year'] ?>, '<?= htmlspecialchars($tuition['class_name']) ?>', '<?= htmlspecialchars($tuition['term']) ?>', <?= $tuition['amount'] ?>)" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
+                                        <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $tuition['id'] ?>, '<?= htmlspecialchars($tuition['class_name']) ?>', '<?= htmlspecialchars($tuition['term']) ?>', <?= $tuition['amount'] ?>)" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
                                             Edit
                                         </button>
                                         <a href="deleteTuition.php?id=<?= $tuition['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure you want to delete this record?')" style="display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background-color: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.3s ease; text-decoration: none;">
@@ -345,11 +310,6 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
 
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label">Year</label>
-                        <input type="text" name="year" id="editYear" class="form-control" required>
-                    </div>
-
-                    <div class="col-md-6">
                         <label class="form-label">Class</label>
                         <input type="text" name="class_name" id="editClassName" class="form-control" required>
                     </div>
@@ -364,7 +324,7 @@ $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
                         </select>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-12">
                         <label class="form-label">Expected Tuition</label>
                         <input type="number" name="amount" id="editAmount" class="form-control" step="0.01" min="0" required>
                     </div>
