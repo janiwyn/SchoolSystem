@@ -214,8 +214,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_payroll'])) {
 // Include layout AFTER all operations
 require_once __DIR__ . '/../helper/layout.php';
 
-// Get active tab - default to student_payments instead of admitted_students
-$activeTab = $_GET['tab'] ?? 'student_payments';
+// Determine active main tab and sub-tab (defaults)
+$activeTab    = $_GET['tab']    ?? 'student_payments';
+$activeSubTab = $_GET['subtab'] ?? 'payments';
 
 // ======================= UNAPPROVED SCHOOL PAYMENTS =======================
 
@@ -323,16 +324,16 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
 <div id="student_payments-tab" class="tab-content <?= $activeTab === 'student_payments' ? 'active' : '' ?>">
     <!-- Sub-tabs for Payments and Balance Top-ups -->
     <div class="sub-tabs">
-        <button class="sub-tab-btn active" onclick="switchSubTab('payments')">
+        <button class="sub-tab-btn <?= $activeSubTab === 'payments' ? 'active' : '' ?>" onclick="switchSubTab('payments')">
             <i class="bi bi-credit-card"></i> School Payments
         </button>
-        <button class="sub-tab-btn" onclick="switchSubTab('topups')">
+        <button class="sub-tab-btn <?= $activeSubTab === 'topups' ? 'active' : '' ?>" onclick="switchSubTab('topups')">
             <i class="bi bi-cash-coin"></i> Balance Top-ups
         </button>
     </div>
 
     <!-- School Payments Sub-tab -->
-    <div id="payments-content" class="sub-tab-content active">
+    <div id="payments-content" class="sub-tab-content <?= $activeSubTab === 'payments' ? 'active' : '' ?>">
         <div class="card">
             <div class="card-header pending-card-header text-white">
                 <h5 class="mb-0">Unapproved School Payments</h5>
@@ -421,7 +422,7 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
     </div>
 
     <!-- Balance Top-ups Sub-tab -->
-    <div id="topups-content" class="sub-tab-content">
+    <div id="topups-content" class="sub-tab-content <?= $activeSubTab === 'topups' ? 'active' : '' ?>">
         <div class="card">
             <div class="card-header pending-card-header text-white">
                 <h5 class="mb-0">Unapproved Balance Top-ups</h5>
@@ -610,6 +611,5 @@ $unapproved_salaries = $salariesResult->fetch_all(MYSQLI_ASSOC);
 </div>
 
 <link rel="stylesheet" href="../../assets/css/pendingrequest.css">
-<script src="../../assets/js/pendingrequest.js"></script>
-
+<script src="../../assets/js/pendingrequest.js?v=3"></script>
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

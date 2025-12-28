@@ -339,3 +339,9 @@
     background-color: #dc3545;
     border-color: #dc3545;
 }
+
+/* Ensure long text (like names) stays on one line in the student payments table */
+.student-payments-table th,
+.student-payments-table td {
+    white-space: nowrap;
+}

@@ -8,7 +8,13 @@ requireRole(['bursar', 'admin', 'principal']);
 // Get all classes for dropdown
 $classesQuery = "SELECT id, class_name FROM classes ORDER BY class_name ASC";
 $classesResult = $mysqli->query($classesQuery);
-$classes = $classesResult->fetch_all(MYSQLI_ASSOC);
+if (!$classesResult) {
+    // Capture DB error so we can display it instead of crashing with 500
+    $error = "Database error loading classes: " . $mysqli->error;
+    $classes = [];
+} else {
+    $classes = $classesResult->fetch_all(MYSQLI_ASSOC);
+}
 
 // Handle form submission
 $message = '';
@@ -148,7 +154,12 @@ WHERE $filterWhere
 ORDER BY fee_structure.created_at DESC";
 
 $result = $mysqli->query($query);
-$tuitions = $result->fetch_all(MYSQLI_ASSOC);
+if (!$result) {
+    $error = "Database error loading tuition records: " . $mysqli->error;
+    $tuitions = [];
+} else {
+    $tuitions = $result->fetch_all(MYSQLI_ASSOC);
+}
 
 // Get unique classes from fee_structure table
 $filterClassesQuery = "SELECT DISTINCT fs.class_id, c.class_name 
@@ -156,18 +167,35 @@ $filterClassesQuery = "SELECT DISTINCT fs.class_id, c.class_name
                        LEFT JOIN classes c ON fs.class_id = c.id 
                        ORDER BY c.class_name ASC";
 $filterClassesResult = $mysqli->query($filterClassesQuery);
-$filterClasses = $filterClassesResult->fetch_all(MYSQLI_ASSOC);
+if (!$filterClassesResult) {
+    $error = "Database error loading filter classes: " . $mysqli->error;
+    $filterClasses = [];
+} else {
+    $filterClasses = $filterClassesResult->fetch_all(MYSQLI_ASSOC);
+}
 
 // Get unique terms for filter
 $termsQuery = "SELECT DISTINCT term FROM fee_structure ORDER BY term ASC";
 $termsResult = $mysqli->query($termsQuery);
-$terms = $termsResult->fetch_all(MYSQLI_ASSOC);
+if (!$termsResult) {
+    $error = "Database error loading terms: " . $mysqli->error;
+    $terms = [];
+} else {
+    $terms = $termsResult->fetch_all(MYSQLI_ASSOC);
+}
 
 // Get current user role
 $userRole = $_SESSION['role'] ?? '';
 $canAddTuition = ($userRole === 'admin');
 $canModifyTuition = ($userRole === 'admin');
 ?>
+
+<!-- Global DB error message (will show on InfinityFree instead of HTTP 500) -->
+<?php if (!empty($error)): ?>
+    <div class="alert alert-danger">
+        <?= htmlspecialchars($error) ?>
+    </div>
+<?php endif; ?>
 
 <!-- Add Tuition Form - Only show for Admin -->
 <?php if ($canAddTuition): ?>

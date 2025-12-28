@@ -176,7 +176,7 @@ $total_pages = ceil($total_records / $records_per_page);
 $paymentsQuery = "SELECT 
     id, admission_no, full_name, day_boarding, gender, class_name, term,
     expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
-    parent_contact, parent_email, payment_date, created_at, status_approved
+    parent_contact, payment_date, created_at, status_approved
 FROM student_payments
 WHERE $filterWhere
 ORDER BY admission_no ASC
@@ -235,6 +235,25 @@ if (empty($approved_students)) {
 // Get current user role
 $userRole = $_SESSION['role'] ?? '';
 $canRecordPayment = in_array($userRole, ['admin', 'bursar']);
+
+// Build expected tuition per class from fee_structure (sum of all terms)
+$classExpected = [];
+$classExpectedQuery = "SELECT class_id, SUM(amount) AS expected FROM fee_structure GROUP BY class_id";
+$classExpectedResult = $mysqli->query($classExpectedQuery);
+if ($classExpectedResult) {
+    while ($row = $classExpectedResult->fetch_assoc()) {
+        $classExpected[(int)$row['class_id']] = (float)($row['expected'] ?? 0);
+    }
+}
+
+// Get a default/current term (latest term defined in fee_structure)
+$currentTerm = '';
+$currentTermQuery = "SELECT term FROM fee_structure ORDER BY id DESC LIMIT 1";
+$currentTermResult = $mysqli->query($currentTermQuery);
+if ($currentTermResult) {
+    $termRow = $currentTermResult->fetch_assoc();
+    $currentTerm = $termRow['term'] ?? '';
+}
 ?>
 
 <!-- Toggle Button for Record Student Payment Form -->
@@ -358,11 +377,6 @@ $canRecordPayment = in_array($userRole, ['admin', 'bursar']);
                     <input type="text" id="parentContact" class="form-control readonly-field" readonly>
                 </div>
                 
-                <div class="col-md-6">
-                    <label class="form-label">Parent Email</label>
-                    <input type="email" id="parentEmail" class="form-control readonly-field" readonly>
-                </div>
-                
                 <!-- Payment Date -->
                 <div class="col-md-3">
                     <label class="form-label">Payment Date</label>
@@ -453,22 +467,20 @@ $canRecordPayment = in_array($userRole, ['admin', 'bursar']);
             <div class="alert alert-info">No payment records found.</div>
         <?php else: ?>
             <div class="table-container">
-                <table class="table table-striped">
+                <table class="table table-striped student-payments-table">
                     <thead>
                         <tr>
                             <th>Adm No</th>
                             <th>Name</th>
+                            <th>F/M</th>
                             <th>Class</th>
-                            <th>Term</th>
-                            <th>Type</th>
-                            <th>Sex</th>
+                            <th>Day/Boarding</th>
                             <th>Expected Tuition</th>
                             <th>Amount Paid</th>
                             <th>Balance</th>
                             <th>Admission Fee</th>
                             <th>Uniform Fee</th>
                             <th>Parent Contact</th>
-                            <th>Parent Email</th>
                             <th>Payment Date</th>
                             <th>Pay Status</th>
                             <th>Approval Status</th>
@@ -481,17 +493,15 @@ $canRecordPayment = in_array($userRole, ['admin', 'bursar']);
                             <tr>
                                 <td><?= htmlspecialchars($payment['admission_no']) ?></td>
                                 <td><?= htmlspecialchars($payment['full_name']) ?></td>
+                                <td><?= $payment['gender'] === 'Male' ? 'M' : 'F' ?></td>
                                 <td><?= htmlspecialchars($payment['class_name']) ?></td>
-                                <td><?= htmlspecialchars($payment['term']) ?></td>
                                 <td><?= htmlspecialchars($payment['day_boarding']) ?></td>
-                                <td><?= htmlspecialchars($payment['gender']) ?></td>
                                 <td><?= number_format($payment['expected_tuition'], 2) ?></td>
                                 <td><?= number_format($payment['amount_paid'], 2) ?></td>
                                 <td><?= number_format($payment['balance'], 2) ?></td>
                                 <td><?= number_format($payment['admission_fee'], 2) ?></td>
                                 <td><?= number_format($payment['uniform_fee'], 2) ?></td>
                                 <td><?= htmlspecialchars($payment['parent_contact']) ?></td>
-                                <td><?= htmlspecialchars($payment['parent_email']) ?></td>
                                 <td><?= date('Y-m-d', strtotime($payment['payment_date'])) ?></td>
                                 <td>
                                     <?php if ($payment['balance'] == 0): ?>
@@ -669,7 +679,14 @@ $canRecordPayment = in_array($userRole, ['admin', 'bursar']);
     </div>
 </div>
 
+<!-- Expose expected tuition map + current term to JS -->
+<script>
+// filepath: d:\xamp\htdocs\SchoolSystem\app\finance\studentPayments.php (inline JS config)
+window.classExpected = <?= json_encode($classExpected, JSON_NUMERIC_CHECK) ?>;
+window.currentTerm   = <?= json_encode($currentTerm) ?>;
+</script>
+
 <link rel="stylesheet" href="../../assets/css/studentPayments.css">
-<script src="../../assets/js/studentPayments.js"></script>
+<script src="../../assets/js/studentPayments.js?v=2"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

@@ -10,87 +10,72 @@ require_once __DIR__ . '/../helper/layout.php';
 
 // Get filter parameters
 $date_from = $_GET['date_from'] ?? date('Y-m-01');
-$date_to = $_GET['date_to'] ?? date('Y-m-d');
-$group_by = $_GET['group_by'] ?? 'daily'; // daily, weekly, monthly
+$date_to   = $_GET['date_to']   ?? date('Y-m-d');
 
-// Build date filter
+// Build date filter (used for payments and expenses)
 $dateFilter = "DATE(sp.payment_date) BETWEEN '$date_from' AND '$date_to'";
 
-// Build the query based on grouping
-if ($group_by === 'daily') {
-    $groupColumn = "DATE(sp.payment_date) as audit_date";
-    $groupBy = "DATE(sp.payment_date), sp.class_name";
-    $orderBy = "DATE(sp.payment_date) DESC, sp.class_name ASC";
-    $dateDisplay = "Y-m-d";
-} elseif ($group_by === 'weekly') {
-    $groupColumn = "CONCAT(YEAR(sp.payment_date), '-W', LPAD(WEEK(sp.payment_date), 2, '0')) as audit_date";
-    $groupBy = "YEAR(sp.payment_date), WEEK(sp.payment_date), sp.class_name";
-    $orderBy = "YEAR(sp.payment_date) DESC, WEEK(sp.payment_date) DESC, sp.class_name ASC";
-    $dateDisplay = "week";
-} elseif ($group_by === 'monthly') {
-    $groupColumn = "DATE_FORMAT(sp.payment_date, '%Y-%m') as audit_date";
-    $groupBy = "YEAR(sp.payment_date), MONTH(sp.payment_date), sp.class_name";
-    $orderBy = "YEAR(sp.payment_date) DESC, MONTH(sp.payment_date) DESC, sp.class_name ASC";
-    $dateDisplay = "month";
-}
-
-// Query to get audit data
-$auditQuery = "SELECT 
-    $groupColumn,
-    sp.class_name,
-    SUM(sp.expected_tuition) as total_expected,
-    SUM(sp.amount_paid) as total_received,
-    SUM(sp.expected_tuition) - SUM(sp.amount_paid) as balance
-FROM student_payments sp
-WHERE $dateFilter
-GROUP BY $groupBy
-ORDER BY $orderBy";
-
+// ------------------ MAIN AUDIT DATA: ONE ROW PER CLASS ------------------
+// For the selected period, aggregate per class (no repetition of class)
+$auditQuery = "
+    SELECT 
+        sp.class_name,
+        SUM(sp.expected_tuition) AS total_expected,
+        SUM(sp.amount_paid)      AS total_received,
+        SUM(sp.expected_tuition) - SUM(sp.amount_paid) AS balance
+    FROM student_payments sp
+    WHERE $dateFilter
+    GROUP BY sp.class_name
+    ORDER BY sp.class_name ASC
+";
 $auditResult = $mysqli->query($auditQuery);
 if (!$auditResult) {
     die("Database error: " . $mysqli->error);
 }
 $auditData = $auditResult->fetch_all(MYSQLI_ASSOC);
 
-// Calculate grand totals
-$grandTotalQuery = "SELECT 
-    SUM(sp.expected_tuition) as grand_expected,
-    SUM(sp.amount_paid) as grand_received,
-    SUM(sp.expected_tuition) - SUM(sp.amount_paid) as grand_balance
-FROM student_payments sp
-WHERE $dateFilter";
+// ------------------ GRAND TOTALS (FILTERED BY DATE) ------------------
+$grandTotalQuery = "
+    SELECT 
+        SUM(sp.expected_tuition) AS grand_expected,
+        SUM(sp.amount_paid)      AS grand_received,
+        SUM(sp.expected_tuition) - SUM(sp.amount_paid) AS grand_balance
+    FROM student_payments sp
+    WHERE $dateFilter
+";
+$grandResult  = $mysqli->query($grandTotalQuery);
+$grandTotals  = $grandResult->fetch_assoc() ?: ['grand_expected' => 0, 'grand_received' => 0, 'grand_balance' => 0];
 
-$grandResult = $mysqli->query($grandTotalQuery);
-$grandTotals = $grandResult->fetch_assoc();
-
-// Get total expenses
-$expensesQuery = "SELECT 
-    SUM(amount) as total_expenses,
-    COUNT(*) as expense_count
-FROM expenses
-WHERE DATE(date) BETWEEN '$date_from' AND '$date_to' AND status = 'approved'";
-
+// ------------------ EXPENSES (FILTERED BY DATE) ------------------
+$expensesQuery = "
+    SELECT 
+        SUM(amount) AS total_expenses,
+        COUNT(*)    AS expense_count
+    FROM expenses
+    WHERE DATE(date) BETWEEN '$date_from' AND '$date_to'
+      AND status = 'approved'
+";
 $expensesResult = $mysqli->query($expensesQuery);
-$expensesTotals = $expensesResult->fetch_assoc();
+$expensesTotals = $expensesResult->fetch_assoc() ?: ['total_expenses' => 0, 'expense_count' => 0];
 
-// Get detailed expenses for dropdown
-$expensesDetailQuery = "SELECT 
-    category,
-    item,
-    amount,
-    date,
-    recorded_by
-FROM expenses
-WHERE DATE(date) BETWEEN '$date_from' AND '$date_to' AND status = 'approved'
-ORDER BY date DESC";
-
+// Detailed expenses (also filtered by date)
+$expensesDetailQuery = "
+    SELECT 
+        category,
+        item,
+        amount,
+        date,
+        recorded_by
+    FROM expenses
+    WHERE DATE(date) BETWEEN '$date_from' AND '$date_to'
+      AND status = 'approved'
+    ORDER BY date DESC
+";
 $expensesDetailResult = $mysqli->query($expensesDetailQuery);
-$expensesDetail = $expensesDetailResult->fetch_all(MYSQLI_ASSOC);
+$expensesDetail       = $expensesDetailResult->fetch_all(MYSQLI_ASSOC);
 
-// Calculate Net Income = Grand Received - Total Expenses
-$netIncome = ($grandTotals['grand_received'] ?? 0) - ($expensesTotals['total_expenses'] ?? 0);
-
-// Get grand balance from audit data (sum of all balances)
+// Net Income = total received (filtered) - total expenses (filtered)
+$netIncome    = ($grandTotals['grand_received'] ?? 0) - ($expensesTotals['total_expenses'] ?? 0);
 $grandBalance = $grandTotals['grand_balance'] ?? 0;
 ?>
 
@@ -158,15 +143,6 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                 </div>
 
                 <div class="filter-group">
-                    <label>Group By</label>
-                    <select name="group_by" class="form-control">
-                        <option value="daily" <?= $group_by === 'daily' ? 'selected' : '' ?>>Daily</option>
-                        <option value="weekly" <?= $group_by === 'weekly' ? 'selected' : '' ?>>Weekly</option>
-                        <option value="monthly" <?= $group_by === 'monthly' ? 'selected' : '' ?>>Monthly</option>
-                    </select>
-                </div>
-
-                <div class="filter-group">
                     <div class="filter-buttons">
                         <button type="submit" class="btn-filter">
                             <i class="bi bi-funnel"></i> Filter
@@ -184,7 +160,12 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
 <!-- Audit Table -->
 <div class="card shadow-sm border-0">
     <div class="card-header audit-header text-white">
-        <h5 class="mb-0">Tuition Audit Report - <?= ucfirst($group_by) ?></h5>
+        <h5 class="mb-0">
+            Tuition Audit Report
+            <small class="ms-2" style="font-size: 12px;">
+                (<?= htmlspecialchars($date_from) ?> to <?= htmlspecialchars($date_to) ?>)
+            </small>
+        </h5>
     </div>
     <div class="card-body">
         <?php if (empty($auditData)): ?>
@@ -197,7 +178,6 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Date</th>
                             <th>Class</th>
                             <th>Expected Tuition</th>
                             <th>Amount Received</th>
@@ -205,36 +185,30 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                         </tr>
                     </thead>
                     <tbody>
-                        <?php 
-                        $currentDate = '';
-                        foreach ($auditData as $row): 
-                            $isNewDate = ($currentDate !== $row['audit_date']);
-                            if ($isNewDate && $currentDate !== '') {
-                                // Add date subtotal row here if needed
-                            }
-                            $currentDate = $row['audit_date'];
-                        ?>
+                        <?php foreach ($auditData as $row): ?>
                             <tr>
-                                <td><?= htmlspecialchars($row['audit_date']) ?></td>
                                 <td><?= htmlspecialchars($row['class_name']) ?></td>
                                 <td><?= number_format($row['total_expected'], 2) ?></td>
                                 <td><?= number_format($row['total_received'], 2) ?></td>
                                 <td><?= number_format($row['balance'], 2) ?></td>
                             </tr>
                         <?php endforeach; ?>
-                        
+
                         <!-- Expenses Dropdown Row -->
                         <tr class="expenses-dropdown-row" onclick="toggleExpensesDropdown(event)">
-                            <td colspan="5" style="cursor: pointer; background-color: #f0f8ff; padding: 12px; font-weight: 600;">
-                                <i class="bi bi-chevron-right" id="expensesToggleIcon" style="transition: transform 0.3s; display: inline-block;"></i>
+                            <td colspan="4" style="cursor: pointer; background-color: #f0f8ff; padding: 12px; font-weight: 600;">
+                                <i class="bi bi-chevron-right" id="expensesToggleIcon"
+                                   style="transition: transform 0.3s; display: inline-block;"></i>
                                 Expenses (<?= $expensesTotals['expense_count'] ?? 0 ?> items)
-                                <span style="float: right; color: #e74c3c;">-<?= number_format($expensesTotals['total_expenses'] ?? 0, 2) ?></span>
+                                <span style="float: right; color: #e74c3c;">
+                                    -<?= number_format($expensesTotals['total_expenses'] ?? 0, 2) ?>
+                                </span>
                             </td>
                         </tr>
 
                         <!-- Expenses Detail Rows (Hidden by default) -->
                         <tr id="expensesDetailContainer" style="display: none;">
-                            <td colspan="5" style="padding: 0; background-color: #f9f9f9;">
+                            <td colspan="4" style="padding: 0; background-color: #f9f9f9;">
                                 <!-- Scrollable Expenses Detail Table -->
                                 <div class="expenses-detail-table">
                                     <table class="table table-sm" style="margin-bottom: 0;">
@@ -253,9 +227,9 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                                                     <td colspan="5" class="text-center text-muted">No expenses recorded</td>
                                                 </tr>
                                             <?php else: ?>
-                                                <?php foreach ($expensesDetail as $expense): 
+                                                <?php foreach ($expensesDetail as $expense):
                                                     $userQuery = "SELECT name FROM users WHERE id = ?";
-                                                    $userStmt = $mysqli->prepare($userQuery);
+                                                    $userStmt  = $mysqli->prepare($userQuery);
                                                     $userStmt->bind_param("i", $expense['recorded_by']);
                                                     $userStmt->execute();
                                                     $userName = $userStmt->get_result()->fetch_assoc()['name'] ?? 'N/A';
@@ -275,10 +249,10 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                                 </div>
                             </td>
                         </tr>
-                        
+
                         <!-- Net Income Row (Grand Total - Expenses) -->
                         <tr class="table-totals" style="background-color: #e8f4e8; position: sticky; bottom: 0; z-index: 5;">
-                            <td colspan="2" class="text-end fw-bold">NET INCOME:</td>
+                            <td class="text-end fw-bold">TOTAL / NET:</td>
                             <td class="totals-expected"><?= number_format($grandTotals['grand_expected'] ?? 0, 2) ?></td>
                             <td class="totals-received"><?= number_format($netIncome, 2) ?></td>
                             <td style="color: #28a745; font-weight: 700;"><?= number_format($grandBalance, 2) ?></td>
@@ -292,19 +266,19 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
 
 <link rel="stylesheet" href="../../assets/css/audit.css">
 
-<!-- Load script INLINE to ensure function is available -->
 <script>
+// inline to ensure availability
 function toggleExpensesDropdown(event) {
     event.stopPropagation();
     const container = document.getElementById('expensesDetailContainer');
-    const icon = document.getElementById('expensesToggleIcon');
-    
-    if (container.style.display === 'none') {
+    const icon      = document.getElementById('expensesToggleIcon');
+
+    if (container.style.display === 'none' || container.style.display === '') {
         container.style.display = 'table-row';
-        icon.style.transform = 'rotate(90deg)';
+        if (icon) icon.style.transform = 'rotate(90deg)';
     } else {
         container.style.display = 'none';
-        icon.style.transform = 'rotate(0deg)';
+        if (icon) icon.style.transform = 'rotate(0deg)';
     }
 }
 </script>

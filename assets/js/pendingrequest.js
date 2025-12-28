@@ -1,8 +1,13 @@
+// Backwards‑compatibility wrapper: ANY call to showSubTab(...) will work.
+function showSubTab(tabName) {
+    switchSubTab(tabName);
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    // Get current active tab from URL or default to admitted_students
+    // Get current active tab from URL or default to student_payments
     const urlParams = new URLSearchParams(window.location.search);
-    const activeTab = urlParams.get('tab') || 'admitted_students';
+    const activeTab = urlParams.get('tab') || 'student_payments';
     const activeSubTab = urlParams.get('subtab') || 'payments';
     
     // Show the correct tab content
@@ -10,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Show the correct sub-tab if on student_payments tab
     if (activeTab === 'student_payments') {
-        showSubTab(activeSubTab);
+        switchSubTab(activeSubTab); // ensure Student Payments → Payments is visible by default
     }
 });
 
@@ -39,7 +44,7 @@ function showTab(tabName) {
     }
 }
 
-// Switch sub-tabs
+// Switch sub-tabs (called from HTML onclick)
 function switchSubTab(tabName) {
     // Hide all sub-tab contents
     document.querySelectorAll('.sub-tab-content').forEach(content => {

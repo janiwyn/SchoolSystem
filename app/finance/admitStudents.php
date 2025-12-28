@@ -5,10 +5,14 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['bursar', 'admin', 'principal']);
 
-// Get all classes from fee_structure
-$classesQuery = "SELECT DISTINCT fs.class_id, c.class_name 
+// Get all classes from fee_structure WITH expected tuition (sum of all terms per class)
+$classesQuery = "SELECT 
+                    fs.class_id, 
+                    c.class_name,
+                    SUM(fs.amount) AS expected_tuition
                  FROM fee_structure fs 
                  LEFT JOIN classes c ON fs.class_id = c.id 
+                 GROUP BY fs.class_id, c.class_name
                  ORDER BY c.class_name ASC";
 $classesResult = $mysqli->query($classesQuery);
 $classes = $classesResult->fetch_all(MYSQLI_ASSOC);
@@ -42,6 +46,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
         $uniform_fee = 0;
     }
 
+    // Compute expected tuition for this class from fee_structure
+    $expected_tuition = 0;
+    if ($class_id) {
+        $expStmt = $mysqli->prepare("SELECT SUM(amount) AS expected FROM fee_structure WHERE class_id = ?");
+        if ($expStmt) {
+            $expStmt->bind_param("i", $class_id);
+            $expStmt->execute();
+            $expRow = $expStmt->get_result()->fetch_assoc();
+            $expected_tuition = (float)($expRow['expected'] ?? 0);
+            $expStmt->close();
+        }
+    }
+
     // Validate required fields (fees NOT required)
     if (!$first_name || !$gender || !$class_id || !$day_boarding || !$parent_contact) {
         $error = "All required fields must be filled";
@@ -69,10 +86,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
                 } else {
                     $status = 'approved';
                     
-                    $stmt = $mysqli->prepare("INSERT INTO admit_students (admission_no, first_name, gender, class_id, day_boarding, admission_fee, uniform_fee, parent_contact, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    // NOTE: now also inserting expected_tuition
+                    $stmt = $mysqli->prepare(
+                        "INSERT INTO admit_students 
+                            (admission_no, first_name, gender, class_id, day_boarding, 
+                             admission_fee, uniform_fee, expected_tuition, parent_contact, 
+                             status, created_by, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                    );
                     
                     if ($stmt) {
-                        $stmt->bind_param("sssissddsi", $admission_no, $first_name, $gender, $class_id, $day_boarding, $admission_fee, $uniform_fee, $parent_contact, $status, $user_id);
+                        // s,s,s,i,s,d,d,d,s,s,i  => "sssisdddssi"
+                        $admission_fee = (float)$admission_fee;
+                        $uniform_fee   = (float)$uniform_fee;
+
+                        $stmt->bind_param(
+                            "sssisdddssi",
+                            $admission_no,
+                            $first_name,
+                            $gender,
+                            $class_id,
+                            $day_boarding,
+                            $admission_fee,
+                            $uniform_fee,
+                            $expected_tuition,
+                            $parent_contact,
+                            $status,
+                            $user_id
+                        );
                         
                         if ($stmt->execute()) {
                             header("Location: admitStudents.php?success=1&day_boarding=" . urlencode($day_boarding));
@@ -110,6 +151,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
         $uniform_fee = 0;
     }
 
+    // Recompute expected tuition for (possibly changed) class
+    $expected_tuition = 0;
+    if ($class_id) {
+        $expStmt = $mysqli->prepare("SELECT SUM(amount) AS expected FROM fee_structure WHERE class_id = ?");
+        if ($expStmt) {
+            $expStmt->bind_param("i", $class_id);
+            $expStmt->execute();
+            $expRow = $expStmt->get_result()->fetch_assoc();
+            $expected_tuition = (float)($expRow['expected'] ?? 0);
+            $expStmt->close();
+        }
+    }
+
     if (!$first_name || !$gender || !$class_id || !$day_boarding || !$parent_contact) {
         $error = "All required fields must be filled";
     } elseif (!is_numeric($admission_fee) || $admission_fee < 0) {
@@ -130,20 +184,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
 
         $stmt = $mysqli->prepare(
             "UPDATE admit_students 
-             SET first_name = ?, gender = ?, class_id = ?, day_boarding = ?, 
-                 admission_fee = ?, uniform_fee = ?, parent_contact = ?
+             SET first_name = ?, 
+                 gender = ?, 
+                 class_id = ?, 
+                 day_boarding = ?, 
+                 admission_fee = ?, 
+                 uniform_fee = ?, 
+                 expected_tuition = ?, 
+                 parent_contact = ?
              WHERE id = ?"
         );
         if ($stmt) {
-            // ssissddi → s,s,i,s,d,d,s,i
+            $admission_fee = (float)$admission_fee;
+            $uniform_fee   = (float)$uniform_fee;
+
+            // s,s,i,s,d,d,d,s,i => "ssisdddsi"
             $stmt->bind_param(
-                "ssissddi",
+                "ssisdddsi",
                 $first_name,
                 $gender,
                 $class_id,
                 $day_boarding,
                 $admission_fee,
                 $uniform_fee,
+                $expected_tuition,
                 $parent_contact,
                 $student_id
             );
@@ -317,6 +381,7 @@ $studentsQuery = "SELECT
     day_boarding,
     admission_fee,
     uniform_fee,
+    expected_tuition,
     parent_contact,
     status,
     created_at
@@ -383,7 +448,12 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                     <select name="class_id" class="form-control" required>
                         <option value="">Select Class</option>
                         <?php foreach ($classes as $class): ?>
-                            <option value="<?= $class['class_id'] ?>"><?= htmlspecialchars($class['class_name']) ?></option>
+                            <option 
+                                value="<?= $class['class_id'] ?>"
+                                data-expected-tuition="<?= htmlspecialchars($class['expected_tuition'] ?? 0) ?>"
+                            >
+                                <?= htmlspecialchars($class['class_name']) ?>
+                            </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -405,6 +475,12 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                 <div class="col-md-3">
                     <label class="form-label">Uniform Fee</label>
                     <input type="number" name="uniform_fee" class="form-control" step="0.01" min="0" placeholder="0.00">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Expected Tuition</label>
+                    <input type="number" name="expected_tuition" id="expectedTuition" class="form-control readonly-field" step="0.01" min="0" readonly>
+                    <small class="text-muted">Auto-filled from tuition setup</small>
                 </div>
 
                 <div class="col-md-3">
@@ -512,6 +588,7 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                             <th>Day/Boarding</th>
                             <th>Adm Fee</th>
                             <th>U Fee</th>
+                            <th>Exp Tuition</th>
                             <th>Parent Contact</th>
                             <th>Date</th>
                             <th>Status</th>
@@ -530,6 +607,7 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                                 <td><?= htmlspecialchars($student['day_boarding']) ?></td>
                                 <td><?= number_format($student['admission_fee'], 2) ?></td>
                                 <td><?= number_format($student['uniform_fee'], 2) ?></td>
+                                <td><?= number_format($student['expected_tuition'], 2) ?></td>
                                 <td><?= htmlspecialchars($student['parent_contact']) ?></td>
                                 <td><?= date('Y-m-d H:i', strtotime($student['created_at'])) ?></td>
                                 <td>
@@ -724,6 +802,6 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
     </div>
 </div>
 
-<script src="../../assets/js/admitStudents.js"></script>
+<script src="../../assets/js/admitStudents.js?v=3"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

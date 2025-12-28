@@ -1,91 +1,125 @@
+// Toggle Record Student Payment collapsible form
 function togglePaymentForm() {
-    const formCard = document.getElementById('paymentFormCard');
-    const toggleBtn = document.querySelector('.btn-toggle-form');
-    const icon = toggleBtn.querySelector('i');
-    
-    if (formCard.style.display === 'none') {
-        // Open form
-        formCard.style.display = 'block';
-        toggleBtn.classList.remove('collapsed');
-        toggleBtn.classList.add('expanded');
-        icon.classList.remove('bi-chevron-right');
-        icon.classList.add('bi-chevron-down');
-    } else {
-        // Close form
-        formCard.style.display = 'none';
-        toggleBtn.classList.remove('expanded');
-        toggleBtn.classList.add('collapsed');
-        icon.classList.remove('bi-chevron-down');
-        icon.classList.add('bi-chevron-right');
+    const card = document.getElementById('paymentFormCard');
+    if (!card) return;
+
+    const btn = document.querySelector('.btn-toggle-form');
+    const icon = btn ? btn.querySelector('i') : null;
+
+    const isHidden = card.style.display === 'none' || card.style.display === '';
+    card.style.display = isHidden ? 'block' : 'none';
+
+    if (icon) {
+        icon.classList.toggle('bi-chevron-right', !isHidden);
+        icon.classList.toggle('bi-chevron-down', isHidden);
     }
 }
 
+// Populate form fields when a student is selected
 function populateStudentData() {
     const select = document.getElementById('studentSelect');
+    if (!select) return;
+
     const option = select.options[select.selectedIndex];
 
-    if (option.value === '') {
-        // Clear all fields
-        document.getElementById('fullName').value = '';
-        document.getElementById('gender').value = '';
-        document.getElementById('className').value = '';
-        document.getElementById('dayBoarding').value = '';
-        document.getElementById('expectedTuition').value = '';
-        document.getElementById('admissionFee').value = '';
-        document.getElementById('uniformFee').value = '';
-        document.getElementById('parentContact').value = '';
-        document.getElementById('parentEmail').value = '';
-        document.getElementById('studentStatus').value = '';
-        document.getElementById('term').value = '';
+    // Form fields
+    const fullNameInput     = document.getElementById('fullName');
+    const statusInput       = document.getElementById('studentStatus');
+    const genderInput       = document.getElementById('gender');
+    const classNameInput    = document.getElementById('className');
+    const termInput         = document.getElementById('term');
+    const dayBoardingInput  = document.getElementById('dayBoarding');
+    const expectedInput     = document.getElementById('expectedTuition');
+    const admissionFeeInput = document.getElementById('admissionFee');
+    const uniformFeeInput   = document.getElementById('uniformFee');
+    const parentContactInput= document.getElementById('parentContact');
+
+    // If any required field is missing, log and stop (avoid JS errors on hosted app)
+    if (!fullNameInput || !statusInput || !genderInput || !classNameInput ||
+        !termInput || !dayBoardingInput || !expectedInput ||
+        !admissionFeeInput || !uniformFeeInput || !parentContactInput) {
+        console.warn('Student payment form fields missing on this page', {
+            fullNameInput,
+            statusInput,
+            genderInput,
+            classNameInput,
+            termInput,
+            dayBoardingInput,
+            expectedInput,
+            admissionFeeInput,
+            uniformFeeInput,
+            parentContactInput
+        });
         return;
     }
 
-    // Populate fields from data attributes
-    const firstName = option.getAttribute('data-first');
-    const lastName = option.getAttribute('data-last');
-    const fullName = firstName + ' ' + lastName;
-    const classId = option.getAttribute('data-class');
+    // If no student selected → clear fields
+    if (!option || !option.value) {
+        fullNameInput.value      = '';
+        statusInput.value        = '';
+        genderInput.value        = '';
+        classNameInput.value     = '';
+        termInput.value          = '';
+        dayBoardingInput.value   = '';
+        expectedInput.value      = '';
+        admissionFeeInput.value  = '';
+        uniformFeeInput.value    = '';
+        parentContactInput.value = '';
+        return;
+    }
 
-    document.getElementById('fullName').value = fullName;
-    document.getElementById('gender').value = option.getAttribute('data-gender');
-    document.getElementById('className').value = option.getAttribute('data-class');
-    document.getElementById('dayBoarding').value = option.getAttribute('data-boarding');
-    document.getElementById('expectedTuition').value = option.getAttribute('data-admission-fee') || 0;
-    document.getElementById('admissionFee').value = option.getAttribute('data-admission-fee');
-    document.getElementById('uniformFee').value = option.getAttribute('data-uniform-fee');
-    document.getElementById('parentContact').value = option.getAttribute('data-contact');
-    document.getElementById('parentEmail').value = option.getAttribute('data-email');
-    
-    // Display status with styling
-    const status = option.getAttribute('data-status');
-    const statusField = document.getElementById('studentStatus');
-    statusField.value = status.charAt(0).toUpperCase() + status.slice(1);
-    
-    if (status === 'unapproved') {
-        statusField.style.backgroundColor = '#fff3cd';
-        statusField.style.color = '#856404';
+    // Read data-* attributes from <option>
+    const firstName   = option.getAttribute('data-first')   || '';
+    const lastName    = option.getAttribute('data-last')    || '';
+    const gender      = option.getAttribute('data-gender')  || '';
+    const classId     = option.getAttribute('data-class')   || '';
+    const dayBoarding = option.getAttribute('data-boarding')|| '';
+    const admFee      = option.getAttribute('data-admission-fee') || '0';
+    const uniFee      = option.getAttribute('data-uniform-fee')   || '0';
+    const contact     = option.getAttribute('data-contact')       || '';
+    const status      = option.getAttribute('data-status')        || '';
+
+    // Fill text fields
+    fullNameInput.value      = (firstName + ' ' + lastName).trim();
+    statusInput.value        = status ? status.charAt(0).toUpperCase() + status.slice(1) : '';
+    genderInput.value        = gender;
+    classNameInput.value     = classId;        // Numeric class id (you can change to name if you pass it)
+    dayBoardingInput.value   = dayBoarding;
+    admissionFeeInput.value  = parseFloat(admFee || 0).toFixed(2);
+    uniformFeeInput.value    = parseFloat(uniFee || 0).toFixed(2);
+    parentContactInput.value = contact;
+
+    // Term: use server-provided currentTerm if available
+    if (typeof window.currentTerm === 'string' && window.currentTerm.length > 0) {
+        termInput.value = window.currentTerm;
     } else {
-        statusField.style.backgroundColor = '';
-        statusField.style.color = '';
+        termInput.value = '';
     }
 
-    // Fetch term and tuition from fee_structure table based on class_id
-    if (classId) {
-        fetch('../../app/api/getStudentTuition.php?class_id=' + classId)
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('term').value = data.term || '';
-                document.getElementById('expectedTuition').value = data.tuition || 0;
-            })
-            .catch(error => {
-                console.error('Error fetching tuition data:', error);
-            });
+    // Expected tuition: look up by class_id from server-provided map
+    let expected = 0;
+    if (window.classExpected && classId && window.classExpected[classId] !== undefined) {
+        expected = parseFloat(window.classExpected[classId]) || 0;
     }
+    expectedInput.value = expected.toFixed(2);
 }
 
+// Set data for additional payment modal
 function setPaymentId(paymentId, balance) {
-    document.getElementById('modalPaymentId').value = paymentId;
-    document.getElementById('modalBalance').value = balance.toFixed(2);
-    document.getElementById('modalAmount').value = '';
-    document.getElementById('modalAmount').max = balance;
+    const idField      = document.getElementById('modalPaymentId');
+    const balanceField = document.getElementById('modalBalance');
+    const amountField  = document.getElementById('modalAmount');
+
+    if (idField)      idField.value = paymentId;
+    if (balanceField) balanceField.value = parseFloat(balance || 0).toFixed(2);
+    if (amountField)  amountField.value = '';
 }
+
+// Initialize behaviour on page load
+document.addEventListener('DOMContentLoaded', function () {
+    const select = document.getElementById('studentSelect');
+    if (select && select.value) {
+        // If a student is already selected (e.g., after validation error), repopulate
+        populateStudentData();
+    }
+});
