@@ -369,17 +369,12 @@ $canModifyTuition = ($userRole === 'admin');
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Class</label>
-                            <input type="text" name="class_name" id="editClassName" class="form-control" required>
+                            <input type="text" name="class_name" id="editClassName" class="form-control" readonly>
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">Term</label>
-                            <select name="term" id="editTerm" class="form-control" required>
-                                <option value="">Select Term</option>
-                                <option value="Term 1">Term 1</option>
-                                <option value="Term 2">Term 2</option>
-                                <option value="Term 3">Term 3</option>
-                            </select>
+                            <input type="text" name="term" id="editTerm" class="form-control" readonly>
                         </div>
 
                         <div class="col-md-12">
@@ -458,6 +453,7 @@ $canModifyTuition = ($userRole === 'admin');
     </div>
 </div>
 
-<script src="../../assets/js/tuition.js"></script>
+<!-- Add cache‑buster so hosted app loads new JS -->
+<script src="../../assets/js/tuition.js?v=2"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

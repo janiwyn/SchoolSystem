@@ -5,6 +5,60 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['bursar', 'admin', 'principal']);
 
+// ADMIN‑ONLY: bulk delete payments by date range
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['delete_by_date'])
+    && (isset($_SESSION['role']) && $_SESSION['role'] === 'admin')
+) {
+    $deleteFrom = $_POST['delete_from'] ?? '';
+    $deleteTo   = $_POST['delete_to']   ?? '';
+
+    if ($deleteFrom && $deleteTo) {
+        // Normalize order if user swaps dates
+        if ($deleteFrom > $deleteTo) {
+            [$deleteFrom, $deleteTo] = [$deleteTo, $deleteFrom];
+        }
+
+        // Begin transaction
+        $mysqli->begin_transaction();
+        $deletedCount = 0;
+
+        try {
+            // Delete related topups first to avoid FK issues
+            $topupSql = "
+                DELETE FROM student_payment_topups
+                WHERE payment_id IN (
+                    SELECT id FROM student_payments
+                    WHERE DATE(payment_date) BETWEEN ? AND ?
+                )";
+            $topupStmt = $mysqli->prepare($topupSql);
+            if ($topupStmt) {
+                $topupStmt->bind_param('ss', $deleteFrom, $deleteTo);
+                $topupStmt->execute();
+                $topupStmt->close();
+            }
+
+            // Delete main payments
+            $paySql = "DELETE FROM student_payments WHERE DATE(payment_date) BETWEEN ? AND ?";
+            $payStmt = $mysqli->prepare($paySql);
+            if ($payStmt) {
+                $payStmt->bind_param('ss', $deleteFrom, $deleteTo);
+                $payStmt->execute();
+                $deletedCount = $payStmt->affected_rows;
+                $payStmt->close();
+            }
+
+            $mysqli->commit();
+            header("Location: studentPayments.php?deleted=" . (int)$deletedCount);
+            exit();
+        } catch (Throwable $e) {
+            $mysqli->rollback();
+            // Optional: log error; for now fall through and reload page
+        }
+    }
+}
+
 // Handle payment recording
 $message = '';
 $error = '';
@@ -459,10 +513,29 @@ if ($currentTermResult) {
     </div>
 </div>
 
+<!-- Success Alert for Deleted Payments -->
+<?php if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
+    <div class="alert alert-success alert-sm">
+        <i class="bi bi-check-circle"></i>
+        <?= (int)$_GET['deleted'] ?> payment record(s) deleted successfully.
+    </div>
+<?php endif; ?>
+
 <!-- Payment Records Table -->
 <div class="card shadow-sm border-0">
     <div class="card-body">
         <h5 class="mb-3">Payment Records</h5>
+        
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+            <!-- Admin‑only bulk delete button, just above the student payments table -->
+            <button type="button"
+                    class="btn btn-danger mb-3"
+                    data-bs-toggle="modal"
+                    data-bs-target="#deletePaymentsByDateModal">
+                <i class="bi bi-trash"></i> Delete Payments by Date
+            </button>
+        <?php endif; ?>
+        
         <?php if (empty($payments)): ?>
             <div class="alert alert-info">No payment records found.</div>
         <?php else: ?>
@@ -678,6 +751,47 @@ if ($currentTermResult) {
         </div>
     </div>
 </div>
+
+<!-- Admin‑only Bootstrap modal for delete by date range -->
+<?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+    <div class="modal fade" id="deletePaymentsByDateModal" tabindex="-1" aria-labelledby="deletePaymentsByDateLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <form method="POST" class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deletePaymentsByDateLabel">
+                        <i class="bi bi-trash"></i> Delete Payments by Date Range
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">
+                        This will permanently delete all student payment records (and their top‑ups)
+                        whose payment date falls between the selected dates (inclusive).
+                    </p>
+                    <div class="mb-3">
+                        <label for="delete_from" class="form-label">From Date</label>
+                        <input type="date" class="form-control" id="delete_from" name="delete_from" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="delete_to" class="form-label">To Date</label>
+                        <input type="date" class="form-control" id="delete_to" name="delete_to" required>
+                    </div>
+                    <div class="alert alert-warning small mb-0">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        This action cannot be undone. Please double‑check the dates before confirming.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <input type="hidden" name="delete_by_date" value="1">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Delete Records
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
 
 <!-- Expose expected tuition map + current term to JS -->
 <script>

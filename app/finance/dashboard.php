@@ -3,23 +3,41 @@ $title = "Bursar Dashboard";
 require_once __DIR__ . '/../helper/layout.php';
 
 // Get statistics for dashboard cards
-// Total Tuition Paid
-$tuitionBaseQuery = "SELECT SUM(amount_paid) as total FROM student_payments"; // removed status filter
-$tuitionBaseResult = $mysqli->query($tuitionBaseQuery);
-$baseTuition = $tuitionBaseResult ? (float)($tuitionBaseResult->fetch_assoc()['total'] ?? 0) : 0;
+// Total Users
+$usersQuery = "SELECT COUNT(*) as total FROM users WHERE status = 1";
+$usersResult = $mysqli->query($usersQuery);
+$totalUsers = $usersResult->fetch_assoc()['total'] ?? 0;
 
-// Only use amount_paid from student_payments
-$totalTuitionPaid = $baseTuition;
-
-// Total Debts (Balance) - SUM of all balances
-$debtsQuery = "SELECT SUM(balance) as total FROM student_payments";
-$debtsResult = $mysqli->query($debtsQuery);
-$totalDebts = $debtsResult->fetch_assoc()['total'] ?? 0;
-
-// Total Students
+// Total Admitted Students
 $studentsQuery = "SELECT COUNT(*) as total FROM admit_students WHERE status = 'approved'";
 $studentsResult = $mysqli->query($studentsQuery);
 $totalStudents = $studentsResult->fetch_assoc()['total'] ?? 0;
+
+// Total Expected Tuition (from admit_students)
+$expectedQueryTotal = "SELECT SUM(expected_tuition) as total FROM admit_students WHERE status = 'approved'";
+$expectedResultTotal = $mysqli->query($expectedQueryTotal);
+$totalExpected = $expectedResultTotal ? (float)($expectedResultTotal->fetch_assoc()['total'] ?? 0) : 0;
+
+// Total Tuition Collected (from student_payments.amount_paid)
+$tuitionBaseQuery = "SELECT SUM(amount_paid) as total FROM student_payments";
+$tuitionBaseResult = $mysqli->query($tuitionBaseQuery);
+$baseTuition = $tuitionBaseResult ? (float)($tuitionBaseResult->fetch_assoc()['total'] ?? 0) : 0;
+$totalTuition = $baseTuition;
+
+// Tuition Balance = Expected - Collected
+$tuitionBalance = $totalExpected - $totalTuition;
+
+// Pending Approvals (same as admin/principal)
+$pendingQuery = "SELECT COUNT(*) as total 
+                 FROM student_payments 
+                 WHERE status_approved = 'unapproved' 
+                   AND id NOT IN (
+                       SELECT DISTINCT payment_id 
+                       FROM student_payment_topups 
+                       WHERE status_approved = 'unapproved'
+                   )";
+$pendingResult = $mysqli->query($pendingQuery);
+$pendingPayments = $pendingResult->fetch_assoc()['total'] ?? 0;
 
 // Get chart filter parameter (default to 30 days)
 $days = intval($_GET['days'] ?? 30);
@@ -39,7 +57,7 @@ while ($currentDate <= $endDateTime) {
     $dateRange[$currentDate->format('Y-m-d')] = [
         'expected' => 0,
         'received' => 0,
-        'balance'  => 0,   // NEW
+        'balance'  => 0,
         'admitted' => 0,
         'expenses' => 0
     ];
@@ -143,64 +161,137 @@ foreach ($expensesResultData as $row) {
 $months = [];
 $expectedData = [];
 $receivedData = [];
-$balanceChartData = []; // NEW
+$balanceChartData = [];
 $admittedData = [];
 $expensesChartData = [];
 
 foreach ($dateRange as $date => $data) {
-    $months[]          = date('M d', strtotime($date));
-    $expectedData[]    = $data['expected'];
-    $receivedData[]    = $data['received'];
-    $balanceChartData[] = $data['balance']; // NEW
-    $admittedData[]    = $data['admitted'];
+    $months[]           = date('M d', strtotime($date));
+    $expectedData[]     = $data['expected'];
+    $receivedData[]     = $data['received'];
+    $balanceChartData[] = $data['balance'];
+    $admittedData[]     = $data['admitted'];
     $expensesChartData[] = $data['expenses'];
 }
 ?>
 
-<div class="row g-4 mb-4">
-    <!-- Total Tuition Paid Card -->
-    <div class="col-md-12 col-lg-4">
-        <div class="card stat-card green">
-            <div class="card-body stat-card-body">
-                <div class="stat-content">
-                    <div class="stat-label">Tuition Paid</div>
-                    <div class="stat-value">$ <?= number_format($totalTuitionPaid, 0) ?></div>
+<!-- NEW: stats carousel matching Admin/Principal -->
+<div id="bursarStatsCarousel" class="carousel slide stats-carousel mb-4">
+    <div class="carousel-inner">
+        <!-- Slide 1: main 4 cards -->
+        <div class="carousel-item active">
+            <div class="row g-4">
+                <!-- 1. Admitted Students -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card green">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Admitted Students</div>
+                                <div class="stat-value"><?= $totalStudents ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-person-check-fill"></i>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-icon">
-                    <i class="bi bi-cash-coin"></i>
+
+                <!-- 2. Expected Tuition -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card blue">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Expected Tuition</div>
+                                <div class="stat-value"><?= number_format($totalExpected, 0) ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-graph-up"></i>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- 3. Tuition Collected -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card orange">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Tuition Collected</div>
+                                <div class="stat-value"><?= number_format($totalTuition, 0) ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-cash-coin"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Balance -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card red">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Balance</div>
+                                <div class="stat-value"><?= number_format($tuitionBalance, 0) ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-calculator"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 2: Pending Approvals + Total Users -->
+        <div class="carousel-item">
+            <div class="row g-4">
+                <!-- Pending Approvals -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card red">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Pending Approvals</div>
+                                <div class="stat-value"><?= $pendingPayments ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-exclamation-circle-fill"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Users -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card blue">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Total Users</div>
+                                <div class="stat-value"><?= $totalUsers ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-people-fill"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- you can add more extra cards here later if needed -->
             </div>
         </div>
     </div>
 
-    <!-- Total Debts Card -->
-    <div class="col-md-12 col-lg-4">
-        <div class="card stat-card red">
-            <div class="card-body stat-card-body">
-                <div class="stat-content">
-                    <div class="stat-label">Unpaid tuition</div>
-                    <div class="stat-value">$ <?= number_format($totalDebts, 0) ?></div>
-                </div>
-                <div class="stat-icon">
-                    <i class="bi bi-exclamation-circle-fill"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Total Students Card -->
-    <div class="col-md-12 col-lg-4">
-        <div class="card stat-card blue">
-            <div class="card-body stat-card-body">
-                <div class="stat-content">
-                    <div class="stat-label">Total Students</div>
-                    <div class="stat-value"><?= $totalStudents ?></div>
-                </div>
-                <div class="stat-icon">
-                    <i class="bi bi-people-fill"></i>
-                </div>
-            </div>
-        </div>
+    <!-- Dots indicators -->
+    <div class="carousel-indicators stats-carousel-indicators">
+        <button type="button"
+                data-bs-target="#bursarStatsCarousel"
+                data-bs-slide-to="0"
+                class="active"
+                aria-current="true"
+                aria-label="Main Stats"></button>
+        <button type="button"
+                data-bs-target="#bursarStatsCarousel"
+                data-bs-slide-to="1"
+                aria-label="More Stats"></button>
     </div>
 </div>
 
