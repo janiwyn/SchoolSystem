@@ -165,6 +165,10 @@
     background-color: #e74c3c;
 }
 
+.legend-color.balance {
+    background-color: #e74c3c;
+}
+
 .legend-label {
     font-size: 14px;
     font-weight: 600;
@@ -173,4 +177,37 @@
 
 #tuitionChart, #admissionsChart, #expensesChart {
     max-height: 400px;
+}
+
+.stats-carousel {
+    width: 100%;
+    display: block;
+    position: relative;
+}
+
+.stats-carousel .carousel-inner {
+    width: 100%;
+}
+
+/* Centered small dots under the cards (override Bootstrap) */
+.stats-carousel .carousel-indicators {
+    position: static !important;
+    margin-top: 14px;
+    margin-bottom: 0;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.stats-carousel .carousel-indicators [data-bs-target] {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #d0dfe8;
+    border: none;
+    opacity: 1;
+}
+
+.stats-carousel .carousel-indicators .active {
+    background-color: #3498db;
 }

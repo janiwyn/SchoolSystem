@@ -13,6 +13,11 @@ $studentsQuery = "SELECT COUNT(*) as total FROM admit_students WHERE status = 'a
 $studentsResult = $mysqli->query($studentsQuery);
 $totalStudents = $studentsResult->fetch_assoc()['total'] ?? 0;
 
+// Total Expected Tuition (from admit_students)
+$expectedQuery = "SELECT SUM(expected_tuition) as total FROM admit_students WHERE status = 'approved'";
+$expectedResult = $mysqli->query($expectedQuery);
+$totalExpected = $expectedResult ? (float)($expectedResult->fetch_assoc()['total'] ?? 0) : 0;
+
 // Total Tuition Collected
 $tuitionBaseQuery = "SELECT SUM(amount_paid) as total FROM student_payments"; // removed status filter
 $tuitionBaseResult = $mysqli->query($tuitionBaseQuery);
@@ -20,6 +25,9 @@ $baseTuition = $tuitionBaseResult ? (float)($tuitionBaseResult->fetch_assoc()['t
 
 // Only use amount_paid from student_payments
 $totalTuition = $baseTuition;
+
+// Tuition Balance
+$tuitionBalance = $totalExpected - $totalTuition;
 
 // Pending Approvals
 $pendingQuery = "SELECT COUNT(*) as total FROM student_payments WHERE status_approved = 'unapproved' AND id NOT IN (SELECT DISTINCT payment_id FROM student_payment_topups WHERE status_approved = 'unapproved')";
@@ -44,6 +52,7 @@ while ($currentDate <= $endDateTime) {
     $dateRange[$currentDate->format('Y-m-d')] = [
         'expected' => 0,
         'received' => 0,
+        'balance'  => 0,  // NEW
         'admitted' => 0,
         'expenses' => 0
     ];
@@ -51,17 +60,39 @@ while ($currentDate <= $endDateTime) {
 }
 
 // Get chart data based on selected days
-$chartQuery = "SELECT 
+// 1) Actual received per day (from student_payments)
+$paymentsQuery = "SELECT 
     DATE(payment_date) as chart_date,
-    SUM(expected_tuition) as expected,
     SUM(amount_paid) as received
 FROM student_payments
 WHERE payment_date >= '$startDate' AND payment_date <= '$endDate'
 GROUP BY DATE(payment_date)
 ORDER BY payment_date ASC";
+$paymentsResult = $mysqli->query($paymentsQuery);
+$paymentsData = $paymentsResult ? $paymentsResult->fetch_all(MYSQLI_ASSOC) : [];
 
-$chartResult = $mysqli->query($chartQuery);
-$chartData = $chartResult->fetch_all(MYSQLI_ASSOC);
+// 2) Expected tuition per day (from admitted_students on admission date)
+$expectedQuery = "SELECT 
+    DATE(created_at) as chart_date,
+    SUM(expected_tuition) as expected
+FROM admit_students
+WHERE DATE(created_at) >= '$startDate' AND DATE(created_at) <= '$endDate'
+  AND status = 'approved'
+GROUP BY DATE(created_at)
+ORDER BY DATE(created_at) ASC";
+$expectedResult = $mysqli->query($expectedQuery);
+$expectedRows = $expectedResult ? $expectedResult->fetch_all(MYSQLI_ASSOC) : [];
+
+// NEW: per-day unpaid balance
+$balanceQuery = "SELECT
+    DATE(payment_date) as chart_date,
+    SUM(balance) as total_balance
+FROM student_payments
+WHERE payment_date >= '$startDate' AND payment_date <= '$endDate'
+GROUP BY DATE(payment_date)
+ORDER BY payment_date ASC";
+$balanceResult = $mysqli->query($balanceQuery);
+$balanceData = $balanceResult ? $balanceResult->fetch_all(MYSQLI_ASSOC) : [];
 
 // Get student admissions data
 $admissionsQuery = "SELECT 
@@ -88,13 +119,25 @@ $expensesResult = $mysqli->query($expensesQuery);
 $expensesResultData = $expensesResult->fetch_all(MYSQLI_ASSOC);
 
 // Populate data into dateRange
-foreach ($chartData as $row) {
-    $dateRange[$row['chart_date']] = [
-        'expected' => (float)$row['expected'],
-        'received' => (float)$row['received'],
-        'admitted' => $dateRange[$row['chart_date']]['admitted'] ?? 0,
-        'expenses' => $dateRange[$row['chart_date']]['expenses'] ?? 0
-    ];
+foreach ($expectedRows as $row) {
+    $d = $row['chart_date'];
+    if (isset($dateRange[$d])) {
+        $dateRange[$d]['expected'] = (float)$row['expected'];
+    }
+}
+
+foreach ($paymentsData as $row) {
+    $d = $row['chart_date'];
+    if (isset($dateRange[$d])) {
+        $dateRange[$d]['received'] = (float)$row['received'];
+    }
+}
+
+foreach ($balanceData as $row) {
+    $d = $row['chart_date'];
+    if (isset($dateRange[$d])) {
+        $dateRange[$d]['balance'] = (float)$row['total_balance'];
+    }
 }
 
 foreach ($admissionsData as $row) {
@@ -113,77 +156,136 @@ foreach ($expensesResultData as $row) {
 $months = [];
 $expectedData = [];
 $receivedData = [];
+$balanceChartData = []; // NEW
 $admittedData = [];
 $expensesChartData = [];
 
 foreach ($dateRange as $date => $data) {
-    $months[] = date('M d', strtotime($date));
-    $expectedData[] = $data['expected'];
-    $receivedData[] = $data['received'];
-    $admittedData[] = $data['admitted'];
+    $months[]          = date('M d', strtotime($date));
+    $expectedData[]    = $data['expected'];
+    $receivedData[]    = $data['received'];
+    $balanceChartData[] = $data['balance']; // NEW
+    $admittedData[]    = $data['admitted'];
     $expensesChartData[] = $data['expenses'];
 }
 ?>
 
-<div class="row g-4 mb-4">
-    <!-- Total Users Card -->
-    <div class="col-md-6 col-lg-3">
-        <div class="card stat-card blue">
-            <div class="card-body stat-card-body">
-                <div class="stat-content">
-                    <div class="stat-label">Total Users</div>
-                    <div class="stat-value"><?= $totalUsers ?></div>
+<div id="principalStatsCarousel" class="carousel slide stats-carousel mb-4">
+    <div class="carousel-inner">
+        <!-- Slide 1: first 4 cards -->
+        <div class="carousel-item active">
+            <div class="row g-4">
+                <!-- 1. Admitted Students -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card green">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Admitted Students</div>
+                                <div class="stat-value"><?= $totalStudents ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-person-check-fill"></i>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-icon">
-                    <i class="bi bi-people-fill"></i>
+
+                <!-- 2. Expected Tuition -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card blue">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Expected Tuition</div>
+                                <div class="stat-value"><?= number_format($totalExpected, 0) ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-graph-up"></i>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- 3. Tuition Collected -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card orange">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Tuition Collected</div>
+                                <div class="stat-value"><?= number_format($totalTuition, 0) ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-cash-coin"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Balance -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card red">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Balance</div>
+                                <div class="stat-value"><?= number_format($tuitionBalance, 0) ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-calculator"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 2: Pending Approvals + Total Users -->
+        <div class="carousel-item">
+            <div class="row g-4">
+                <!-- Pending Approvals -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card red">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Pending Approvals</div>
+                                <div class="stat-value"><?= $pendingPayments ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-exclamation-circle-fill"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Users -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="card stat-card blue">
+                        <div class="card-body stat-card-body">
+                            <div class="stat-content">
+                                <div class="stat-label">Total Users</div>
+                                <div class="stat-value"><?= $totalUsers ?></div>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="bi bi-people-fill"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- more extra cards here later if needed -->
             </div>
         </div>
     </div>
 
-    <!-- Total Admitted Students Card -->
-    <div class="col-md-6 col-lg-3">
-        <div class="card stat-card green">
-            <div class="card-body stat-card-body">
-                <div class="stat-content">
-                    <div class="stat-label">Admitted Students</div>
-                    <div class="stat-value"><?= $totalStudents ?></div>
-                </div>
-                <div class="stat-icon">
-                    <i class="bi bi-person-check-fill"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Total Tuition Collected Card -->
-    <div class="col-md-6 col-lg-3">
-        <div class="card stat-card orange">
-            <div class="card-body stat-card-body">
-                <div class="stat-content">
-                    <div class="stat-label">Tuition Collected</div>
-                    <div class="stat-value"><?= number_format($totalTuition, 0) ?></div>
-                </div>
-                <div class="stat-icon">
-                    <i class="bi bi-cash-coin"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Pending Approvals Card -->
-    <div class="col-md-6 col-lg-3">
-        <div class="card stat-card red">
-            <div class="card-body stat-card-body">
-                <div class="stat-content">
-                    <div class="stat-label">Pending Approvals</div>
-                    <div class="stat-value"><?= $pendingPayments ?></div>
-                </div>
-                <div class="stat-icon">
-                    <i class="bi bi-exclamation-circle-fill"></i>
-                </div>
-            </div>
-        </div>
+    <!-- Dots indicators -->
+    <div class="carousel-indicators stats-carousel-indicators">
+        <button type="button"
+                data-bs-target="#principalStatsCarousel"
+                data-bs-slide-to="0"
+                class="active"
+                aria-current="true"
+                aria-label="Main Stats"></button>
+        <button type="button"
+                data-bs-target="#principalStatsCarousel"
+                data-bs-slide-to="1"
+                aria-label="More Stats"></button>
     </div>
 </div>
 
@@ -216,6 +318,10 @@ foreach ($dateRange as $date => $data) {
         <div class="legend-item">
             <div class="legend-color received"></div>
             <div class="legend-label">Received Tuition</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color balance"></div>
+            <div class="legend-label">Unpaid Balance</div>
         </div>
     </div>
 
@@ -261,9 +367,10 @@ foreach ($dateRange as $date => $data) {
 
 <!-- Pass data to JavaScript -->
 <script>
-    window.chartMonths = <?= json_encode($months) ?>;
+    window.chartMonths  = <?= json_encode($months) ?>;
     window.expectedData = <?= json_encode($expectedData) ?>;
     window.receivedData = <?= json_encode($receivedData) ?>;
+    window.balanceData  = <?= json_encode($balanceChartData) ?>; // NEW
     window.admittedData = <?= json_encode($admittedData) ?>;
     window.expensesData = <?= json_encode($expensesChartData) ?>;
 </script>

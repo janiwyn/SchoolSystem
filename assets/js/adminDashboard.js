@@ -9,6 +9,7 @@ function initializeTuitionChart() {
     const months = window.chartMonths;
     const expectedData = window.expectedData;
     const receivedData = window.receivedData;
+    const balanceData = window.balanceData; // Unpaid balance data
 
     const ctx = document.getElementById('tuitionChart').getContext('2d');
     new Chart(ctx, {
@@ -40,6 +41,20 @@ function initializeTuitionChart() {
                     tension: 0.4,
                     pointRadius: 5,
                     pointBackgroundColor: '#27ae60',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 7,
+                },
+                {
+                    label: 'Unpaid Balance',
+                    data: balanceData,
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#e74c3c',
                     pointBorderColor: '#fff',
                     pointBorderWidth: 2,
                     pointHoverRadius: 7,

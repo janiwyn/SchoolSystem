@@ -166,6 +166,10 @@
     background-color: #e74c3c;
 }
 
+.legend-color.balance {
+    background-color: #e74c3c;
+}
+
 .legend-label {
     font-size: 14px;
     font-weight: 600;

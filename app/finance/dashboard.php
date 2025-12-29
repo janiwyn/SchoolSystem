@@ -39,6 +39,7 @@ while ($currentDate <= $endDateTime) {
     $dateRange[$currentDate->format('Y-m-d')] = [
         'expected' => 0,
         'received' => 0,
+        'balance'  => 0,   // NEW
         'admitted' => 0,
         'expenses' => 0
     ];
@@ -46,17 +47,39 @@ while ($currentDate <= $endDateTime) {
 }
 
 // Get chart data based on selected days
-$chartQuery = "SELECT 
+// 1) Actual received per day (from student_payments)
+$paymentsQuery = "SELECT 
     DATE(payment_date) as chart_date,
-    SUM(expected_tuition) as expected,
     SUM(amount_paid) as received
 FROM student_payments
 WHERE payment_date >= '$startDate' AND payment_date <= '$endDate'
 GROUP BY DATE(payment_date)
 ORDER BY payment_date ASC";
+$paymentsResult = $mysqli->query($paymentsQuery);
+$paymentsData = $paymentsResult ? $paymentsResult->fetch_all(MYSQLI_ASSOC) : [];
 
-$chartResult = $mysqli->query($chartQuery);
-$chartData = $chartResult->fetch_all(MYSQLI_ASSOC);
+// 2) Expected tuition per day (from admitted_students on admission date)
+$expectedQuery = "SELECT 
+    DATE(created_at) as chart_date,
+    SUM(expected_tuition) as expected
+FROM admit_students
+WHERE DATE(created_at) >= '$startDate' AND DATE(created_at) <= '$endDate'
+  AND status = 'approved'
+GROUP BY DATE(created_at)
+ORDER BY DATE(created_at) ASC";
+$expectedResult = $mysqli->query($expectedQuery);
+$expectedRows = $expectedResult ? $expectedResult->fetch_all(MYSQLI_ASSOC) : [];
+
+// NEW: per-day unpaid balance
+$balanceQuery = "SELECT
+    DATE(payment_date) as chart_date,
+    SUM(balance) as total_balance
+FROM student_payments
+WHERE payment_date >= '$startDate' AND payment_date <= '$endDate'
+GROUP BY DATE(payment_date)
+ORDER BY payment_date ASC";
+$balanceResult = $mysqli->query($balanceQuery);
+$balanceData = $balanceResult ? $balanceResult->fetch_all(MYSQLI_ASSOC) : [];
 
 // Get student admissions data
 $admissionsQuery = "SELECT 
@@ -83,13 +106,25 @@ $expensesResult = $mysqli->query($expensesQuery);
 $expensesResultData = $expensesResult->fetch_all(MYSQLI_ASSOC);
 
 // Populate data into dateRange
-foreach ($chartData as $row) {
-    $dateRange[$row['chart_date']] = [
-        'expected' => (float)$row['expected'],
-        'received' => (float)$row['received'],
-        'admitted' => $dateRange[$row['chart_date']]['admitted'] ?? 0,
-        'expenses' => $dateRange[$row['chart_date']]['expenses'] ?? 0
-    ];
+foreach ($expectedRows as $row) {
+    $d = $row['chart_date'];
+    if (isset($dateRange[$d])) {
+        $dateRange[$d]['expected'] = (float)$row['expected'];
+    }
+}
+
+foreach ($paymentsData as $row) {
+    $d = $row['chart_date'];
+    if (isset($dateRange[$d])) {
+        $dateRange[$d]['received'] = (float)$row['received'];
+    }
+}
+
+foreach ($balanceData as $row) {
+    $d = $row['chart_date'];
+    if (isset($dateRange[$d])) {
+        $dateRange[$d]['balance'] = (float)$row['total_balance'];
+    }
 }
 
 foreach ($admissionsData as $row) {
@@ -108,14 +143,16 @@ foreach ($expensesResultData as $row) {
 $months = [];
 $expectedData = [];
 $receivedData = [];
+$balanceChartData = []; // NEW
 $admittedData = [];
 $expensesChartData = [];
 
 foreach ($dateRange as $date => $data) {
-    $months[] = date('M d', strtotime($date));
-    $expectedData[] = $data['expected'];
-    $receivedData[] = $data['received'];
-    $admittedData[] = $data['admitted'];
+    $months[]          = date('M d', strtotime($date));
+    $expectedData[]    = $data['expected'];
+    $receivedData[]    = $data['received'];
+    $balanceChartData[] = $data['balance']; // NEW
+    $admittedData[]    = $data['admitted'];
     $expensesChartData[] = $data['expenses'];
 }
 ?>
@@ -197,6 +234,10 @@ foreach ($dateRange as $date => $data) {
             <div class="legend-color received"></div>
             <div class="legend-label">Received Tuition</div>
         </div>
+        <div class="legend-item">
+            <div class="legend-color balance"></div>
+            <div class="legend-label">Unpaid Balance</div>
+        </div>
     </div>
 
     <canvas id="tuitionChart"></canvas>
@@ -241,9 +282,10 @@ foreach ($dateRange as $date => $data) {
 
 <!-- Pass data to JavaScript -->
 <script>
-    window.chartMonths = <?= json_encode($months) ?>;
+    window.chartMonths  = <?= json_encode($months) ?>;
     window.expectedData = <?= json_encode($expectedData) ?>;
     window.receivedData = <?= json_encode($receivedData) ?>;
+    window.balanceData  = <?= json_encode($balanceChartData) ?>; // NEW
     window.admittedData = <?= json_encode($admittedData) ?>;
     window.expensesData = <?= json_encode($expensesChartData) ?>;
 </script>
