@@ -47,6 +47,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_expense'])) {
     }
 }
 
+// Admin‑only: bulk delete expenses by category + date range
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['delete_expenses_by_filter'])
+    && (isset($_SESSION['role']) && $_SESSION['role'] === 'admin')
+) {
+    $deleteCategory = $_POST['delete_category'] ?? 'all';
+    $deleteFrom     = $_POST['delete_from'] ?? '';
+    $deleteTo       = $_POST['delete_to']   ?? '';
+
+    if ($deleteFrom && $deleteTo) {
+        // Normalize dates if user swapped them
+        if ($deleteFrom > $deleteTo) {
+            [$deleteFrom, $deleteTo] = [$deleteTo, $deleteFrom];
+        }
+
+        $deletedCount = 0;
+        $mysqli->begin_transaction();
+
+        try {
+            if ($deleteCategory === 'all') {
+                $sql  = "DELETE FROM expenses WHERE DATE(date) BETWEEN ? AND ?";
+                $stmt = $mysqli->prepare($sql);
+                if ($stmt) {
+                    $stmt->bind_param('ss', $deleteFrom, $deleteTo);
+                    $stmt->execute();
+                    $deletedCount = $stmt->affected_rows;
+                    $stmt->close();
+                }
+            } else {
+                $sql  = "DELETE FROM expenses WHERE DATE(date) BETWEEN ? AND ? AND category = ?";
+                $stmt = $mysqli->prepare($sql);
+                if ($stmt) {
+                    $stmt->bind_param('sss', $deleteFrom, $deleteTo, $deleteCategory);
+                    $stmt->execute();
+                    $deletedCount = $stmt->affected_rows;
+                    $stmt->close();
+                }
+            }
+
+            $mysqli->commit();
+            header("Location: expenses.php?deleted=" . (int)$deletedCount);
+            exit();
+        } catch (Throwable $e) {
+            $mysqli->rollback();
+            // Optional: log error
+        }
+    }
+}
+
 // Include layout AFTER header operations
 require_once __DIR__ . '/../helper/layout.php';
 
@@ -259,12 +309,31 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
     </div>
 </div>
 
+<!-- Success Message for Deleted Records -->
+<?php if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
+    <div class="alert alert-success alert-sm">
+        <i class="bi bi-check-circle"></i>
+        <?= (int)$_GET['deleted'] ?> expense record(s) deleted successfully.
+    </div>
+<?php endif; ?>
+
 <!-- Expenses Table -->
 <div class="card shadow-sm border-0">
     <div class="card-body">
         <h5 class="mb-3">Expenses Records</h5>
+
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+            <!-- Admin‑only bulk delete button -->
+            <button type="button"
+                    class="btn btn-danger mb-3"
+                    data-bs-toggle="modal"
+                    data-bs-target="#deleteExpensesByFilterModal">
+                <i class="bi bi-trash"></i> Delete Expenses
+            </button>
+        <?php endif; ?>
+
         <?php if (empty($expenses)): ?>
-            <div class="alert alert-info">No expense records found.</div>
+            <div class="alert alert-info">No expenses found.</div>
         <?php else: ?>
             <div class="table-container">
                 <table class="table table-striped">
@@ -373,6 +442,60 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
         <?php endif; ?>
     </div>
 </div>
+
+<?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+    <!-- Admin‑only modal: delete expenses by category + date range -->
+    <div class="modal fade" id="deleteExpensesByFilterModal" tabindex="-1" aria-labelledby="deleteExpensesByFilterLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <form method="POST" class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteExpensesByFilterLabel">
+                        <i class="bi bi-trash"></i> Delete Expenses
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">
+                        This will permanently delete all expense records that match the selected
+                        category and date range.
+                    </p>
+
+                    <div class="mb-3">
+                        <label for="delete_category" class="form-label">Category</label>
+                        <select class="form-control" id="delete_category" name="delete_category" required>
+                            <option value="all">All Categories</option>
+                            <option value="Salaries">Salaries</option>
+                            <option value="Food">Food</option>
+                            <option value="Administrative">Administrative</option>
+                            <option value="Utilities">Utilities</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="delete_from" class="form-label">From Date</label>
+                        <input type="date" class="form-control" id="delete_from" name="delete_from" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="delete_to" class="form-label">To Date</label>
+                        <input type="date" class="form-control" id="delete_to" name="delete_to" required>
+                    </div>
+
+                    <div class="alert alert-warning small mb-0">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        This action cannot be undone. Please make sure the category and dates are correct.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <input type="hidden" name="delete_expenses_by_filter" value="1">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Delete Records
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
 
 <!-- Restriction Modal for Principal -->
 <div class="modal fade" id="expenseRestrictionModal" tabindex="-1" aria-labelledby="expenseRestrictionModalLabel" aria-hidden="true">
