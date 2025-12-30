@@ -24,43 +24,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_tuition'])) {
     $term = trim($_POST['term']);
     $amount = trim($_POST['amount']);
 
-    if (!$class_name || !$term || !$amount) {
-        $error = "All fields are required";
-    } elseif (!is_numeric($amount) || $amount <= 0) {
-        $error = "Please enter a valid amount";
+    // Only class and term are strictly required
+    if (!$class_name || !$term) {
+        $error = "Class and term are required";
     } else {
-        // Check if class exists, if not create it
-        $checkClassStmt = $mysqli->prepare("SELECT id FROM classes WHERE class_name = ?");
-        $checkClassStmt->bind_param("s", $class_name);
-        $checkClassStmt->execute();
-        $classResult = $checkClassStmt->get_result();
-        
-        if ($classResult->num_rows > 0) {
-            $classRow = $classResult->fetch_assoc();
-            $class_id = $classRow['id'];
-        } else {
-            // Insert new class if it doesn't exist
-            $insertClassStmt = $mysqli->prepare("INSERT INTO classes (class_name) VALUES (?)");
-            $insertClassStmt->bind_param("s", $class_name);
-            $insertClassStmt->execute();
-            $class_id = $mysqli->insert_id;
-            $insertClassStmt->close();
+        // If amount is empty, treat as 0
+        if ($amount === '' || $amount === null) {
+            $amount = 0;
+        } elseif (!is_numeric($amount) || $amount < 0) {
+            $error = "Please enter a valid amount (0 or more)";
         }
-        $checkClassStmt->close();
 
-        // Insert tuition record
-        $user_id = $_SESSION['user_id'];
-        $stmt = $mysqli->prepare("INSERT INTO fee_structure (class_id, term, amount, created_by, created_at) VALUES (?, ?, ?, ?, NOW())");
-        if ($stmt) {
-            $stmt->bind_param("isdi", $class_id, $term, $amount, $user_id);
-            if ($stmt->execute()) {
-                // Redirect to prevent form resubmission - BEFORE layout include
-                header("Location: tuition.php?success=1");
-                exit();
+        if ($error === '') {
+            $amount = (float)$amount;
+
+            // Check if class exists, if not create it
+            $checkClassStmt = $mysqli->prepare("SELECT id FROM classes WHERE class_name = ?");
+            $checkClassStmt->bind_param("s", $class_name);
+            $checkClassStmt->execute();
+            $classResult = $checkClassStmt->get_result();
+            
+            if ($classResult->num_rows > 0) {
+                $classRow = $classResult->fetch_assoc();
+                $class_id = $classRow['id'];
             } else {
-                $error = "Error adding tuition: " . $stmt->error;
+                // Insert new class if it doesn't exist
+                $insertClassStmt = $mysqli->prepare("INSERT INTO classes (class_name) VALUES (?)");
+                $insertClassStmt->bind_param("s", $class_name);
+                $insertClassStmt->execute();
+                $class_id = $mysqli->insert_id;
+                $insertClassStmt->close();
             }
-            $stmt->close();
+            $checkClassStmt->close();
+
+            // Insert tuition record
+            $user_id = $_SESSION['user_id'];
+            $stmt = $mysqli->prepare("INSERT INTO fee_structure (class_id, term, amount, created_by, created_at) VALUES (?, ?, ?, ?, NOW())");
+            if ($stmt) {
+                $stmt->bind_param("isdi", $class_id, $term, $amount, $user_id);
+                if ($stmt->execute()) {
+                    // Redirect to prevent form resubmission - BEFORE layout include
+                    header("Location: tuition.php?success=1");
+                    exit();
+                } else {
+                    $error = "Error adding tuition: " . $stmt->error;
+                }
+                $stmt->close();
+            }
         }
     }
 }
@@ -72,41 +82,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_tuition'])) {
     $term = trim($_POST['term']);
     $amount = trim($_POST['amount']);
 
-    if (!$class_name || !$term || !$amount) {
-        $error = "All fields are required";
-    } elseif (!is_numeric($amount) || $amount <= 0) {
-        $error = "Please enter a valid amount";
+    if (!$class_name || !$term) {
+        $error = "Class and term are required";
     } else {
-        // Get or create class
-        $checkClassStmt = $mysqli->prepare("SELECT id FROM classes WHERE class_name = ?");
-        $checkClassStmt->bind_param("s", $class_name);
-        $checkClassStmt->execute();
-        $classResult = $checkClassStmt->get_result();
-        
-        if ($classResult->num_rows > 0) {
-            $classRow = $classResult->fetch_assoc();
-            $class_id = $classRow['id'];
-        } else {
-            $insertClassStmt = $mysqli->prepare("INSERT INTO classes (class_name) VALUES (?)");
-            $insertClassStmt->bind_param("s", $class_name);
-            $insertClassStmt->execute();
-            $class_id = $mysqli->insert_id;
-            $insertClassStmt->close();
+        if ($amount === '' || $amount === null) {
+            $amount = 0;
+        } elseif (!is_numeric($amount) || $amount < 0) {
+            $error = "Please enter a valid amount (0 or more)";
         }
-        $checkClassStmt->close();
 
-        // Update tuition record
-        $stmt = $mysqli->prepare("UPDATE fee_structure SET class_id = ?, term = ?, amount = ? WHERE id = ?");
-        if ($stmt) {
-            $stmt->bind_param("isdi", $class_id, $term, $amount, $tuition_id);
-            if ($stmt->execute()) {
-                // Redirect to prevent form resubmission - BEFORE layout include
-                header("Location: tuition.php?updated=1");
-                exit();
+        if ($error === '') {
+            $amount = (float)$amount;
+
+            // Get or create class
+            $checkClassStmt = $mysqli->prepare("SELECT id FROM classes WHERE class_name = ?");
+            $checkClassStmt->bind_param("s", $class_name);
+            $checkClassStmt->execute();
+            $classResult = $checkClassStmt->get_result();
+            
+            if ($classResult->num_rows > 0) {
+                $classRow = $classResult->fetch_assoc();
+                $class_id = $classRow['id'];
             } else {
-                $error = "Error updating tuition: " . $stmt->error;
+                $insertClassStmt = $mysqli->prepare("INSERT INTO classes (class_name) VALUES (?)");
+                $insertClassStmt->bind_param("s", $class_name);
+                $insertClassStmt->execute();
+                $class_id = $mysqli->insert_id;
+                $insertClassStmt->close();
             }
-            $stmt->close();
+            $checkClassStmt->close();
+
+            // Update tuition record
+            $stmt = $mysqli->prepare("UPDATE fee_structure SET class_id = ?, term = ?, amount = ? WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("isdi", $class_id, $term, $amount, $tuition_id);
+                if ($stmt->execute()) {
+                    // Redirect to prevent form resubmission - BEFORE layout include
+                    header("Location: tuition.php?updated=1");
+                    exit();
+                } else {
+                    $error = "Error updating tuition: " . $stmt->error;
+                }
+                $stmt->close();
+            }
         }
     }
 }
@@ -229,7 +247,8 @@ $canModifyTuition = ($userRole === 'admin');
 
                 <div class="col-md-4">
                     <label class="form-label">Expected Tuition</label>
-                    <input type="number" name="amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                    <!-- removed required so it can be empty / 0 -->
+                    <input type="number" name="amount" class="form-control" step="0.01" min="0" placeholder="0.00">
                 </div>
 
                 <div class="col-12">
@@ -379,7 +398,8 @@ $canModifyTuition = ($userRole === 'admin');
 
                         <div class="col-md-12">
                             <label class="form-label">Expected Tuition</label>
-                            <input type="number" name="amount" id="editAmount" class="form-control" step="0.01" min="0" required>
+                            <!-- remove required to allow empty / 0 -->
+                            <input type="number" name="amount" id="editAmount" class="form-control" step="0.01" min="0">
                         </div>
                     </div>
 
