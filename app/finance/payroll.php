@@ -5,6 +5,73 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['bursar', 'admin', 'principal']);
 
+// Handle EDIT payroll record
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payroll'])) {
+    $payroll_id     = intval($_POST['payroll_id']);
+    $new_name       = trim($_POST['edit_name']);
+    $new_department = trim($_POST['edit_department']);
+    $new_salary     = floatval($_POST['edit_salary']);
+    $new_date       = trim($_POST['edit_date']);
+
+    if ($payroll_id > 0 && $new_name && $new_department && $new_salary > 0 && $new_date) {
+        // Get OLD payroll details first
+        $getStmt = $mysqli->prepare("SELECT name, salary, date, department FROM payroll WHERE id = ?");
+        $getStmt->bind_param("i", $payroll_id);
+        $getStmt->execute();
+        $oldPayroll = $getStmt->get_result()->fetch_assoc();
+        $getStmt->close();
+
+        if ($oldPayroll) {
+            $mysqli->begin_transaction();
+
+            try {
+                // Update payroll table
+                $updPayroll = $mysqli->prepare("UPDATE payroll SET name = ?, department = ?, salary = ?, date = ? WHERE id = ?");
+                $updPayroll->bind_param("ssdsi", $new_name, $new_department, $new_salary, $new_date, $payroll_id);
+                $updPayroll->execute();
+                $updPayroll->close();
+
+                // Update matching Salaries expense for this employee
+                // Match on old name, old date, old amount
+                $updExpense = $mysqli->prepare("
+                    UPDATE expenses 
+                    SET item = ?, 
+                        amount = ?, 
+                        unit_price = ?, 
+                        expected = ?, 
+                        date = ?
+                    WHERE category = 'Salaries'
+                      AND item = ?
+                      AND date = ?
+                      AND amount = ?
+                ");
+                $updExpense->bind_param(
+                    "sdddsssd",
+                    $new_name,           // new item
+                    $new_salary,         // new amount
+                    $new_salary,         // new unit_price
+                    $new_salary,         // new expected
+                    $new_date,           // new date
+                    $oldPayroll['name'], // old item
+                    $oldPayroll['date'], // old date
+                    $oldPayroll['salary']// old amount
+                );
+                $updExpense->execute();
+                $updExpense->close();
+
+                $mysqli->commit();
+                header("Location: payroll.php?updated=1");
+                exit();
+            } catch (Throwable $e) {
+                $mysqli->rollback();
+                error_log("Payroll edit error: " . $e->getMessage());
+                header("Location: payroll.php?error=edit_failed");
+                exit();
+            }
+        }
+    }
+}
+
 // Handle DELETE payroll record
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_payroll'])) {
     $payroll_id = intval($_POST['payroll_id']);
@@ -146,6 +213,8 @@ if (isset($_GET['success']) && $_GET['success'] == 1) {
     $message = "Payroll recorded successfully! It has been automatically added to the Salaries expenses.";
 } elseif (isset($_GET['deleted']) && $_GET['deleted'] == 1) {
     $message = "Payroll record deleted successfully (also removed from Salaries expenses).";
+} elseif (isset($_GET['updated']) && $_GET['updated'] == 1) {
+    $message = "Payroll record updated successfully (also updated in Salaries expenses).";
 }
 
 // Build filter query
@@ -346,6 +415,10 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
     <div class="alert alert-success">
         <i class="bi bi-check-circle"></i> Payroll record deleted successfully (also removed from Salaries expenses).
     </div>
+<?php elseif (isset($_GET['updated']) && $_GET['updated'] == 1): ?>
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle"></i> Payroll record updated successfully (also updated in Salaries expenses).
+    </div>
 <?php endif; ?>
 
 <!-- Payroll Table -->
@@ -395,10 +468,19 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                                     <?php endif; ?>
                                 </td>
                                 <td>
+                                    <!-- Edit button -->
+                                    <button type="button" class="btn btn-sm btn-warning" title="Edit Payroll"
+                                            data-bs-toggle="modal" data-bs-target="#editPayrollModal"
+                                            onclick="loadEditPayroll(<?= $payroll['id'] ?>, '<?= htmlspecialchars($payroll['name'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payroll['department'], ENT_QUOTES) ?>', <?= $payroll['salary'] ?>, '<?= htmlspecialchars($payroll['date'], ENT_QUOTES) ?>')">
+                                        <i class="bi bi-pencil-square"></i> Edit
+                                    </button>
+
+                                    <!-- Print button -->
                                     <button class="btn btn-sm btn-primary" onclick="printPayroll(<?= $payroll['id'] ?>)" title="Print Payroll">
                                         <i class="bi bi-printer"></i> Print
                                     </button>
-                                    <!-- Delete button per row -->
+
+                                    <!-- Delete button -->
                                     <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this payroll record? This will also remove it from the Salaries expenses.');">
                                         <input type="hidden" name="payroll_id" value="<?= $payroll['id'] ?>">
                                         <button type="submit" name="delete_payroll" class="btn btn-sm btn-danger" title="Delete Payroll">
@@ -474,6 +556,61 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                 </div>
             <?php endif; ?>
         <?php endif; ?>
+    </div>
+</div>
+
+<!-- Edit Payroll Modal -->
+<div class="modal fade" id="editPayrollModal" tabindex="-1" aria-labelledby="editPayrollModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header form-header text-white">
+                    <h5 class="modal-title" id="editPayrollModalLabel">
+                        <i class="bi bi-pencil-square"></i> Edit Payroll Record
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="payroll_id" id="editPayrollId">
+
+                    <div class="mb-3">
+                        <label for="editPayrollName" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="editPayrollName" name="edit_name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="editPayrollDepartment" class="form-label">Department</label>
+                        <select class="form-control" id="editPayrollDepartment" name="edit_department" required>
+                            <option value="">Select Department</option>
+                            <option value="finance">Finance</option>
+                            <option value="teacher">Teacher</option>
+                            <option value="cleaner">Cleaner</option>
+                            <option value="security">Security</option>
+                            <option value="cook">Cook</option>
+                            <option value="driver">Driver</option>
+                            <option value="matron">Matron</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="editPayrollSalary" class="form-label">Salary</label>
+                        <input type="number" class="form-control" id="editPayrollSalary" name="edit_salary" step="0.01" min="0" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="editPayrollDate" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="editPayrollDate" name="edit_date" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="edit_payroll" class="btn btn-form-submit">
+                        <i class="bi bi-check-circle"></i> Update Payroll
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
