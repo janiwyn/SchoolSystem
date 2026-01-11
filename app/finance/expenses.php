@@ -405,7 +405,13 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                                             </button>
                                         </form>
                                     <?php else: ?>
-                                        <span class="text-muted">-</span>
+                                        <button type="button"
+                                                class="btn btn-sm btn-danger"
+                                                title="Delete Expense"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#expensesRestrictionModal">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
                                     <?php endif; ?>
                                 </td>
                             </tr>
@@ -565,6 +571,37 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
         </div>
     </div>
 </div>
+
+<!-- Restriction Modal for non‑admin delete attempts -->
+<?php if (!$isAdmin): ?>
+    <div class="modal fade" id="expensesRestrictionModal" tabindex="-1" aria-labelledby="expensesRestrictionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="expensesRestrictionModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill"></i> Access Restricted
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center py-4">
+                    <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
+                    <h5 class="mb-3">Cannot Delete Expenses</h5>
+                    <p class="text-muted mb-0">
+                        Only <strong>Admin</strong> has permission to delete expense records.
+                    </p>
+                    <p class="text-muted mt-2">
+                        As a <strong class="text-primary"><?= htmlspecialchars(ucfirst($userRole)) ?></strong>, you can view expenses but cannot delete them.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
 
 <link rel="stylesheet" href="../../assets/css/expenses.css">
 <script src="../../assets/js/expenses.js"></script>

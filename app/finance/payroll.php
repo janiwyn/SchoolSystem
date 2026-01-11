@@ -72,8 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payroll'])) {
     }
 }
 
-// Handle DELETE payroll record
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_payroll'])) {
+// Handle DELETE payroll record (ADMIN ONLY)
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['delete_payroll'])
+    && strtolower($_SESSION['role'] ?? '') === 'admin'
+) {
     $payroll_id = intval($_POST['payroll_id']);
     
     if ($payroll_id > 0) {
@@ -204,6 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
 // Get current user role
 $userRole = $_SESSION['role'] ?? '';
 $canRecordPayroll = in_array($userRole, ['admin', 'bursar']);
+$isAdmin = strtolower($userRole) === 'admin';
 
 // Include layout AFTER header operations
 require_once __DIR__ . '/../helper/layout.php';
@@ -480,13 +485,25 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                                         <i class="bi bi-printer"></i> Print
                                     </button>
 
-                                    <!-- Delete button -->
-                                    <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this payroll record? This will also remove it from the Salaries expenses.');">
-                                        <input type="hidden" name="payroll_id" value="<?= $payroll['id'] ?>">
-                                        <button type="submit" name="delete_payroll" class="btn btn-sm btn-danger" title="Delete Payroll">
+                                    <?php if ($isAdmin): ?>
+                                        <!-- REAL delete (admin only) -->
+                                        <form method="POST" style="display: inline;"
+                                              onsubmit="return confirm('Are you sure you want to delete this payroll record? This will also remove it from the Salaries expenses.');">
+                                            <input type="hidden" name="payroll_id" value="<?= $payroll['id'] ?>">
+                                            <button type="submit" name="delete_payroll" class="btn btn-sm btn-danger" title="Delete Payroll">
+                                                <i class="bi bi-trash"></i> Delete
+                                            </button>
+                                        </form>
+                                    <?php else: ?>
+                                        <!-- Non‑admin: show restriction modal instead of deleting -->
+                                        <button type="button"
+                                                class="btn btn-sm btn-danger"
+                                                title="Delete Payroll"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#payrollRestrictionModal">
                                             <i class="bi bi-trash"></i> Delete
                                         </button>
-                                    </form>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
