@@ -20,8 +20,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
         $department = $custom_department;
     }
 
-    if (!$name || !$department || !$date || !$salary) {
-        $error = "All fields are required";
+    // Default date to today if empty
+    if (empty($date)) {
+        $date = date('Y-m-d');
+    }
+
+    // Validate date format
+    $dateObj = DateTime::createFromFormat('Y-m-d', $date);
+    if (!$dateObj) {
+        $date = date('Y-m-d');
+    }
+
+    if (!$name || !$department || !$salary) {
+        $error = "Name, department and salary are required";
     } elseif ($salary <= 0) {
         $error = "Salary must be greater than zero";
     } else {
@@ -32,10 +43,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
         
         try {
             // Insert into payroll table
+            // FIX: Correct parameter order and types: name(s), department(s), salary(d), date(s), recorded_by(i)
             $stmt = $mysqli->prepare("INSERT INTO payroll (name, department, salary, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, NOW(), 'unapproved')");
             
             if ($stmt) {
-                $stmt->bind_param("sssdi", $name, $department, $salary, $date, $user_id);
+                // FIX: ssds i = string, string, double, string, integer
+                $stmt->bind_param("ssdsi", $name, $department, $salary, $date, $user_id);
                 if ($stmt->execute()) {
                     $payroll_id = $mysqli->insert_id;
                     $stmt->close();
@@ -51,7 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
                     $expenseStmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)");
                     
                     if ($expenseStmt) {
-                        $expenseStmt->bind_param("ssddddsss", $category, $item, $quantity, $unit_price, $expected, $salary, $date, $user_id, $status);
+                        // category(s), item(s), quantity(d), unit_price(d), expected(d), amount(d), date(s), recorded_by(i), status(s)
+                        $expenseStmt->bind_param("ssddddsis", $category, $item, $quantity, $unit_price, $expected, $salary, $date, $user_id, $status);
                         if ($expenseStmt->execute()) {
                             $expenseStmt->close();
                             
@@ -305,7 +319,18 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                     <tbody>
                         <?php foreach ($payroll_records as $payroll): ?>
                             <tr>
-                                <td><?= date('Y-m-d', strtotime($payroll['date'])) ?></td>
+                                <td>
+                                    <?php
+                                    // 3) Safely format the date to avoid -0001-11-30
+                                    $rawDate = $payroll['date'] ?? null;
+                                    if ($rawDate && $rawDate !== '0000-00-00' && $rawDate !== '0000-00-00 00:00:00') {
+                                        echo date('Y-m-d', strtotime($rawDate));
+                                    } else {
+                                        // For old bad records you can either show N/A or today; pick one:
+                                        echo 'N/A'; // or: echo date('Y-m-d');
+                                    }
+                                    ?>
+                                </td>
                                 <td><?= htmlspecialchars($payroll['name']) ?></td>
                                 <td><?= htmlspecialchars($payroll['department']) ?></td>
                                 <td><?= number_format($payroll['salary'], 2) ?></td>
