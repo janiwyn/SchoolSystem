@@ -168,7 +168,7 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
         </h5>
     </div>
     <div class="card-body">
-        <?php if (empty($auditData)): ?>
+        <?php if (empty($auditData) && empty($expensesDetail)): ?>
             <div class="alert alert-info">
                 <i class="bi bi-info-circle"></i> No data found for the selected period.
             </div>
@@ -185,14 +185,23 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($auditData as $row): ?>
+                        <?php if (!empty($auditData)): ?>
+                            <?php foreach ($auditData as $row): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($row['class_name']) ?></td>
+                                    <td><?= number_format($row['total_expected'], 2) ?></td>
+                                    <td><?= number_format($row['total_received'], 2) ?></td>
+                                    <td><?= number_format($row['balance'], 2) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <!-- No tuition income but we still want to show expenses below -->
                             <tr>
-                                <td><?= htmlspecialchars($row['class_name']) ?></td>
-                                <td><?= number_format($row['total_expected'], 2) ?></td>
-                                <td><?= number_format($row['total_received'], 2) ?></td>
-                                <td><?= number_format($row['balance'], 2) ?></td>
+                                <td colspan="4" class="text-center text-muted">
+                                    No tuition income recorded for the selected period.
+                                </td>
                             </tr>
-                        <?php endforeach; ?>
+                        <?php endif; ?>
 
                         <!-- Expenses Dropdown Row -->
                         <tr class="expenses-dropdown-row" onclick="toggleExpensesDropdown(event)">
@@ -209,7 +218,6 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                         <!-- Expenses Detail Rows (Hidden by default) -->
                         <tr id="expensesDetailContainer" style="display: none;">
                             <td colspan="4" style="padding: 0; background-color: #f9f9f9;">
-                                <!-- Scrollable Expenses Detail Table -->
                                 <div class="expenses-detail-table">
                                     <table class="table table-sm" style="margin-bottom: 0;">
                                         <thead>
@@ -224,7 +232,9 @@ $grandBalance = $grandTotals['grand_balance'] ?? 0;
                                         <tbody>
                                             <?php if (empty($expensesDetail)): ?>
                                                 <tr>
-                                                    <td colspan="5" class="text-center text-muted">No expenses recorded</td>
+                                                    <td colspan="5" class="text-center text-muted">
+                                                        No expenses recorded for the selected period.
+                                                    </td>
                                                 </tr>
                                             <?php else: ?>
                                                 <?php foreach ($expensesDetail as $expense):
