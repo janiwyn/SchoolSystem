@@ -5,6 +5,25 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['bursar', 'admin', 'principal']);
 
+// ADMIN‑ONLY: delete a single expense row by ID
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['delete_expense'])
+    && (isset($_SESSION['role']) && $_SESSION['role'] === 'admin')
+) {
+    $expenseId = intval($_POST['expense_id'] ?? 0);
+    if ($expenseId > 0) {
+        $stmt = $mysqli->prepare("DELETE FROM expenses WHERE id = ?");
+        if ($stmt) {
+            $stmt->bind_param('i', $expenseId);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+    header("Location: expenses.php?exp_deleted=1");
+    exit();
+}
+
 // Handle form submission
 $message = '';
 $error = '';
@@ -317,6 +336,14 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
     </div>
 <?php endif; ?>
 
+<!-- Success alert for single‑row delete -->
+<?php if (isset($_GET['exp_deleted']) && $_GET['exp_deleted'] == 1): ?>
+    <div class="alert alert-success alert-sm">
+        <i class="bi bi-check-circle"></i>
+        Expense record deleted successfully.
+    </div>
+<?php endif; ?>
+
 <!-- Expenses Table -->
 <div class="card shadow-sm border-0">
     <div class="card-body">
@@ -348,6 +375,7 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                             <th>Amount Paid</th>
                             <th>Recorded By</th>
                             <th>Status</th>
+                            <th>Actions</th> <!-- New Actions column -->
                         </tr>
                     </thead>
                     <tbody>
@@ -366,6 +394,18 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                                         <span class="badge bg-success">Approved</span>
                                     <?php else: ?>
                                         <span class="badge bg-warning text-dark">Unapproved</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this expense record?');">
+                                            <input type="hidden" name="expense_id" value="<?= (int)$expense['id'] ?>">
+                                            <button type="submit" name="delete_expense" class="btn btn-sm btn-danger" title="Delete Expense">
+                                                <i class="bi bi-trash"></i> Delete
+                                            </button>
+                                        </form>
+                                    <?php else: ?>
+                                        <span class="text-muted">-</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
