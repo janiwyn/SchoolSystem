@@ -66,18 +66,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_expense'])) {
     }
 }
 
-// Admin‑only: bulk delete expenses by category + date range
+// ADMIN‑ONLY: bulk delete expenses by category + date range
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST'
-    && isset($_POST['delete_expenses_by_filter'])
+    && isset($_POST['bulk_delete_expenses'])
     && (isset($_SESSION['role']) && $_SESSION['role'] === 'admin')
 ) {
-    $deleteCategory = $_POST['delete_category'] ?? 'all';
-    $deleteFrom     = $_POST['delete_from'] ?? '';
-    $deleteTo       = $_POST['delete_to']   ?? '';
+    $deleteCategory = $_POST['bulk_category'] ?? 'all';
+    $deleteFrom     = $_POST['bulk_from'] ?? '';
+    $deleteTo       = $_POST['bulk_to']   ?? '';
 
     if ($deleteFrom && $deleteTo) {
-        // Normalize dates if user swapped them
+        // Normalize order if user swapped dates
         if ($deleteFrom > $deleteTo) {
             [$deleteFrom, $deleteTo] = [$deleteTo, $deleteFrom];
         }
@@ -87,7 +87,7 @@ if (
 
         try {
             if ($deleteCategory === 'all') {
-                $sql  = "DELETE FROM expenses WHERE DATE(date) BETWEEN ? AND ?";
+                $sql  = "DELETE FROM expenses WHERE DATE(`date`) BETWEEN ? AND ?";
                 $stmt = $mysqli->prepare($sql);
                 if ($stmt) {
                     $stmt->bind_param('ss', $deleteFrom, $deleteTo);
@@ -96,7 +96,7 @@ if (
                     $stmt->close();
                 }
             } else {
-                $sql  = "DELETE FROM expenses WHERE DATE(date) BETWEEN ? AND ? AND category = ?";
+                $sql  = "DELETE FROM expenses WHERE DATE(`date`) BETWEEN ? AND ? AND category = ?";
                 $stmt = $mysqli->prepare($sql);
                 if ($stmt) {
                     $stmt->bind_param('sss', $deleteFrom, $deleteTo, $deleteCategory);
@@ -107,11 +107,11 @@ if (
             }
 
             $mysqli->commit();
-            header("Location: expenses.php?deleted=" . (int)$deletedCount);
+            header("Location: expenses.php?bulk_deleted=" . (int)$deletedCount);
             exit();
         } catch (Throwable $e) {
             $mysqli->rollback();
-            // Optional: log error
+            // optional: log error
         }
     }
 }
@@ -501,23 +501,23 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                     </p>
 
                     <div class="mb-3">
-                        <label for="delete_category" class="form-label">Category</label>
-                        <select class="form-control" id="delete_category" name="delete_category" required>
+                        <label for="bulk_category" class="form-label">Category</label>
+                        <select class="form-control" id="bulk_category" name="bulk_category" required>
                             <option value="all">All Categories</option>
                             <option value="Salaries">Salaries</option>
-                            <option value="Food">Food</option>
+                            <option value="Cooks">Food</option>
                             <option value="Administrative">Administrative</option>
                             <option value="Utilities">Utilities</option>
                         </select>
                     </div>
 
                     <div class="mb-3">
-                        <label for="delete_from" class="form-label">From Date</label>
-                        <input type="date" class="form-control" id="delete_from" name="delete_from" required>
+                        <label for="bulk_from" class="form-label">From Date</label>
+                        <input type="date" class="form-control" id="bulk_from" name="bulk_from" required>
                     </div>
                     <div class="mb-3">
-                        <label for="delete_to" class="form-label">To Date</label>
-                        <input type="date" class="form-control" id="delete_to" name="delete_to" required>
+                        <label for="bulk_to" class="form-label">To Date</label>
+                        <input type="date" class="form-control" id="bulk_to" name="bulk_to" required>
                     </div>
 
                     <div class="alert alert-warning small mb-0">
@@ -526,7 +526,7 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <input type="hidden" name="delete_expenses_by_filter" value="1">
+                    <input type="hidden" name="bulk_delete_expenses" value="1">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-danger">
                         <i class="bi bi-trash"></i> Delete Records
