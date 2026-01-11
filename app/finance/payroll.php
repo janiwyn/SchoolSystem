@@ -5,6 +5,45 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['bursar', 'admin', 'principal']);
 
+// Handle DELETE payroll record
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_payroll'])) {
+    $payroll_id = intval($_POST['payroll_id']);
+    
+    if ($payroll_id > 0) {
+        // Get payroll details first (to find matching expense)
+        $getStmt = $mysqli->prepare("SELECT name, salary, date FROM payroll WHERE id = ?");
+        $getStmt->bind_param("i", $payroll_id);
+        $getStmt->execute();
+        $payrollRow = $getStmt->get_result()->fetch_assoc();
+        $getStmt->close();
+        
+        if ($payrollRow) {
+            $mysqli->begin_transaction();
+            
+            try {
+                // Delete from payroll table
+                $delPayroll = $mysqli->prepare("DELETE FROM payroll WHERE id = ?");
+                $delPayroll->bind_param("i", $payroll_id);
+                $delPayroll->execute();
+                $delPayroll->close();
+                
+                // Delete matching expense (Salaries category, same name/item, date, amount)
+                $delExpense = $mysqli->prepare("DELETE FROM expenses WHERE category = 'Salaries' AND item = ? AND date = ? AND amount = ? LIMIT 1");
+                $delExpense->bind_param("ssd", $payrollRow['name'], $payrollRow['date'], $payrollRow['salary']);
+                $delExpense->execute();
+                $delExpense->close();
+                
+                $mysqli->commit();
+                header("Location: payroll.php?deleted=1");
+                exit();
+            } catch (Throwable $e) {
+                $mysqli->rollback();
+                // Fall through
+            }
+        }
+    }
+}
+
 // Handle form submission
 $message = '';
 $error = '';
@@ -105,6 +144,8 @@ require_once __DIR__ . '/../helper/layout.php';
 // Show success message if redirected
 if (isset($_GET['success']) && $_GET['success'] == 1) {
     $message = "Payroll recorded successfully! It has been automatically added to the Salaries expenses.";
+} elseif (isset($_GET['deleted']) && $_GET['deleted'] == 1) {
+    $message = "Payroll record deleted successfully (also removed from Salaries expenses).";
 }
 
 // Build filter query
@@ -296,6 +337,17 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
+<!-- Show success message if redirected -->
+<?php if (isset($_GET['success']) && $_GET['success'] == 1): ?>
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle"></i> Payroll recorded successfully! It has been automatically added to the Salaries expenses.
+    </div>
+<?php elseif (isset($_GET['deleted']) && $_GET['deleted'] == 1): ?>
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle"></i> Payroll record deleted successfully (also removed from Salaries expenses).
+    </div>
+<?php endif; ?>
+
 <!-- Payroll Table -->
 <div class="card shadow-sm border-0">
     <div class="card-body">
@@ -346,6 +398,13 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                                     <button class="btn btn-sm btn-primary" onclick="printPayroll(<?= $payroll['id'] ?>)" title="Print Payroll">
                                         <i class="bi bi-printer"></i> Print
                                     </button>
+                                    <!-- Delete button per row -->
+                                    <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this payroll record? This will also remove it from the Salaries expenses.');">
+                                        <input type="hidden" name="payroll_id" value="<?= $payroll['id'] ?>">
+                                        <button type="submit" name="delete_payroll" class="btn btn-sm btn-danger" title="Delete Payroll">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
