@@ -373,6 +373,9 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                             <th>Unit Price</th>
                             <th>Expected</th>
                             <th>Amount Paid</th>
+                            <?php if ($active_tab === 'salaries'): ?>
+                                <th>Balance ($)</th> <!-- KEEP for Salaries -->
+                            <?php endif; ?>
                             <th>Recorded By</th>
                             <th>Status</th>
                             <th>Actions</th> <!-- New Actions column -->
@@ -388,6 +391,14 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                                 <td><?= number_format($expense['unit_price'], 2) ?></td>
                                 <td><?= number_format($expense['expected'], 2) ?></td>
                                 <td><?= number_format($expense['amount'], 2) ?></td>
+                                <?php if ($active_tab === 'salaries'): ?>
+                                    <?php
+                                    $expected = (float)($expense['expected'] ?? 0);
+                                    $paid     = (float)($expense['amount'] ?? 0);
+                                    $balance  = max(0, $expected - $paid);
+                                    ?>
+                                    <td><?= number_format($balance, 2) ?></td> <!-- KEEP -->
+                                <?php endif; ?>
                                 <td><?= htmlspecialchars($expense['recorded_by'] ?? 'System') ?></td>
                                 <td>
                                     <?php if ($expense['status'] === 'approved'): ?>

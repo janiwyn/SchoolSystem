@@ -516,6 +516,7 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                             <th>Department</th>
                             <th>Expected Annual Salary ($)</th>
                             <th>Annual Salary Paid ($)</th>
+                            <th>Balance ($)</th> <!-- NEW -->
                             <th>Recorded By</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -523,6 +524,11 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                     </thead>
                     <tbody>
                         <?php foreach ($payroll_records as $payroll): ?>
+                            <?php
+                            $expected = (float)($payroll['expected_salary'] ?? 0);
+                            $paid     = (float)($payroll['salary'] ?? 0);
+                            $balance  = max(0, $expected - $paid);
+                            ?>
                             <tr>
                                 <td>
                                     <?php
@@ -536,8 +542,9 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                                 </td>
                                 <td><?= htmlspecialchars($payroll['name']) ?></td>
                                 <td><?= htmlspecialchars($payroll['department']) ?></td>
-                                <td><?= number_format($payroll['expected_salary'], 2) ?></td>
-                                <td><?= number_format($payroll['salary'], 2) ?></td>
+                                <td><?= number_format($expected, 2) ?></td>
+                                <td><?= number_format($paid, 2) ?></td>
+                                <td><?= number_format($balance, 2) ?></td> <!-- NEW -->
                                 <td><?= htmlspecialchars($payroll['recorded_by'] ?? 'System') ?></td>
                                 <td>
                                     <?php if ($payroll['status'] === 'approved'): ?>
@@ -588,10 +595,16 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                         <?php endforeach; ?>
 
                         <!-- Totals Row -->
+                        <?php
+                        $totalExpected = (float)($totals['total_expected'] ?? 0);
+                        $totalPaid     = (float)($totals['total_salary'] ?? 0);
+                        $totalBalance  = max(0, $totalExpected - $totalPaid);
+                        ?>
                         <tr class="table-totals">
                             <td colspan="3" class="text-end fw-bold">TOTALS:</td>
-                            <td><?= number_format($totals['total_expected'] ?? 0, 2) ?></td>
-                            <td><?= number_format($totals['total_salary'] ?? 0, 2) ?></td>
+                            <td><?= number_format($totalExpected, 2) ?></td>
+                            <td><?= number_format($totalPaid, 2) ?></td>
+                            <td><?= number_format($totalBalance, 2) ?></td> <!-- NEW -->
                             <td colspan="3"></td>
                         </tr>
                     </tbody>
