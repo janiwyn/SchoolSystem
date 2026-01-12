@@ -32,12 +32,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payroll'])) {
                 $updPayroll->execute();
                 $updPayroll->close();
 
-                // Update matching Salaries expense (use paid salary = new_salary)
+                // Update matching Salaries expense (set quantity=0, unit_price=0)
                 $updExpense = $mysqli->prepare("
                     UPDATE expenses 
                     SET item = ?, 
+                        quantity = 0,
+                        unit_price = 0,
                         amount = ?, 
-                        unit_price = ?, 
                         expected = ?, 
                         date = ?
                     WHERE category = 'Salaries'
@@ -46,15 +47,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payroll'])) {
                       AND amount = ?
                 ");
                 $updExpense->bind_param(
-                    "sdddsssd",
-                    $new_name,
-                    $new_salary,
-                    $new_salary,
-                    $new_expected_salary,
-                    $new_date,
-                    $oldPayroll['name'],
-                    $oldPayroll['date'],
-                    $oldPayroll['salary']
+                    "sddssssd",
+                    $new_name,           // new item
+                    $new_salary,         // new amount
+                    $new_expected_salary,// new expected
+                    $new_date,           // new date
+                    $oldPayroll['name'], // old item
+                    $oldPayroll['date'], // old date
+                    $oldPayroll['salary']// old amount
                 );
                 $updExpense->execute();
                 $updExpense->close();
@@ -146,18 +146,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_payroll'])) {
                 $updPayroll->execute();
                 $updPayroll->close();
 
-                // Update matching expense (increase amount paid)
+                // Update matching expense (set quantity=0, unit_price=0)
                 $updExpense = $mysqli->prepare("
                     UPDATE expenses 
-                    SET amount = ?, 
-                        unit_price = ? 
+                    SET amount = ?,
+                        quantity = 0,
+                        unit_price = 0
                     WHERE category = 'Salaries' 
                       AND item = ? 
                       AND date = ?
                 ");
                 $updExpense->bind_param(
-                    "ddss",
-                    $new_paid,
+                    "dss",
                     $new_paid,
                     $payroll['name'],
                     $payroll['date']
@@ -219,15 +219,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
                     $payroll_id = $mysqli->insert_id;
                     $stmt->close();
 
-                    // Insert into expenses (use paid salary as amount, expected_salary as expected)
+                    // Insert into expenses (use quantity=0, unit_price=0 for Salaries)
                     $category = 'Salaries';
                     $item = $name;
-                    $quantity = 1;
-                    $unit_price = $salary;
+                    $quantity = 0;        // Changed from 1 to 0
+                    $unit_price = 0;      // Changed from $salary to 0
                     $status = 'unapproved';
 
                     $expenseStmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)");
                     if ($expenseStmt) {
+                        // quantity(d)=0, unit_price(d)=0
                         $expenseStmt->bind_param("ssddddsis", $category, $item, $quantity, $unit_price, $expected_salary, $salary, $date, $user_id, $status);
                         if ($expenseStmt->execute()) {
                             $expenseStmt->close();
