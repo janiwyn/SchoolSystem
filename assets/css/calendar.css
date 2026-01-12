@@ -1,0 +1,303 @@
+.calendar-card {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.calendar-header {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: #fff;
+}
+
+.calendar-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: contain;
+    margin-right: 12px;
+    background: #fff;
+    padding: 4px;
+}
+
+.calendar-school-info h5 {
+    font-weight: 700;
+}
+
+.calendar-school-info small {
+    font-size: 12px;
+}
+
+.calendar-export-buttons .btn {
+    margin-left: 6px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.calendar-body {
+    padding: 18px 20px 22px 20px;
+}
+
+.calendar-export-wrapper {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 16px;
+    background-color: #ffffff;
+}
+
+.calendar-month-label {
+    font-size: 13px;
+    color: #6c757d;
+}
+
+.calendar-nav {
+    margin-top: 10px;
+}
+
+.calendar-month-title,
+#calendarMonthTitle {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.calendar-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    font-size: 12px;
+}
+
+.calendar-day-header {
+    font-weight: 700;
+    text-align: center;
+    padding: 6px 0;
+    background-color: #17a2b8;
+    color: #fff;
+    border-radius: 4px;
+}
+
+.calendar-day-cell {
+    min-height: 80px;
+    border-radius: 4px;
+    border: 1px solid #e1e5ea;
+    padding: 4px 4px 2px 4px;
+    background-color: #f8f9fa;
+    position: relative;
+}
+
+.calendar-day-cell.other-month {
+    background-color: #f1f3f5;
+    color: #adb5bd;
+}
+
+.calendar-day-number {
+    font-size: 11px;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 2px;
+}
+
+.calendar-day-cell.today .calendar-day-number {
+    color: #17a2b8;
+}
+
+.calendar-day-cell.today {
+    border-color: #17a2b8;
+    box-shadow: 0 0 0 1px rgba(23,162,184,0.3);
+}
+
+.calendar-event {
+    font-size: 10px;
+    margin-bottom: 2px;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+}
+
+.calendar-event-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    background: #dc3545;
+    color: #fff;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.calendar-event:hover .calendar-event-delete {
+    opacity: 1;
+}
+
+.calendar-event-delete:hover {
+    background: #c82333;
+}
+
+/* Badge base styles */
+.calendar-badge {
+    display: inline-block !important;
+    padding: 2px 6px !important;
+    border-radius: 999px !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.calendar-badge:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* Public Holiday - RED */
+.badge-public,
+.calendar-badge.badge-public {
+    background-color: #dc3545 !important;
+    color: #fff !important;
+}
+
+/* Special Day - GREEN */
+.badge-special,
+.calendar-badge.badge-special {
+    background-color: #28a745 !important;
+    color: #fff !important;
+}
+
+/* Other - Grey (default) */
+.badge-other,
+.calendar-badge.badge-other {
+    background-color: #6c757d !important;
+    color: #fff !important;
+}
+
+/* Plain text (no badge) */
+.calendar-event-text {
+    font-size: 10px;
+    color: #333;
+}
+
+/* Event form styles */
+.calendar-event-form .form-label {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.calendar-event-form .form-control {
+    font-size: 13px;
+}
+
+/* Toggle button (reuse theme) */
+.btn-toggle-form {
+    background-color: #17a2b8;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-toggle-form:hover {
+    background-color: #138496;
+    color: #fff;
+}
+
+.btn-toggle-form i {
+    transition: transform 0.3s ease;
+}
+
+/* Add Event Button - explicit styling */
+.calendar-add-btn,
+.btn-form-submit.calendar-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: #fff !important;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.calendar-add-btn:hover {
+    background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.3);
+    color: #fff !important;
+}
+
+.calendar-add-btn i {
+    font-size: 16px;
+}
+
+/* Print/export tweaks */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #calendarExportWrapper, #calendarExportWrapper * {
+        visibility: visible;
+    }
+    #calendarExportWrapper {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+}
+
+/* Export planner container */
+#exportPlannerContainer {
+    page-break-inside: avoid;
+}
+
+.planner-export-container {
+    background: white;
+    padding: 20px;
+}
+
+.planner-header img {
+    display: block;
+    margin: 0 auto 8px auto;
+}
+
+.planner-events {
+    display: grid;
+    gap: 10px;
+}
+
+.planner-event-item {
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+
+/* Ensure grid stays intact on print */
+@media print {
+    .planner-events {
+        display: grid !important;
+    }
+    .planner-event-item {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+}

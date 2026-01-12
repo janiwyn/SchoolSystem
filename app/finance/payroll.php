@@ -7,15 +7,16 @@ requireRole(['bursar', 'admin', 'principal']);
 
 // Handle EDIT payroll record
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payroll'])) {
-    $payroll_id     = intval($_POST['payroll_id']);
-    $new_name       = trim($_POST['edit_name']);
-    $new_department = trim($_POST['edit_department']);
-    $new_salary     = floatval($_POST['edit_salary']);
-    $new_date       = trim($_POST['edit_date']);
+    $payroll_id         = intval($_POST['payroll_id']);
+    $new_name           = trim($_POST['edit_name']);
+    $new_department     = trim($_POST['edit_department']);
+    $new_expected_salary = floatval($_POST['edit_expected_salary']);
+    $new_salary         = floatval($_POST['edit_salary']); // paid salary
+    $new_date           = trim($_POST['edit_date']);
 
-    if ($payroll_id > 0 && $new_name && $new_department && $new_salary > 0 && $new_date) {
-        // Get OLD payroll details first
-        $getStmt = $mysqli->prepare("SELECT name, salary, date, department FROM payroll WHERE id = ?");
+    if ($payroll_id > 0 && $new_name && $new_department && $new_expected_salary >= 0 && $new_salary >= 0 && $new_date) {
+        // Get OLD payroll details
+        $getStmt = $mysqli->prepare("SELECT name, salary, expected_salary, date, department FROM payroll WHERE id = ?");
         $getStmt->bind_param("i", $payroll_id);
         $getStmt->execute();
         $oldPayroll = $getStmt->get_result()->fetch_assoc();
@@ -26,13 +27,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payroll'])) {
 
             try {
                 // Update payroll table
-                $updPayroll = $mysqli->prepare("UPDATE payroll SET name = ?, department = ?, salary = ?, date = ? WHERE id = ?");
-                $updPayroll->bind_param("ssdsi", $new_name, $new_department, $new_salary, $new_date, $payroll_id);
+                $updPayroll = $mysqli->prepare("UPDATE payroll SET name = ?, department = ?, expected_salary = ?, salary = ?, date = ? WHERE id = ?");
+                $updPayroll->bind_param("ssddsi", $new_name, $new_department, $new_expected_salary, $new_salary, $new_date, $payroll_id);
                 $updPayroll->execute();
                 $updPayroll->close();
 
-                // Update matching Salaries expense for this employee
-                // Match on old name, old date, old amount
+                // Update matching Salaries expense (use paid salary = new_salary)
                 $updExpense = $mysqli->prepare("
                     UPDATE expenses 
                     SET item = ?, 
@@ -47,14 +47,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payroll'])) {
                 ");
                 $updExpense->bind_param(
                     "sdddsssd",
-                    $new_name,           // new item
-                    $new_salary,         // new amount
-                    $new_salary,         // new unit_price
-                    $new_salary,         // new expected
-                    $new_date,           // new date
-                    $oldPayroll['name'], // old item
-                    $oldPayroll['date'], // old date
-                    $oldPayroll['salary']// old amount
+                    $new_name,
+                    $new_salary,
+                    $new_salary,
+                    $new_expected_salary,
+                    $new_date,
+                    $oldPayroll['name'],
+                    $oldPayroll['date'],
+                    $oldPayroll['salary']
                 );
                 $updExpense->execute();
                 $updExpense->close();
@@ -115,74 +115,123 @@ if (
     }
 }
 
-// Handle form submission
+// Handle PAY salary (add payment to existing paid salary)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_payroll'])) {
+    $payroll_id = intval($_POST['payroll_id']);
+    $payment_amount = floatval($_POST['payment_amount']);
+
+    if ($payroll_id > 0 && $payment_amount > 0) {
+        // Get current payroll details
+        $getStmt = $mysqli->prepare("SELECT name, salary, expected_salary, date FROM payroll WHERE id = ?");
+        $getStmt->bind_param("i", $payroll_id);
+        $getStmt->execute();
+        $payroll = $getStmt->get_result()->fetch_assoc();
+        $getStmt->close();
+
+        if ($payroll) {
+            $new_paid = $payroll['salary'] + $payment_amount;
+            
+            // Don't allow overpayment
+            if ($new_paid > $payroll['expected_salary']) {
+                header("Location: payroll.php?error=overpayment");
+                exit();
+            }
+
+            $mysqli->begin_transaction();
+
+            try {
+                // Update payroll table (add to paid salary)
+                $updPayroll = $mysqli->prepare("UPDATE payroll SET salary = ? WHERE id = ?");
+                $updPayroll->bind_param("di", $new_paid, $payroll_id);
+                $updPayroll->execute();
+                $updPayroll->close();
+
+                // Update matching expense (increase amount paid)
+                $updExpense = $mysqli->prepare("
+                    UPDATE expenses 
+                    SET amount = ?, 
+                        unit_price = ? 
+                    WHERE category = 'Salaries' 
+                      AND item = ? 
+                      AND date = ?
+                ");
+                $updExpense->bind_param(
+                    "ddss",
+                    $new_paid,
+                    $new_paid,
+                    $payroll['name'],
+                    $payroll['date']
+                );
+                $updExpense->execute();
+                $updExpense->close();
+
+                $mysqli->commit();
+                header("Location: payroll.php?paid=1");
+                exit();
+            } catch (Throwable $e) {
+                $mysqli->rollback();
+                error_log("Payroll pay error: " . $e->getMessage());
+                header("Location: payroll.php?error=pay_failed");
+                exit();
+            }
+        }
+    }
+}
+
+// Handle form submission (ADD payroll)
 $message = '';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
-    $name = trim($_POST['name']);
-    $department = trim($_POST['department']);
-    $custom_department = trim($_POST['custom_department'] ?? '');
-    $salary = floatval($_POST['salary']);
-    $date = trim($_POST['date']);
+    $name               = trim($_POST['name']);
+    $department         = trim($_POST['department']);
+    $custom_department  = trim($_POST['custom_department'] ?? '');
+    $expected_salary    = floatval($_POST['expected_salary']);
+    $salary             = floatval($_POST['salary']); // paid salary (can be 0)
+    $date               = trim($_POST['date']);
 
-    // Use custom department if "other" selected
     if ($department === 'other' && !empty($custom_department)) {
         $department = $custom_department;
     }
 
-    // Default date to today if empty
     if (empty($date)) {
         $date = date('Y-m-d');
     }
 
-    // Validate date format
     $dateObj = DateTime::createFromFormat('Y-m-d', $date);
     if (!$dateObj) {
         $date = date('Y-m-d');
     }
 
-    if (!$name || !$department || !$salary) {
-        $error = "Name, department and salary are required";
-    } elseif ($salary <= 0) {
-        $error = "Salary must be greater than zero";
+    if (!$name || !$department) {
+        $error = "Name and department are required";
+    } elseif ($expected_salary < 0 || $salary < 0) {
+        $error = "Salaries cannot be negative";
     } else {
         $user_id = $_SESSION['user_id'];
-        
-        // Start transaction
         $mysqli->begin_transaction();
-        
+
         try {
-            // Insert into payroll table
-            // FIX: Correct parameter order and types: name(s), department(s), salary(d), date(s), recorded_by(i)
-            $stmt = $mysqli->prepare("INSERT INTO payroll (name, department, salary, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, NOW(), 'unapproved')");
-            
+            // Insert into payroll (expected_salary + salary)
+            $stmt = $mysqli->prepare("INSERT INTO payroll (name, department, expected_salary, salary, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, NOW(), 'unapproved')");
             if ($stmt) {
-                // FIX: ssds i = string, string, double, string, integer
-                $stmt->bind_param("ssdsi", $name, $department, $salary, $date, $user_id);
+                $stmt->bind_param("ssddsi", $name, $department, $expected_salary, $salary, $date, $user_id);
                 if ($stmt->execute()) {
                     $payroll_id = $mysqli->insert_id;
                     $stmt->close();
-                    
-                    // Insert into expenses table automatically
+
+                    // Insert into expenses (use paid salary as amount, expected_salary as expected)
                     $category = 'Salaries';
-                    $item = $name; // Employee name goes in item column
-                    $quantity = 1; // Default quantity
-                    $unit_price = $salary; // Unit price is the salary
-                    $expected = $salary; // Expected = salary
-                    $status = 'unapproved'; // Same status as payroll
-                    
+                    $item = $name;
+                    $quantity = 1;
+                    $unit_price = $salary;
+                    $status = 'unapproved';
+
                     $expenseStmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)");
-                    
                     if ($expenseStmt) {
-                        // category(s), item(s), quantity(d), unit_price(d), expected(d), amount(d), date(s), recorded_by(i), status(s)
-                        $expenseStmt->bind_param("ssddddsis", $category, $item, $quantity, $unit_price, $expected, $salary, $date, $user_id, $status);
+                        $expenseStmt->bind_param("ssddddsis", $category, $item, $quantity, $unit_price, $expected_salary, $salary, $date, $user_id, $status);
                         if ($expenseStmt->execute()) {
                             $expenseStmt->close();
-                            
-                            // Commit transaction
                             $mysqli->commit();
-                            
-                            // Redirect to prevent form resubmission
                             header("Location: payroll.php?success=1");
                             exit();
                         } else {
@@ -198,7 +247,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
                 throw new Exception("Error preparing payroll statement: " . $mysqli->error);
             }
         } catch (Exception $e) {
-            // Rollback on error
             $mysqli->rollback();
             $error = $e->getMessage();
         }
@@ -220,6 +268,12 @@ if (isset($_GET['success']) && $_GET['success'] == 1) {
     $message = "Payroll record deleted successfully (also removed from Salaries expenses).";
 } elseif (isset($_GET['updated']) && $_GET['updated'] == 1) {
     $message = "Payroll record updated successfully (also updated in Salaries expenses).";
+} elseif (isset($_GET['paid']) && $_GET['paid'] == 1) {
+    $message = "Salary payment recorded successfully!";
+} elseif (isset($_GET['error']) && $_GET['error'] == 'overpayment') {
+    $error = "Payment amount exceeds remaining balance.";
+} elseif (isset($_GET['error']) && $_GET['error'] == 'pay_failed') {
+    $error = "Payment failed. Please try again.";
 }
 
 // Build filter query
@@ -259,6 +313,7 @@ $query = "SELECT
     payroll.id,
     payroll.name,
     payroll.department,
+    payroll.expected_salary,
     payroll.salary,
     payroll.date,
     payroll.status,
@@ -273,9 +328,10 @@ LIMIT $offset, $records_per_page";
 $result = $mysqli->query($query);
 $payroll_records = $result->fetch_all(MYSQLI_ASSOC);
 
-// Calculate totals
+// Calculate totals (expected + paid)
 $totalsQuery = "SELECT 
     COUNT(*) as total_count,
+    SUM(expected_salary) as total_expected,
     SUM(salary) as total_salary
 FROM payroll
 WHERE $filterWhere";
@@ -345,7 +401,12 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Salary</label>
+                    <label class="form-label">Expected Annual Salary</label>
+                    <input type="number" name="expected_salary" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Paid Salary</label>
                     <input type="number" name="salary" class="form-control" step="0.01" min="0" placeholder="0.00" required>
                 </div>
 
@@ -411,7 +472,7 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
-<!-- Show success message if redirected -->
+<!-- Show success/error messages -->
 <?php if (isset($_GET['success']) && $_GET['success'] == 1): ?>
     <div class="alert alert-success">
         <i class="bi bi-check-circle"></i> Payroll recorded successfully! It has been automatically added to the Salaries expenses.
@@ -423,6 +484,18 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
 <?php elseif (isset($_GET['updated']) && $_GET['updated'] == 1): ?>
     <div class="alert alert-success">
         <i class="bi bi-check-circle"></i> Payroll record updated successfully (also updated in Salaries expenses).
+    </div>
+<?php elseif (isset($_GET['paid']) && $_GET['paid'] == 1): ?>
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle"></i> Salary payment recorded successfully!
+    </div>
+<?php elseif (isset($_GET['error']) && $_GET['error'] == 'overpayment'): ?>
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-circle"></i> Payment amount exceeds remaining balance.
+    </div>
+<?php elseif (isset($_GET['error']) && $_GET['error'] == 'pay_failed'): ?>
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-circle"></i> Payment failed. Please try again.
     </div>
 <?php endif; ?>
 
@@ -440,7 +513,8 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                             <th>Date</th>
                             <th>Name</th>
                             <th>Department</th>
-                            <th>Amount ($)</th>
+                            <th>Expected Annual Salary ($)</th>
+                            <th>Annual Salary Paid ($)</th>
                             <th>Recorded By</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -451,18 +525,17 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                             <tr>
                                 <td>
                                     <?php
-                                    // 3) Safely format the date to avoid -0001-11-30
                                     $rawDate = $payroll['date'] ?? null;
                                     if ($rawDate && $rawDate !== '0000-00-00' && $rawDate !== '0000-00-00 00:00:00') {
                                         echo date('Y-m-d', strtotime($rawDate));
                                     } else {
-                                        // For old bad records you can either show N/A or today; pick one:
-                                        echo 'N/A'; // or: echo date('Y-m-d');
+                                        echo 'N/A';
                                     }
                                     ?>
                                 </td>
                                 <td><?= htmlspecialchars($payroll['name']) ?></td>
                                 <td><?= htmlspecialchars($payroll['department']) ?></td>
+                                <td><?= number_format($payroll['expected_salary'], 2) ?></td>
                                 <td><?= number_format($payroll['salary'], 2) ?></td>
                                 <td><?= htmlspecialchars($payroll['recorded_by'] ?? 'System') ?></td>
                                 <td>
@@ -473,10 +546,19 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                                     <?php endif; ?>
                                 </td>
                                 <td>
+                                    <!-- Pay button (if paid < expected) -->
+                                    <?php if ($payroll['salary'] < $payroll['expected_salary']): ?>
+                                        <button type="button" class="btn btn-sm btn-success" title="Pay Salary"
+                                                data-bs-toggle="modal" data-bs-target="#payPayrollModal"
+                                                onclick="loadPayModal(<?= $payroll['id'] ?>, '<?= htmlspecialchars($payroll['name'], ENT_QUOTES) ?>', <?= $payroll['expected_salary'] ?>, <?= $payroll['salary'] ?>)">
+                                            <i class="bi bi-cash"></i> Pay
+                                        </button>
+                                    <?php endif; ?>
+
                                     <!-- Edit button -->
                                     <button type="button" class="btn btn-sm btn-warning" title="Edit Payroll"
                                             data-bs-toggle="modal" data-bs-target="#editPayrollModal"
-                                            onclick="loadEditPayroll(<?= $payroll['id'] ?>, '<?= htmlspecialchars($payroll['name'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payroll['department'], ENT_QUOTES) ?>', <?= $payroll['salary'] ?>, '<?= htmlspecialchars($payroll['date'], ENT_QUOTES) ?>')">
+                                            onclick="loadEditPayroll(<?= $payroll['id'] ?>, '<?= htmlspecialchars($payroll['name'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payroll['department'], ENT_QUOTES) ?>', <?= $payroll['expected_salary'] ?>, <?= $payroll['salary'] ?>, '<?= htmlspecialchars($payroll['date'], ENT_QUOTES) ?>')">
                                         <i class="bi bi-pencil-square"></i> Edit
                                     </button>
 
@@ -486,7 +568,7 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                                     </button>
 
                                     <?php if ($isAdmin): ?>
-                                        <!-- REAL delete (admin only) -->
+                                        <!-- Delete button (admin only) -->
                                         <form method="POST" style="display: inline;"
                                               onsubmit="return confirm('Are you sure you want to delete this payroll record? This will also remove it from the Salaries expenses.');">
                                             <input type="hidden" name="payroll_id" value="<?= $payroll['id'] ?>">
@@ -495,22 +577,19 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                                             </button>
                                         </form>
                                     <?php else: ?>
-                                        <!-- Non‑admin: show restriction modal instead of deleting -->
-                                        <button type="button"
-                                                class="btn btn-sm btn-danger"
-                                                title="Delete Payroll"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#payrollRestrictionModal">
+                                        <button type="button" class="btn btn-sm btn-danger" title="Delete Payroll"
+                                                data-bs-toggle="modal" data-bs-target="#payrollRestrictionModal">
                                             <i class="bi bi-trash"></i> Delete
                                         </button>
                                     <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                        
+
                         <!-- Totals Row -->
                         <tr class="table-totals">
                             <td colspan="3" class="text-end fw-bold">TOTALS:</td>
+                            <td><?= number_format($totals['total_expected'] ?? 0, 2) ?></td>
                             <td><?= number_format($totals['total_salary'] ?? 0, 2) ?></td>
                             <td colspan="3"></td>
                         </tr>
@@ -611,7 +690,12 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                     </div>
 
                     <div class="mb-3">
-                        <label for="editPayrollSalary" class="form-label">Salary</label>
+                        <label for="editExpectedSalary" class="form-label">Expected Annual Salary</label>
+                        <input type="number" class="form-control" id="editExpectedSalary" name="edit_expected_salary" step="0.01" min="0" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="editPayrollSalary" class="form-label">Paid Salary</label>
                         <input type="number" class="form-control" id="editPayrollSalary" name="edit_salary" step="0.01" min="0" required>
                     </div>
 
@@ -624,6 +708,58 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" name="edit_payroll" class="btn btn-form-submit">
                         <i class="bi bi-check-circle"></i> Update Payroll
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Pay Salary Modal -->
+<div class="modal fade" id="payPayrollModal" tabindex="-1" aria-labelledby="payPayrollModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header form-header text-white">
+                    <h5 class="modal-title" id="payPayrollModalLabel">
+                        <i class="bi bi-cash"></i> Pay Salary
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="payroll_id" id="payPayrollId">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Employee Name</label>
+                        <p class="form-control-plaintext" id="payEmployeeName"></p>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Expected Annual Salary</label>
+                            <p class="form-control-plaintext fw-bold text-primary" id="payExpectedSalary"></p>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Already Paid</label>
+                            <p class="form-control-plaintext fw-bold text-success" id="payAlreadyPaid"></p>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Remaining Balance</label>
+                        <p class="form-control-plaintext fw-bold text-danger" style="font-size: 20px;" id="payRemainingBalance"></p>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="paymentAmount" class="form-label">Payment Amount</label>
+                        <input type="number" class="form-control" id="paymentAmount" name="payment_amount" step="0.01" min="0.01" placeholder="Enter amount to pay" required>
+                        <small class="form-text text-muted">Cannot exceed remaining balance</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="pay_payroll" class="btn btn-success">
+                        <i class="bi bi-check-circle"></i> Record Payment
                     </button>
                 </div>
             </form>
@@ -661,6 +797,6 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
 </div>
 
 <link rel="stylesheet" href="../../assets/css/payroll.css">
-<script src="../../assets/js/payroll.js"></script>
+<script src="../../assets/js/payroll.js?v=4"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

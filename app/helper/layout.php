@@ -55,6 +55,8 @@ if ($justLoggedIn) {
         <link rel="stylesheet" href="../../assets/css/audit.css">
     <?php elseif ($title === "Student Payments"): ?>
         <link rel="stylesheet" href="../../assets/css/studentPayments.css">
+    <?php elseif ($title === "School Calendar"): ?>
+        <link rel="stylesheet" href="../../assets/css/calendar.css">
     <?php endif; ?>
 </head>
 <body>

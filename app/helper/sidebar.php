@@ -74,6 +74,12 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
                 <span>Activity Log</span>
             </a>
         <?php endif; ?>
+
+        <!-- School Calendar - Visible to all roles -->
+        <a href="../../app/calendar/calendar.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'calendar.php' ? 'active' : '' ?>">
+            <i class="bi bi-calendar3"></i>
+            <span>School Calendar</span>
+        </a>
     </nav>
 
     <style>
