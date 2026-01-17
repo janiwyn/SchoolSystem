@@ -5,6 +5,7 @@ function togglePaymentForm() {
 
     const btn = document.querySelector('.btn-toggle-form');
     const icon = btn ? btn.querySelector('i') : null;
+    const previewCard = document.getElementById('studentPreviewCard');
 
     const isHidden = card.style.display === 'none' || card.style.display === '';
     card.style.display = isHidden ? 'block' : 'none';
@@ -12,6 +13,11 @@ function togglePaymentForm() {
     if (icon) {
         icon.classList.toggle('bi-chevron-right', !isHidden);
         icon.classList.toggle('bi-chevron-down', isHidden);
+    }
+
+    // Hide preview card when closing the form
+    if (!isHidden && previewCard) {
+        previewCard.classList.remove('visible');
     }
 }
 
