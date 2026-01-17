@@ -292,11 +292,16 @@ $canRecordPayment = in_array($userRole, ['admin', 'bursar']);
 
 // Build expected tuition per class from fee_structure (sum of all terms)
 $classExpected = [];
-$classExpectedQuery = "SELECT class_id, SUM(amount) AS expected FROM fee_structure GROUP BY class_id";
+$classNames = []; // ADD THIS - Map class IDs to class names
+$classExpectedQuery = "SELECT fs.class_id, c.class_name, SUM(fs.amount) AS expected 
+                       FROM fee_structure fs
+                       LEFT JOIN classes c ON fs.class_id = c.id
+                       GROUP BY fs.class_id, c.class_name";
 $classExpectedResult = $mysqli->query($classExpectedQuery);
 if ($classExpectedResult) {
     while ($row = $classExpectedResult->fetch_assoc()) {
         $classExpected[(int)$row['class_id']] = (float)($row['expected'] ?? 0);
+        $classNames[(int)$row['class_id']] = $row['class_name'] ?? 'Unknown'; // ADD THIS
     }
 }
 
@@ -323,6 +328,38 @@ if ($currentTermResult) {
     <?php endif; ?>
 </div>
 
+<!-- Student Preview Card (Shows when student is selected) -->
+<div id="studentPreviewCard" class="student-preview-card">
+    <div class="preview-card-content">
+        <div class="preview-logo-container">
+            <img src="../../assets/images/logo.png" alt="School Logo" onerror="this.src='../../assets/images/default-logo.png'">
+        </div>
+        <div class="preview-details">
+            <div class="preview-student-name" id="previewStudentName">-</div>
+            <div class="preview-info-grid">
+                <div class="preview-info-item">
+                    <div class="preview-info-label">Class</div>
+                    <div class="preview-info-value" id="previewClass">-</div>
+                </div>
+                <div class="preview-info-item">
+                    <div class="preview-info-label">Term</div>
+                    <div class="preview-info-value" id="previewTerm">-</div>
+                </div>
+                <div class="preview-info-item">
+                    <div class="preview-info-label">Status</div>
+                    <div class="preview-info-value">
+                        <span class="preview-status-badge" id="previewDayBoarding">-</span>
+                    </div>
+                </div>
+                <div class="preview-info-item">
+                    <div class="preview-info-label">Gender</div>
+                    <div class="preview-info-value" id="previewGender">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Record Student Payment Form (Collapsible) -->
 <?php if ($canRecordPayment): ?>
     <div class="card shadow-sm border-0 mb-4" id="paymentFormCard" style="display: none;">
@@ -345,12 +382,27 @@ if ($currentTermResult) {
                         <option value="">-- Select Student --</option>
                         <?php if (!empty($approved_students)): ?>
                             <?php foreach ($approved_students as $student): ?>
+                                <?php
+                                // Get class name for this student
+                                $studentClassName = 'N/A';
+                                $classQuery = $mysqli->prepare("SELECT class_name FROM classes WHERE id = ?");
+                                if ($classQuery) {
+                                    $classQuery->bind_param("i", $student['class_id']);
+                                    $classQuery->execute();
+                                    $classResult = $classQuery->get_result();
+                                    if ($classRow = $classResult->fetch_assoc()) {
+                                        $studentClassName = $classRow['class_name'];
+                                    }
+                                    $classQuery->close();
+                                }
+                                ?>
                                 <option value="<?= $student['id'] ?>" 
                                     data-admission="<?= htmlspecialchars($student['admission_no']) ?>"
                                     data-first="<?= htmlspecialchars($student['first_name']) ?>"
                                     data-last="<?= htmlspecialchars($student['last_name']) ?>"
                                     data-gender="<?= htmlspecialchars($student['gender']) ?>"
                                     data-class="<?= $student['class_id'] ?>"
+                                    data-class-name="<?= htmlspecialchars($studentClassName) ?>"
                                     data-boarding="<?= htmlspecialchars($student['day_boarding']) ?>"
                                     data-admission-fee="<?= $student['admission_fee'] ?>"
                                     data-uniform-fee="<?= $student['uniform_fee'] ?>"
@@ -797,10 +849,12 @@ if ($currentTermResult) {
 <script>
 // filepath: d:\xamp\htdocs\SchoolSystem\app\finance\studentPayments.php (inline JS config)
 window.classExpected = <?= json_encode($classExpected, JSON_NUMERIC_CHECK) ?>;
+window.classNames = <?= json_encode($classNames) ?>; // ADD THIS
 window.currentTerm   = <?= json_encode($currentTerm) ?>;
 </script>
 
 <link rel="stylesheet" href="../../assets/css/studentPayments.css">
+<link rel="stylesheet" href="../../assets/css/studentPreviewCard.css">
 <script src="../../assets/js/studentPayments.js?v=2"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

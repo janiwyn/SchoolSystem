@@ -34,26 +34,23 @@ function populateStudentData() {
     const uniformFeeInput   = document.getElementById('uniformFee');
     const parentContactInput= document.getElementById('parentContact');
 
+    // Preview card elements
+    const previewCard = document.getElementById('studentPreviewCard');
+    const previewName = document.getElementById('previewStudentName');
+    const previewClass = document.getElementById('previewClass');
+    const previewTerm = document.getElementById('previewTerm');
+    const previewDayBoarding = document.getElementById('previewDayBoarding');
+    const previewGender = document.getElementById('previewGender');
+
     // If any required field is missing, log and stop (avoid JS errors on hosted app)
     if (!fullNameInput || !statusInput || !genderInput || !classNameInput ||
         !termInput || !dayBoardingInput || !expectedInput ||
         !admissionFeeInput || !uniformFeeInput || !parentContactInput) {
-        console.warn('Student payment form fields missing on this page', {
-            fullNameInput,
-            statusInput,
-            genderInput,
-            classNameInput,
-            termInput,
-            dayBoardingInput,
-            expectedInput,
-            admissionFeeInput,
-            uniformFeeInput,
-            parentContactInput
-        });
+        console.warn('Student payment form fields missing on this page');
         return;
     }
 
-    // If no student selected → clear fields
+    // If no student selected → clear fields and hide preview card
     if (!option || !option.value) {
         fullNameInput.value      = '';
         statusInput.value        = '';
@@ -65,6 +62,11 @@ function populateStudentData() {
         admissionFeeInput.value  = '';
         uniformFeeInput.value    = '';
         parentContactInput.value = '';
+        
+        // Hide preview card
+        if (previewCard) {
+            previewCard.classList.remove('visible');
+        }
         return;
     }
 
@@ -73,28 +75,30 @@ function populateStudentData() {
     const lastName    = option.getAttribute('data-last')    || '';
     const gender      = option.getAttribute('data-gender')  || '';
     const classId     = option.getAttribute('data-class')   || '';
+    const className   = option.getAttribute('data-class-name') || ''; // ADD THIS
     const dayBoarding = option.getAttribute('data-boarding')|| '';
     const admFee      = option.getAttribute('data-admission-fee') || '0';
     const uniFee      = option.getAttribute('data-uniform-fee')   || '0';
     const contact     = option.getAttribute('data-contact')       || '';
     const status      = option.getAttribute('data-status')        || '';
 
+    const fullName = (firstName + ' ' + lastName).trim();
+
     // Fill text fields
-    fullNameInput.value      = (firstName + ' ' + lastName).trim();
+    fullNameInput.value      = fullName;
     statusInput.value        = status ? status.charAt(0).toUpperCase() + status.slice(1) : '';
     genderInput.value        = gender;
-    classNameInput.value     = classId;        // Numeric class id (you can change to name if you pass it)
+    classNameInput.value     = classId;
     dayBoardingInput.value   = dayBoarding;
     admissionFeeInput.value  = parseFloat(admFee || 0).toFixed(2);
     uniformFeeInput.value    = parseFloat(uniFee || 0).toFixed(2);
     parentContactInput.value = contact;
 
     // Term: use server-provided currentTerm if available
-    if (typeof window.currentTerm === 'string' && window.currentTerm.length > 0) {
-        termInput.value = window.currentTerm;
-    } else {
-        termInput.value = '';
-    }
+    const termValue = (typeof window.currentTerm === 'string' && window.currentTerm.length > 0) 
+        ? window.currentTerm 
+        : '';
+    termInput.value = termValue;
 
     // Expected tuition: look up by class_id from server-provided map
     let expected = 0;
@@ -102,6 +106,29 @@ function populateStudentData() {
         expected = parseFloat(window.classExpected[classId]) || 0;
     }
     expectedInput.value = expected.toFixed(2);
+
+    // Populate preview card
+    if (previewCard && previewName && previewClass && previewTerm && previewDayBoarding && previewGender) {
+        previewName.textContent = fullName;
+        previewClass.textContent = className || getClassName(classId); // USE className first
+        previewTerm.textContent = termValue || 'N/A';
+        previewDayBoarding.textContent = dayBoarding;
+        previewGender.textContent = gender === 'Male' ? 'M' : 'F';
+        
+        // Show preview card with animation
+        previewCard.classList.add('visible');
+    }
+}
+
+// Helper function to get class name from class ID
+function getClassName(classId) {
+    // Use the server-provided class names map
+    if (window.classNames && classId && window.classNames[classId]) {
+        return window.classNames[classId];
+    }
+    
+    // Fallback to ID if name not found
+    return 'Class ' + classId;
 }
 
 // Set data for additional payment modal
