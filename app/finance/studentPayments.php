@@ -68,10 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     $payment_date = trim($_POST['payment_date']);
     $term = trim($_POST['term']);
     
-    if (!$student_id || !$amount_paid || !$payment_date || !$term) {
+    if (!$student_id || !$payment_date || !$term) {
         $error = "All fields are required";
-    } elseif ($amount_paid <= 0) {
-        $error = "Amount must be greater than zero";
+    } elseif ($amount_paid < 0) {
+        $error = "Amount cannot be negative";
     } else {
         // Get student info
         $studentStmt = $mysqli->prepare("SELECT admission_no, first_name, last_name, gender, class_id, day_boarding, parent_contact, parent_email FROM admit_students WHERE id = ?");
@@ -465,6 +465,7 @@ if ($currentTermResult) {
                 <div class="col-md-3">
                     <label class="form-label">Amount Paid</label>
                     <input type="number" name="amount_paid" id="amountPaid" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                    <small class="text-muted">Enter 0 for no payment</small>
                 </div>
                 
                 <div class="col-md-3">
