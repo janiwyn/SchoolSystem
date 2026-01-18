@@ -29,35 +29,45 @@ $message = '';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_expense'])) {
     $category = trim($_POST['category']);
+    $sub_category = trim($_POST['sub_category'] ?? ''); // NEW: sub-category
     $item = trim($_POST['item']);
     $amount = floatval($_POST['amount']);
     $date = trim($_POST['date']);
     
-    // Only process quantity and unit_price for Cooks category
+    // Process quantity and unit_price based on sub-category
     $quantity = 0;
     $unit_price = 0;
     $expected = 0;
     
-    if ($category === 'Cooks') {
-        $quantity = floatval($_POST['quantity']);
-        $unit_price = floatval($_POST['unit_price']);
-        $expected = $quantity * $unit_price;
+    // For General Expenses, use sub_category to determine fields
+    if ($category === 'General Expenses') {
+        if ($sub_category === 'Food' || $sub_category === 'Administrative') {
+            $quantity = floatval($_POST['quantity'] ?? 0);
+            $unit_price = floatval($_POST['unit_price'] ?? 0);
+            $expected = $quantity * $unit_price;
+        }
+        // For Utilities, quantity/unit_price/expected stay 0
     }
 
     if (!$category || !$item || !$date || !$amount) {
         $error = "Category, Item, Amount, and Date are required";
-    } elseif ($amount <= 0) {
-        $error = "Amount must be greater than zero";
+    } elseif ($category === 'General Expenses' && !$sub_category) {
+        $error = "Please select an expense type (Food, Utilities, or Administrative)";
+    } elseif ($amount < 0) {
+        $error = "Amount cannot be negative";
     } else {
         $user_id = $_SESSION['user_id'];
-        $stmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+        
+        // Store sub_category in the 'category' field for General Expenses
+        $finalCategory = ($category === 'General Expenses') ? $sub_category : $category;
+        
+        $stmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'unapproved')");
         
         if ($stmt) {
-            $stmt->bind_param("ssddddsi", $category, $item, $quantity, $unit_price, $expected, $amount, $date, $user_id);
+            $stmt->bind_param("ssddddsi", $finalCategory, $item, $quantity, $unit_price, $expected, $amount, $date, $user_id);
             if ($stmt->execute()) {
-                $message = "Expense recorded successfully!";
-                // Clear form fields
-                $_POST = [];
+                header("Location: expenses.php?success=1&tab=" . strtolower($finalCategory));
+                exit();
             } else {
                 $error = "Error recording expense: " . $stmt->error;
             }
@@ -137,12 +147,8 @@ if ($date_to) {
 // Add category filter based on active tab
 if ($active_tab === 'salaries') {
     $filterWhere .= " AND expenses.category = 'Salaries'";
-} elseif ($active_tab === 'cooks') {
-    $filterWhere .= " AND expenses.category = 'Cooks'";
-} elseif ($active_tab === 'utilities') {
-    $filterWhere .= " AND expenses.category = 'Utilities'";
-} elseif ($active_tab === 'administrative') {
-    $filterWhere .= " AND expenses.category = 'Administrative'";
+} elseif ($active_tab === 'general') {
+    $filterWhere .= " AND expenses.category IN ('Food', 'Utilities', 'Administrative')";
 }
 
 // Pagination setup
@@ -229,43 +235,53 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                     <label class="form-label">Category</label>
                     <select name="category" id="category" class="form-control" required onchange="handleCategoryChange()">
                         <option value="">Select Category</option>
-                        <option value="Cooks">Cooks (Food)</option>
+                        <option value="Salaries">Salaries</option>
+                        <option value="General Expenses">General Expenses</option>
+                    </select>
+                </div>
+
+                <!-- NEW: Sub-Category field (only for General Expenses) -->
+                <div class="col-md-4" id="subCategoryField" style="display: none;">
+                    <label class="form-label">Expense Type</label>
+                    <select name="sub_category" id="sub_category" class="form-control" onchange="handleSubCategoryChange()">
+                        <option value="">Select Type</option>
+                        <option value="Food">Food</option>
                         <option value="Utilities">Utilities</option>
                         <option value="Administrative">Administrative</option>
                     </select>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-4" id="itemField">
                     <label class="form-label">Item</label>
                     <input type="text" name="item" class="form-control" placeholder="e.g., Rice, Electricity, Office Supplies" required>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-4" id="quantityField" style="display: none;">
                     <label class="form-label">Quantity</label>
                     <input type="number" name="quantity" id="quantity" class="form-control" step="0.01" min="0" placeholder="0" value="0" oninput="calculateExpected()">
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-4" id="unitPriceField" style="display: none;">
                     <label class="form-label">Unit Price</label>
                     <input type="number" name="unit_price" id="unit_price" class="form-control" step="0.01" min="0" placeholder="0.00" value="0" oninput="calculateExpected()">
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-4" id="expectedField" style="display: none;">
                     <label class="form-label">Expected</label>
                     <input type="number" name="expected" id="expected" class="form-control readonly-field" step="0.01" placeholder="0.00" value="0.00" readonly style="background-color: #e9ecef;">
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-4" id="amountField">
                     <label class="form-label">Amount Paid ($)</label>
                     <input type="number" name="amount" class="form-control" step="0.01" min="0" placeholder="0.00" required>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-4" id="dateField">
                     <label class="form-label">Date</label>
                     <input type="date" name="date" class="form-control" value="<?= date('Y-m-d') ?>" required>
                 </div>
 
-                <div class="col-md-4" style="display: flex; align-items: flex-end;">
+                <div class="col-md-4" id="submitField" style="display: flex; align-items: flex-end;">
                     <button type="submit" name="record_expense" class="btn btn-form-submit w-100">
                         <i class="bi bi-plus-circle"></i> Record Expense
                     </button>
@@ -313,17 +329,9 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
            class="expense-tab-btn <?= $active_tab === 'salaries' ? 'active' : '' ?>">
             <i class="bi bi-person-badge"></i> Salaries
         </a>
-        <a href="?tab=cooks<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
-           class="expense-tab-btn <?= $active_tab === 'cooks' ? 'active' : '' ?>">
-            <i class="bi bi-egg-fried"></i>Food
-        </a>
-        <a href="?tab=utilities<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
-           class="expense-tab-btn <?= $active_tab === 'utilities' ? 'active' : '' ?>">
-            <i class="bi bi-lightning-charge"></i> Utilities
-        </a>
-        <a href="?tab=administrative<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
-           class="expense-tab-btn <?= $active_tab === 'administrative' ? 'active' : '' ?>">
-            <i class="bi bi-briefcase"></i> Administrative
+        <a href="?tab=general<?= $date_from ? '&date_from=' . $date_from : '' ?><?= $date_to ? '&date_to=' . $date_to : '' ?>" 
+           class="expense-tab-btn <?= $active_tab === 'general' ? 'active' : '' ?>">
+            <i class="bi bi-receipt"></i> General Expenses
         </a>
     </div>
 </div>
@@ -522,9 +530,9 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                         <select class="form-control" id="bulk_category" name="bulk_category" required>
                             <option value="all">All Categories</option>
                             <option value="Salaries">Salaries</option>
-                            <option value="Cooks">Food</option>
-                            <option value="Administrative">Administrative</option>
+                            <option value="Food">Food</option>
                             <option value="Utilities">Utilities</option>
+                            <option value="Administrative">Administrative</option>
                         </select>
                     </div>
 

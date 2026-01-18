@@ -32,23 +32,93 @@ function calculateExpected() {
     }
 }
 
-// Handle category change - show/hide fields based on selection
+// Handle category change - show/hide sub-category and fields
 function handleCategoryChange() {
     const categorySelect = document.getElementById('category');
-    const quantityField = document.getElementById('quantity').parentElement;
-    const unitPriceField = document.getElementById('unit_price').parentElement;
-    const expectedField = document.getElementById('expected').parentElement;
+    const subCategoryField = document.getElementById('subCategoryField');
+    const subCategorySelect = document.getElementById('sub_category');
     
-    if (categorySelect.value === 'Cooks' || categorySelect.value === 'Administrative') {
-        // Show fields for Cooks and Administrative
+    if (!categorySelect || !subCategoryField) return;
+    
+    const category = categorySelect.value;
+    
+    if (category === 'General Expenses') {
+        // Show sub-category dropdown
+        subCategoryField.style.display = 'block';
+        subCategorySelect.required = true;
+        
+        // Hide all optional fields initially
+        hideAllOptionalFields();
+    } else if (category === 'Salaries') {
+        // Hide sub-category dropdown
+        subCategoryField.style.display = 'none';
+        subCategorySelect.required = false;
+        subCategorySelect.value = '';
+        
+        // Hide all optional fields for Salaries
+        hideAllOptionalFields();
+    } else {
+        // No category selected
+        subCategoryField.style.display = 'none';
+        subCategorySelect.required = false;
+        subCategorySelect.value = '';
+        hideAllOptionalFields();
+    }
+}
+
+// NEW: Handle sub-category change
+function handleSubCategoryChange() {
+    const subCategory = document.getElementById('sub_category')?.value;
+    
+    const quantityField = document.getElementById('quantityField');
+    const unitPriceField = document.getElementById('unitPriceField');
+    const expectedField = document.getElementById('expectedField');
+    
+    if (!quantityField || !unitPriceField || !expectedField) return;
+    
+    if (subCategory === 'Food' || subCategory === 'Administrative') {
+        // Show Quantity, Unit Price, Expected
         quantityField.style.display = 'block';
         unitPriceField.style.display = 'block';
         expectedField.style.display = 'block';
-    } else if (categorySelect.value === 'Utilities') {
-        // Hide fields for Utilities
-        quantityField.style.display = 'none';
-        unitPriceField.style.display = 'none';
-        expectedField.style.display = 'none';
+        
+        // Make fields required
+        document.getElementById('quantity').required = true;
+        document.getElementById('unit_price').required = true;
+    } else if (subCategory === 'Utilities') {
+        // Hide all optional fields
+        hideAllOptionalFields();
+    } else {
+        // No sub-category selected
+        hideAllOptionalFields();
+    }
+}
+
+// Helper function to hide all optional fields
+function hideAllOptionalFields() {
+    const quantityField = document.getElementById('quantityField');
+    const unitPriceField = document.getElementById('unitPriceField');
+    const expectedField = document.getElementById('expectedField');
+    
+    if (quantityField) quantityField.style.display = 'none';
+    if (unitPriceField) unitPriceField.style.display = 'none';
+    if (expectedField) expectedField.style.display = 'none';
+    
+    // Reset values and make fields optional
+    const quantityInput = document.getElementById('quantity');
+    const unitPriceInput = document.getElementById('unit_price');
+    const expectedInput = document.getElementById('expected');
+    
+    if (quantityInput) {
+        quantityInput.value = '0';
+        quantityInput.required = false;
+    }
+    if (unitPriceInput) {
+        unitPriceInput.value = '0';
+        unitPriceInput.required = false;
+    }
+    if (expectedInput) {
+        expectedInput.value = '0.00';
     }
 }
 
@@ -68,6 +138,6 @@ document.addEventListener('DOMContentLoaded', function() {
         unitPriceField.addEventListener('change', calculateExpected);
     }
     
-    // Initialize category change handler
+    // Initialize category and sub-category handlers
     handleCategoryChange();
 });
