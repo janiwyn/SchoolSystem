@@ -554,42 +554,44 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <!-- Pay button (if paid < expected) -->
-                                    <?php if ($payroll['salary'] < $payroll['expected_salary']): ?>
-                                        <button type="button" class="btn btn-sm btn-success" title="Pay Salary"
-                                                data-bs-toggle="modal" data-bs-target="#payPayrollModal"
-                                                onclick="loadPayModal(<?= $payroll['id'] ?>, '<?= htmlspecialchars($payroll['name'], ENT_QUOTES) ?>', <?= $payroll['expected_salary'] ?>, <?= $payroll['salary'] ?>)">
-                                            <i class="bi bi-cash"></i> Pay
-                                        </button>
-                                    <?php endif; ?>
-
-                                    <!-- Edit button -->
-                                    <button type="button" class="btn btn-sm btn-warning" title="Edit Payroll"
-                                            data-bs-toggle="modal" data-bs-target="#editPayrollModal"
-                                            onclick="loadEditPayroll(<?= $payroll['id'] ?>, '<?= htmlspecialchars($payroll['name'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payroll['department'], ENT_QUOTES) ?>', <?= $payroll['expected_salary'] ?>, <?= $payroll['salary'] ?>, '<?= htmlspecialchars($payroll['date'], ENT_QUOTES) ?>')">
-                                        <i class="bi bi-pencil-square"></i> Edit
-                                    </button>
-
-                                    <!-- Print button -->
-                                    <button class="btn btn-sm btn-primary" onclick="printPayroll(<?= $payroll['id'] ?>)" title="Print Payroll">
-                                        <i class="bi bi-printer"></i> Print
-                                    </button>
-
-                                    <?php if ($isAdmin): ?>
-                                        <!-- Delete button (admin only) -->
-                                        <form method="POST" style="display: inline;"
-                                              onsubmit="return confirm('Are you sure you want to delete this payroll record? This will also remove it from the Salaries expenses.');">
-                                            <input type="hidden" name="payroll_id" value="<?= $payroll['id'] ?>">
-                                            <button type="submit" name="delete_payroll" class="btn btn-sm btn-danger" title="Delete Payroll">
-                                                <i class="bi bi-trash"></i> Delete
+                                    <div class="action-buttons">
+                                        <!-- Pay button (if paid < expected) -->
+                                        <?php if ($payroll['salary'] < $payroll['expected_salary']): ?>
+                                            <button type="button" class="btn-icon-pay" title="Pay Salary"
+                                                    data-bs-toggle="modal" data-bs-target="#payPayrollModal"
+                                                    onclick="loadPayModal(<?= $payroll['id'] ?>, '<?= htmlspecialchars($payroll['name'], ENT_QUOTES) ?>', <?= $payroll['expected_salary'] ?>, <?= $payroll['salary'] ?>)">
+                                                <i class="bi bi-cash"></i>
                                             </button>
-                                        </form>
-                                    <?php else: ?>
-                                        <button type="button" class="btn btn-sm btn-danger" title="Delete Payroll"
-                                                data-bs-toggle="modal" data-bs-target="#payrollRestrictionModal">
-                                            <i class="bi bi-trash"></i> Delete
+                                        <?php endif; ?>
+
+                                        <!-- Edit button -->
+                                        <button type="button" class="btn-icon-edit" title="Edit Payroll"
+                                                data-bs-toggle="modal" data-bs-target="#editPayrollModal"
+                                                onclick="loadEditPayroll(<?= $payroll['id'] ?>, '<?= htmlspecialchars($payroll['name'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payroll['department'], ENT_QUOTES) ?>', <?= $payroll['expected_salary'] ?>, <?= $payroll['salary'] ?>, '<?= htmlspecialchars($payroll['date'], ENT_QUOTES) ?>')">
+                                            <i class="bi bi-pencil-square"></i>
                                         </button>
-                                    <?php endif; ?>
+
+                                        <!-- Print button -->
+                                        <button class="btn-icon-print" onclick="printPayroll(<?= $payroll['id'] ?>)" title="Print Payroll">
+                                            <i class="bi bi-printer"></i>
+                                        </button>
+
+                                        <?php if ($isAdmin): ?>
+                                            <!-- Delete button (admin only) -->
+                                            <form method="POST" style="display: inline;"
+                                                  onsubmit="return confirm('Are you sure you want to delete this payroll record? This will also remove it from the Salaries expenses.');">
+                                                <input type="hidden" name="payroll_id" value="<?= $payroll['id'] ?>">
+                                                <button type="submit" name="delete_payroll" class="btn-icon-delete" title="Delete Payroll">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <button type="button" class="btn-icon-delete-restricted" title="Delete Payroll"
+                                                    data-bs-toggle="modal" data-bs-target="#payrollRestrictionModal">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

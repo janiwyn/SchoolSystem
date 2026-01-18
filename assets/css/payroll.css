@@ -253,3 +253,121 @@
 .btn-toggle-form[data-bs-toggle="modal"]:hover {
     background-color: #dc3545;
 }
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.btn-icon-pay {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    padding: 0;
+}
+
+.btn-icon-pay:hover {
+    background-color: #218838;
+    transform: scale(1.1);
+    color: white;
+}
+
+.btn-icon-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background-color: #ffc107;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    padding: 0;
+}
+
+.btn-icon-edit:hover {
+    background-color: #e0a800;
+    transform: scale(1.1);
+    color: white;
+}
+
+.btn-icon-print {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    padding: 0;
+}
+
+.btn-icon-print:hover {
+    background-color: #0056b3;
+    transform: scale(1.1);
+    color: white;
+}
+
+.btn-icon-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    padding: 0;
+}
+
+.btn-icon-delete:hover {
+    background-color: #c82333;
+    transform: scale(1.1);
+    color: white;
+}
+
+.btn-icon-delete-restricted {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    padding: 0;
+    opacity: 0.7;
+}
+
+.btn-icon-delete-restricted:hover {
+    opacity: 1;
+    background-color: #dc3545;
+    color: white;
+}
