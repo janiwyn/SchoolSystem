@@ -235,7 +235,6 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
                     <label class="form-label">Category</label>
                     <select name="category" id="category" class="form-control" required onchange="handleCategoryChange()">
                         <option value="">Select Category</option>
-                        <option value="Salaries">Salaries</option>
                         <option value="General Expenses">General Expenses</option>
                     </select>
                 </div>
