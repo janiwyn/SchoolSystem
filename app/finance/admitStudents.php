@@ -397,6 +397,8 @@ $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
 // Get current user role
 $userRole = $_SESSION['role'] ?? '';
 $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
+$canEditStudent = in_array($userRole, ['admin', 'principal', 'bursar']); // NEW: Bursar can edit
+$canDeleteStudent = in_array($userRole, ['admin', 'principal']); // NEW: Bursar cannot delete
 ?>
 
 <!DOCTYPE html>
@@ -617,18 +619,24 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
                                 </td>
                                 <td>
                                     <div class="action-buttons">
-                                        <?php if ($canAdmitStudent): ?>
+                                        <?php if ($canEditStudent): ?>
+                                            <!-- Edit button - now available for bursar too -->
                                             <button type="button" class="btn-icon-edit" title="Edit" data-bs-toggle="modal" data-bs-target="#editModal" onclick="loadEditForm(<?= $student['id'] ?>, '<?= htmlspecialchars($student['first_name']) ?>', '<?= htmlspecialchars($student['gender']) ?>', <?= $student['admission_fee'] ?>, <?= $student['uniform_fee'] ?>, '<?= htmlspecialchars($student['parent_contact']) ?>', '<?= htmlspecialchars($student['day_boarding']) ?>', <?= $student['class_id'] ?>)">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
-                                            <a href="deleteStudent.php?id=<?= $student['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure?')">
-                                                <i class="bi bi-trash"></i>
-                                            </a>
                                         <?php else: ?>
                                             <button type="button" class="btn-icon-edit-restricted" title="Edit" data-bs-toggle="modal" data-bs-target="#admitRestrictionModal">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
-                                            <button type="button" class="btn-icon-delete-restricted" title="Delete" data-bs-toggle="modal" data-bs-target="#admitRestrictionModal">
+                                        <?php endif; ?>
+
+                                        <?php if ($canDeleteStudent): ?>
+                                            <!-- Delete button - restricted for bursar -->
+                                            <a href="deleteStudent.php?id=<?= $student['id'] ?>" class="btn-icon-delete" title="Delete" onclick="return confirm('Are you sure?')">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        <?php else: ?>
+                                            <button type="button" class="btn-icon-delete-restricted" title="Delete" data-bs-toggle="modal" data-bs-target="#deleteRestrictionModal">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         <?php endif; ?>
@@ -698,8 +706,8 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
     </div>
 </div>
 
-<!-- Edit Student Modal - Only shown for Admin/Principal -->
-<?php if ($canAdmitStudent): ?>
+<!-- Edit Student Modal - Now shown for Admin/Principal/Bursar -->
+<?php if ($canEditStudent): ?>
     <div class="modal fade" id="editModal" tabindex="-1">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
@@ -773,7 +781,7 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
     </div>
 <?php endif; ?>
 
-<!-- Restriction Modal for Bursar -->
+<!-- Restriction Modal for Admitting Students -->
 <div class="modal fade" id="admitRestrictionModal" tabindex="-1" aria-labelledby="admitRestrictionModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -785,12 +793,41 @@ $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
             </div>
             <div class="modal-body text-center py-4">
                 <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
-                <h5 class="mb-3">Cannot Modify Student Admissions</h5>
+                <h5 class="mb-3">Cannot Admit New Students</h5>
                 <p class="text-muted mb-0">
-                    Only <strong>Admin</strong> and <strong>Principal</strong> have permission to admit, edit, or delete students.
+                    Only <strong>Admin</strong> and <strong>Principal</strong> have permission to admit new students.
                 </p>
                 <p class="text-muted mt-2">
-                    As a <strong class="text-primary">Bursar</strong>, you can view student records but cannot modify them.
+                    As a <strong class="text-primary">Bursar</strong>, you can view and edit student records but cannot admit new students.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- NEW: Restriction Modal for Deleting Students -->
+<div class="modal fade" id="deleteRestrictionModal" tabindex="-1" aria-labelledby="deleteRestrictionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteRestrictionModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Access Restricted
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
+                <h5 class="mb-3">Cannot Delete Students</h5>
+                <p class="text-muted mb-0">
+                    Only <strong>Admin</strong> and <strong>Principal</strong> have permission to delete student records.
+                </p>
+                <p class="text-muted mt-2">
+                    As a <strong class="text-primary">Bursar</strong>, you can view and edit student records but cannot delete them.
                 </p>
             </div>
             <div class="modal-footer">
