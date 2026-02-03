@@ -13,11 +13,44 @@ if (
 ) {
     $expenseId = intval($_POST['expense_id'] ?? 0);
     if ($expenseId > 0) {
-        $stmt = $mysqli->prepare("DELETE FROM expenses WHERE id = ?");
-        if ($stmt) {
-            $stmt->bind_param('i', $expenseId);
-            $stmt->execute();
-            $stmt->close();
+        // Get expense details BEFORE deletion
+        $getExpense = $mysqli->prepare("SELECT category, item, amount, date FROM expenses WHERE id = ?");
+        if ($getExpense) {
+            $getExpense->bind_param('i', $expenseId);
+            $getExpense->execute();
+            $expenseData = $getExpense->get_result()->fetch_assoc();
+            $getExpense->close();
+            
+            // If it's a Salaries expense, delete matching payroll record
+            if ($expenseData && $expenseData['category'] === 'Salaries') {
+                $mysqli->begin_transaction();
+                try {
+                    // Delete from expenses
+                    $delExpense = $mysqli->prepare("DELETE FROM expenses WHERE id = ?");
+                    $delExpense->bind_param('i', $expenseId);
+                    $delExpense->execute();
+                    $delExpense->close();
+                    
+                    // Delete matching payroll record (same name, date, and salary amount)
+                    $delPayroll = $mysqli->prepare("DELETE FROM payroll WHERE name = ? AND date = ? AND salary = ? LIMIT 1");
+                    $delPayroll->bind_param('ssd', $expenseData['item'], $expenseData['date'], $expenseData['amount']);
+                    $delPayroll->execute();
+                    $delPayroll->close();
+                    
+                    $mysqli->commit();
+                } catch (Throwable $e) {
+                    $mysqli->rollback();
+                    error_log("Error deleting salary expense: " . $e->getMessage());
+                }
+            } else {
+                // Not a salary expense, just delete from expenses
+                $stmt = $mysqli->prepare("DELETE FROM expenses WHERE id = ?");
+                if ($stmt) {
+                    $stmt->bind_param('i', $expenseId);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            }
         }
     }
     header("Location: expenses.php?exp_deleted=1");
@@ -96,6 +129,30 @@ if (
         $mysqli->begin_transaction();
 
         try {
+            // If deleting Salaries category, also delete matching payroll records
+            if ($deleteCategory === 'Salaries' || $deleteCategory === 'all') {
+                // Get all salary expenses in date range
+                if ($deleteCategory === 'all') {
+                    $getSalaries = $mysqli->prepare("SELECT item, date, amount FROM expenses WHERE category = 'Salaries' AND DATE(`date`) BETWEEN ? AND ?");
+                } else {
+                    $getSalaries = $mysqli->prepare("SELECT item, date, amount FROM expenses WHERE category = 'Salaries' AND DATE(`date`) BETWEEN ? AND ?");
+                }
+                $getSalaries->bind_param('ss', $deleteFrom, $deleteTo);
+                $getSalaries->execute();
+                $salariesResult = $getSalaries->get_result();
+                $salariesToDelete = $salariesResult->fetch_all(MYSQLI_ASSOC);
+                $getSalaries->close();
+                
+                // Delete matching payroll records
+                foreach ($salariesToDelete as $salary) {
+                    $delPayroll = $mysqli->prepare("DELETE FROM payroll WHERE name = ? AND date = ? AND salary = ? LIMIT 1");
+                    $delPayroll->bind_param('ssd', $salary['item'], $salary['date'], $salary['amount']);
+                    $delPayroll->execute();
+                    $delPayroll->close();
+                }
+            }
+            
+            // Now delete expenses
             if ($deleteCategory === 'all') {
                 $sql  = "DELETE FROM expenses WHERE DATE(`date`) BETWEEN ? AND ?";
                 $stmt = $mysqli->prepare($sql);
@@ -121,7 +178,7 @@ if (
             exit();
         } catch (Throwable $e) {
             $mysqli->rollback();
-            // optional: log error
+            error_log("Error in bulk delete: " . $e->getMessage());
         }
     }
 }
