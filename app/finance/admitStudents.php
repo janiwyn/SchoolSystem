@@ -2,20 +2,30 @@
 $title = "Admit Students";
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../middleware/role.php';
+require_once __DIR__ . '/../config/cache.php';
+$cache = new SimpleCache();
 
 requireRole(['bursar', 'admin', 'principal']);
 
 // Get all classes from fee_structure WITH expected tuition (sum of all terms per class)
-$classesQuery = "SELECT 
-                    fs.class_id, 
-                    c.class_name,
-                    SUM(fs.amount) AS expected_tuition
-                 FROM fee_structure fs 
-                 LEFT JOIN classes c ON fs.class_id = c.id 
-                 GROUP BY fs.class_id, c.class_name
-                 ORDER BY c.class_name ASC";
-$classesResult = $mysqli->query($classesQuery);
-$classes = $classesResult->fetch_all(MYSQLI_ASSOC);
+$classes = $cache->get('all_classes_with_tuition');
+
+if ($classes === null) {
+    // Cache miss - fetch from database
+    $classesQuery = "SELECT 
+                        fs.class_id, 
+                        c.class_name,
+                        SUM(fs.amount) AS expected_tuition
+                     FROM fee_structure fs 
+                     LEFT JOIN classes c ON fs.class_id = c.id 
+                     GROUP BY fs.class_id, c.class_name
+                     ORDER BY c.class_name ASC";
+    $classesResult = $mysqli->query($classesQuery);
+    $classes = $classesResult->fetch_all(MYSQLI_ASSOC);
+    
+    // Cache for 10 minutes (600 seconds)
+    $cache->set('all_classes_with_tuition', $classes, 600);
+}
 
 // Generate next serial number globally (no Day/Boarding split)
 function generateSerialNumber($mysqli) {
@@ -182,23 +192,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
             $oldStmt->close();
         }
 
-        $stmt = $mysqli->prepare(
-            "UPDATE admit_students 
-             SET first_name = ?, 
-                 gender = ?, 
-                 class_id = ?, 
-                 day_boarding = ?, 
-                 admission_fee = ?, 
-                 uniform_fee = ?, 
-                 expected_tuition = ?, 
-                 parent_contact = ?
-             WHERE id = ?"
-        );
-        if ($stmt) {
+        $mysqli->begin_transaction();
+        
+        try {
+            // 1. Update admit_students table
+            $stmt = $mysqli->prepare(
+                "UPDATE admit_students 
+                 SET first_name = ?, 
+                     gender = ?, 
+                     class_id = ?, 
+                     day_boarding = ?, 
+                     admission_fee = ?, 
+                     uniform_fee = ?, 
+                     expected_tuition = ?, 
+                     parent_contact = ?
+                 WHERE id = ?"
+            );
+            
             $admission_fee = (float)$admission_fee;
             $uniform_fee   = (float)$uniform_fee;
 
-            // s,s,i,s,d,d,d,s,i => "ssisdddsi"
             $stmt->bind_param(
                 "ssisdddsi",
                 $first_name,
@@ -211,91 +224,152 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
                 $parent_contact,
                 $student_id
             );
-            if ($stmt->execute()) {
-
-                // Re‑read CURRENT admission_no after update so SN matches what you see now
-                $currentSn = null;
-                $snStmt = $mysqli->prepare("SELECT admission_no FROM admit_students WHERE id = ?");
-                if ($snStmt) {
-                    $snStmt->bind_param("i", $student_id);
-                    $snStmt->execute();
-                    $snRes = $snStmt->get_result();
-                    $snRow = $snRes->fetch_assoc();
-                    $currentSn = $snRow['admission_no'] ?? null;
-                    $snStmt->close();
-                }
-
-                // Log detailed changes only for principal, using the CURRENT SN
-                if (isset($_SESSION['role']) && $_SESSION['role'] === 'principal' && $oldData && $currentSn !== null) {
-                    $changes = [];
-
-                    if ($oldData['first_name'] !== $first_name) {
-                        $changes[] = "Name: {$oldData['first_name']} → {$first_name}";
-                    }
-                    if ($oldData['gender'] !== $gender) {
-                        $changes[] = "Gender: {$oldData['gender']} → {$gender}";
-                    }
-                    if ((string)$oldData['class_id'] !== (string)$class_id) {
-                        $changes[] = "Class ID: {$oldData['class_id']} → {$class_id}";
-                    }
-                    if ($oldData['day_boarding'] !== $day_boarding) {
-                        $changes[] = "Type (Day/Boarding): {$oldData['day_boarding']} → {$day_boarding}";
-                    }
-                    if ((float)$oldData['admission_fee'] != (float)$admission_fee) {
-                        $changes[] = "Admission Fee: ".
-                            number_format((float)$oldData['admission_fee'], 2).
-                            " → ".
-                            number_format((float)$admission_fee, 2);
-                    }
-                    if ((float)$oldData['uniform_fee'] != (float)$uniform_fee) {
-                        $changes[] = "Uniform Fee: ".
-                            number_format((float)$oldData['uniform_fee'], 2).
-                            " → ".
-                            number_format((float)$uniform_fee, 2);
-                    }
-                    if ($oldData['parent_contact'] !== $parent_contact) {
-                        $changes[] = "Parent Contact: {$oldData['parent_contact']} → {$parent_contact}";
-                    }
-
-                    $snText = $currentSn; // THIS is the serial number you see now (after re‑ordering)
-                    $changeSummary = empty($changes)
-                        ? "No field values actually changed."
-                        : implode("; ", $changes);
-
-                    // entity_name just the name (SN can change over time)
-                    $entityName = $first_name;
-                    $details = "Principal edited admitted student SN {$snText}. Changes: {$changeSummary}";
-                    $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-
-                    $logSql = "INSERT INTO activity_logs
-                        (user_id, user_name, user_role, action, entity_type, entity_id, entity_name, details, ip_address, is_acknowledged, created_at)
-                        VALUES (?, ?, ?, 'edit', 'admit_student', ?, ?, ?, ?, 0, NOW())";
-                    $logStmt = $mysqli->prepare($logSql);
-                    if ($logStmt) {
-                        // i,s,s,i,s,s,s → "ississs"
-                        $logStmt->bind_param(
-                            "ississs",
-                            $_SESSION['user_id'],
-                            $_SESSION['name'],
-                            $_SESSION['role'],
-                            $student_id,
-                            $entityName,
-                            $details,
-                            $ipAddress
-                        );
-                        $logStmt->execute();
-                        $logStmt->close();
-                    }
-                }
-
-                header("Location: admitStudents.php?updated=1");
-                exit();
-            } else {
-                $error = "Error updating student: " . $stmt->error;
-            }
+            $stmt->execute();
             $stmt->close();
-        } else {
-            $error = "Database error: " . $mysqli->error;
+
+            // 2. Get class name for the new class_id
+            $classNameStmt = $mysqli->prepare("SELECT class_name FROM classes WHERE id = ?");
+            $classNameStmt->bind_param("i", $class_id);
+            $classNameStmt->execute();
+            $classNameResult = $classNameStmt->get_result();
+            $class_name = $classNameResult->fetch_assoc()['class_name'] ?? '';
+            $classNameStmt->close();
+
+            // 3. CRITICAL FIX: Update ALL student_payments records for this student
+            // This updates BOTH new and old payment records
+            $updatePaymentsStmt = $mysqli->prepare(
+                "UPDATE student_payments 
+                 SET full_name = ?,
+                     gender = ?,
+                     class_id = ?,
+                     class_name = ?,
+                     day_boarding = ?,
+                     admission_fee = ?,
+                     uniform_fee = ?,
+                     expected_tuition = ?,
+                     parent_contact = ?
+                 WHERE student_id = ?"
+            );
+            
+            if ($updatePaymentsStmt) {
+                $updatePaymentsStmt->bind_param(
+                    "ssissdddsi",
+                    $first_name,
+                    $gender,
+                    $class_id,
+                    $class_name,
+                    $day_boarding,
+                    $admission_fee,
+                    $uniform_fee,
+                    $expected_tuition,
+                    $parent_contact,
+                    $student_id
+                );
+                $updatePaymentsStmt->execute();
+                $affectedRows = $updatePaymentsStmt->affected_rows; // NEW: Check how many rows were updated
+                $updatePaymentsStmt->close();
+                
+                // NEW: Log if no payment records were updated (for debugging)
+                if ($affectedRows === 0) {
+                    error_log("Warning: No payment records updated for student_id: $student_id");
+                }
+            }
+
+            // 4. Also update student_payment_topups table
+            $updateTopupsStmt = $mysqli->prepare(
+                "UPDATE student_payment_topups 
+                 SET full_name = ?
+                 WHERE student_id = ?"
+            );
+            
+            if ($updateTopupsStmt) {
+                $updateTopupsStmt->bind_param("si", $first_name, $student_id);
+                $updateTopupsStmt->execute();
+                $updateTopupsStmt->close();
+            }
+
+            $mysqli->commit();
+
+            // Re‑read CURRENT admission_no after update for logging
+            $currentSn = null;
+            $snStmt = $mysqli->prepare("SELECT admission_no FROM admit_students WHERE id = ?");
+            if ($snStmt) {
+                $snStmt->bind_param("i", $student_id);
+                $snStmt->execute();
+                $snRes = $snStmt->get_result();
+                $snRow = $snRes->fetch_assoc();
+                $currentSn = $snRow['admission_no'] ?? null;
+                $snStmt->close();
+            }
+
+            // Log detailed changes only for principal
+            if (isset($_SESSION['role']) && $_SESSION['role'] === 'principal' && $oldData && $currentSn !== null) {
+                $changes = [];
+
+                if ($oldData['first_name'] !== $first_name) {
+                    $changes[] = "Name: {$oldData['first_name']} → {$first_name}";
+                }
+                if ($oldData['gender'] !== $gender) {
+                    $changes[] = "Gender: {$oldData['gender']} → {$gender}";
+                }
+                if ((string)$oldData['class_id'] !== (string)$class_id) {
+                    $changes[] = "Class ID: {$oldData['class_id']} → {$class_id}";
+                }
+                if ($oldData['day_boarding'] !== $day_boarding) {
+                    $changes[] = "Type (Day/Boarding): {$oldData['day_boarding']} → {$day_boarding}";
+                }
+                if ((float)$oldData['admission_fee'] != (float)$admission_fee) {
+                    $changes[] = "Admission Fee: ".
+                        number_format((float)$oldData['admission_fee'], 2).
+                        " → ".
+                        number_format((float)$admission_fee, 2);
+                }
+                if ((float)$oldData['uniform_fee'] != (float)$uniform_fee) {
+                    $changes[] = "Uniform Fee: ".
+                        number_format((float)$oldData['uniform_fee'], 2).
+                        " → ".
+                        number_format((float)$uniform_fee, 2);
+                }
+                if ($oldData['parent_contact'] !== $parent_contact) {
+                    $changes[] = "Parent Contact: {$oldData['parent_contact']} → {$parent_contact}";
+                }
+
+                $snText = $currentSn;
+                $changeSummary = empty($changes)
+                    ? "No field values actually changed."
+                    : implode("; ", $changes);
+
+                $entityName = $first_name;
+                $details = "Principal edited admitted student SN {$snText}. Changes: {$changeSummary}. All related payment records updated automatically.";
+                $ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+
+                $logSql = "INSERT INTO activity_logs
+                    (user_id, user_name, user_role, action, entity_type, entity_id, entity_name, details, ip_address, is_acknowledged, created_at)
+                    VALUES (?, ?, ?, 'edit', 'admit_student', ?, ?, ?, ?, 0, NOW())";
+                $logStmt = $mysqli->prepare($logSql);
+                if ($logStmt) {
+                    $logStmt->bind_param(
+                        "ississs",
+                        $_SESSION['user_id'],
+                        $_SESSION['name'],
+                        $_SESSION['role'],
+                        $student_id,
+                        $entityName,
+                        $details,
+                        $ipAddress
+                    );
+                    $logStmt->execute();
+                    $logStmt->close();
+                }
+            }
+
+            header("Location: admitStudents.php?updated=1");
+            exit();
+            
+        } catch (Throwable $e) {
+            $mysqli->rollback();
+            error_log("Error updating student: " . $e->getMessage());
+            $error = "Error updating student: " . $e->getMessage();
         }
     }
 }
@@ -393,6 +467,18 @@ LIMIT $offset, $records_per_page";
 
 $studentsResult = $mysqli->query($studentsQuery);
 $students = $studentsResult->fetch_all(MYSQLI_ASSOC);
+
+// NEW: Calculate grand totals for ALL records (not just current page)
+$totalsQuery = "SELECT 
+    SUM(admission_fee) as total_admission,
+    SUM(uniform_fee) as total_uniform,
+    SUM(expected_tuition) as total_expected
+FROM admit_students
+LEFT JOIN classes c ON admit_students.class_id = c.id
+WHERE $filterWhere";
+
+$totalsResult = $mysqli->query($totalsQuery);
+$totals = $totalsResult->fetch_assoc();
 
 // Get current user role
 $userRole = $_SESSION['role'] ?? '';
@@ -646,6 +732,27 @@ $canDeleteStudent = in_array($userRole, ['admin', 'principal']); // NEW: Bursar 
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- NEW: Totals Row -->
+            <div class="admitted-totals-row">
+                <div class="totals-content">
+                    <span class="totals-label">TOTALS:</span>
+                    <div class="totals-values">
+                        <div class="total-item">
+                            <span class="total-item-label">Admission Fee:</span>
+                            <span class="total-item-value totals-admission-fee"><?= number_format($totals['total_admission'] ?? 0, 2) ?></span>
+                        </div>
+                        <div class="total-item">
+                            <span class="total-item-label">Uniform Fee:</span>
+                            <span class="total-item-value totals-uniform-fee"><?= number_format($totals['total_uniform'] ?? 0, 2) ?></span>
+                        </div>
+                        <div class="total-item">
+                            <span class="total-item-label">Expected Tuition:</span>
+                            <span class="total-item-value totals-expected-tuition"><?= number_format($totals['total_expected'] ?? 0, 2) ?></span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Pagination -->

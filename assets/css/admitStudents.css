@@ -348,3 +348,85 @@
 .btn-toggle-form[data-bs-toggle="modal"]:hover {
     background-color: #dc3545;
 }
+
+/* Totals Row Styling */
+.admitted-totals-row {
+    background: linear-gradient(135deg, #e8f4e8 0%, #d4edda 100%);
+    border-top: 3px solid #17a2b8;
+    border-bottom: 3px solid #17a2b8;
+    padding: 20px 25px;
+    margin-top: 0;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.05);
+}
+
+.totals-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.totals-label {
+    font-size: 16px;
+    font-weight: 700;
+    color: #2c3e50;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.totals-values {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+}
+
+.total-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.total-item-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.total-item-value {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.totals-admission-fee {
+    color: #f39c12;
+}
+
+.totals-uniform-fee {
+    color: #e74c3c;
+}
+
+.totals-expected-tuition {
+    color: #17a2b8;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .totals-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .totals-values {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .total-item {
+        align-items: flex-start;
+    }
+}

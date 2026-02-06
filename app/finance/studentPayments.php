@@ -258,32 +258,26 @@ $totalsResult = $mysqli->query($totalsQuery);
 $totals = $totalsResult->fetch_assoc();
 
 // Get approved students for dropdown - MODIFIED to include unapproved students
-$approvedStudentsQuery = "SELECT 
-    id, admission_no, first_name, last_name, gender, class_id, day_boarding, 
-    admission_fee, uniform_fee, parent_contact, parent_email, status
-FROM admit_students
-WHERE status IN ('approved', 'unapproved')
-ORDER BY first_name ASC";
+// REMOVED: Don't load students on initial page load
+$approved_students = []; // Empty by default
 
-$approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
-
-// Check if query executed successfully
-if (!$approvedStudentsResult) {
-    die("Database error: " . $mysqli->error);
-}
-
-$approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
-
-// Debug: Check if students were found
-if (empty($approved_students)) {
-    // If no students, fetch ALL students to help with debugging
-    $debugQuery = "SELECT COUNT(*) as total, 
-                          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
-                          SUM(CASE WHEN status = 'unapproved' THEN 1 ELSE 0 END) as unapproved_count
-                   FROM admit_students";
-    $debugResult = $mysqli->query($debugQuery);
-    $debugRow = $debugResult->fetch_assoc();
-    // You can log this or display a message if needed
+// Only load students if the form is being submitted
+if (isset($_POST['record_payment'])) {
+    $approvedStudentsQuery = "SELECT 
+        id, admission_no, first_name, last_name, gender, class_id, day_boarding, 
+        admission_fee, uniform_fee, parent_contact, parent_email, status
+    FROM admit_students
+    WHERE status IN ('approved', 'unapproved')
+    ORDER BY first_name ASC";
+    
+    $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
+    
+    // Check if query executed successfully
+    if (!$approvedStudentsResult) {
+        die("Database error: " . $mysqli->error);
+    }
+    
+    $approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
 }
 
 // Get current user role

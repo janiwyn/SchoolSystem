@@ -66,9 +66,25 @@
 }
 
 .preview-logo-container img {
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
+    /* Prevent layout shift during image load */
+    max-width: 80px;
+    max-height: 80px;
+    /* Add smooth transition */
+    transition: opacity 0.3s ease;
+}
+
+/* Prevent logo from enlarging during load */
+.preview-logo-container {
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+    margin-right: 20px;
+    /* Prevent layout shift */
+    min-width: 80px;
+    min-height: 80px;
 }
 
 .preview-details {

@@ -156,3 +156,86 @@ document.addEventListener('DOMContentLoaded', function () {
         populateStudentData();
     }
 });
+
+// NEW: Track if students have been loaded
+let studentsLoaded = false;
+
+// NEW: Load students when dropdown is focused (clicked)
+document.addEventListener('DOMContentLoaded', function() {
+    const studentSelect = document.getElementById('studentSelect');
+    
+    if (studentSelect) {
+        // Load students when user clicks on the dropdown
+        studentSelect.addEventListener('focus', function() {
+            if (!studentsLoaded) {
+                loadStudents();
+            }
+        }, { once: false }); // Allow retry if first attempt fails
+    }
+});
+
+// NEW: Function to load students via AJAX
+function loadStudents() {
+    const studentSelect = document.getElementById('studentSelect');
+    
+    if (!studentSelect) return;
+    
+    // Show loading message
+    studentSelect.innerHTML = '<option value="">Loading students...</option>';
+    studentSelect.disabled = true;
+    
+    fetch('../../app/api/loadStudents.php')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load students');
+            }
+            return response.json();
+        })
+        .then(students => {
+            // Clear loading message
+            studentSelect.innerHTML = '<option value="">-- Select Student --</option>';
+            
+            if (students.length === 0) {
+                studentSelect.innerHTML = '<option value="">No students available</option>';
+                studentSelect.disabled = true;
+                return;
+            }
+            
+            // Populate dropdown with students
+            students.forEach(student => {
+                const option = document.createElement('option');
+                option.value = student.id;
+                option.textContent = `${student.first_name} ${student.last_name} (${student.admission_no})`;
+                
+                // Set data attributes
+                option.dataset.admission = student.admission_no;
+                option.dataset.first = student.first_name;
+                option.dataset.last = student.last_name;
+                option.dataset.gender = student.gender;
+                option.dataset.class = student.class_id;
+                option.dataset.className = student.class_name || 'N/A';
+                option.dataset.boarding = student.day_boarding;
+                option.dataset.admissionFee = student.admission_fee;
+                option.dataset.uniformFee = student.uniform_fee;
+                option.dataset.contact = student.parent_contact;
+                option.dataset.email = student.parent_email || '';
+                option.dataset.status = student.status;
+                
+                // Add status indicator for unapproved students
+                if (student.status === 'unapproved') {
+                    option.textContent += ' ● Pending Approval';
+                    option.style.color = '#f39c12';
+                }
+                
+                studentSelect.appendChild(option);
+            });
+            
+            studentSelect.disabled = false;
+            studentsLoaded = true;
+        })
+        .catch(error => {
+            console.error('Error loading students:', error);
+            studentSelect.innerHTML = '<option value="">Error loading students. Please refresh.</option>';
+            studentSelect.disabled = true;
+        });
+}
