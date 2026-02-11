@@ -59,6 +59,66 @@ if (
     }
 }
 
+// Handle EDIT payment record (Admin, Bursar, Principal)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record'])) {
+    $edit_id = intval($_POST['edit_payment_id']);
+    $edit_amount_paid = floatval($_POST['edit_amount_paid']);
+    $edit_admission_fee = floatval($_POST['edit_admission_fee']);
+    $edit_uniform_fee = floatval($_POST['edit_uniform_fee']);
+
+    if ($edit_id > 0 && $edit_amount_paid >= 0 && $edit_admission_fee >= 0 && $edit_uniform_fee >= 0) {
+        // Get current expected_tuition to recalculate balance
+        $getStmt = $mysqli->prepare("SELECT expected_tuition FROM student_payments WHERE id = ?");
+        $getStmt->bind_param("i", $edit_id);
+        $getStmt->execute();
+        $currentRow = $getStmt->get_result()->fetch_assoc();
+        $getStmt->close();
+
+        if ($currentRow) {
+            $new_balance = $currentRow['expected_tuition'] - $edit_amount_paid;
+            // Set status to unapproved after correction
+            $new_status = 'unapproved';
+
+            $updateStmt = $mysqli->prepare("UPDATE student_payments SET amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, status_approved = ? WHERE id = ?");
+            $updateStmt->bind_param("ddddsi", $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $new_status, $edit_id);
+
+            if ($updateStmt->execute()) {
+                header("Location: studentPayments.php?corrected=1");
+                exit();
+            }
+            $updateStmt->close();
+        }
+    }
+}
+
+// Handle DELETE single payment record (Admin, Bursar, Principal)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_single_payment'])) {
+    $delete_id = intval($_POST['delete_payment_id']);
+
+    if ($delete_id > 0) {
+        $mysqli->begin_transaction();
+        try {
+            // Delete related topups first
+            $delTopups = $mysqli->prepare("DELETE FROM student_payment_topups WHERE payment_id = ?");
+            $delTopups->bind_param("i", $delete_id);
+            $delTopups->execute();
+            $delTopups->close();
+
+            // Delete the payment record
+            $delPayment = $mysqli->prepare("DELETE FROM student_payments WHERE id = ?");
+            $delPayment->bind_param("i", $delete_id);
+            $delPayment->execute();
+            $delPayment->close();
+
+            $mysqli->commit();
+            header("Location: studentPayments.php?deleted=1");
+            exit();
+        } catch (Throwable $e) {
+            $mysqli->rollback();
+        }
+    }
+}
+
 // Handle payment recording
 $message = '';
 $error = '';
@@ -73,112 +133,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     } elseif ($amount_paid < 0) {
         $error = "Amount cannot be negative";
     } else {
-        // Get student info
-        $studentStmt = $mysqli->prepare("SELECT admission_no, first_name, last_name, gender, class_id, day_boarding, parent_contact, parent_email FROM admit_students WHERE id = ?");
-        $studentStmt->bind_param("i", $student_id);
-        $studentStmt->execute();
-        $studentResult = $studentStmt->get_result();
+        // NEW: Check for duplicate payment (same student, term, date, amount)
+        $duplicateCheck = $mysqli->prepare("SELECT id FROM student_payments 
+            WHERE student_id = ? 
+            AND term = ? 
+            AND payment_date = ? 
+            AND amount_paid = ? 
+            LIMIT 1");
+        $duplicateCheck->bind_param("issd", $student_id, $term, $payment_date, $amount_paid);
+        $duplicateCheck->execute();
+        $duplicateResult = $duplicateCheck->get_result();
         
-        if ($studentResult->num_rows === 0) {
-            $error = "Student not found";
+        if ($duplicateResult->num_rows > 0) {
+            $error = "Duplicate payment detected! This student already has a payment record for $term on $payment_date with the same amount.";
+            $duplicateCheck->close();
         } else {
-            $student = $studentResult->fetch_assoc();
-            $studentStmt->close();
+            $duplicateCheck->close();
             
-            // Get class and tuition info
-            $classStmt = $mysqli->prepare("SELECT class_name FROM classes WHERE id = ?");
-            $classStmt->bind_param("i", $student['class_id']);
-            $classStmt->execute();
-            $classResult = $classStmt->get_result();
-            $classRow = $classResult->fetch_assoc();
-            $classStmt->close();
+            // Get student info
+            $studentStmt = $mysqli->prepare("SELECT admission_no, first_name, last_name, gender, class_id, day_boarding, parent_contact, parent_email FROM admit_students WHERE id = ?");
+            $studentStmt->bind_param("i", $student_id);
+            $studentStmt->execute();
+            $studentResult = $studentStmt->get_result();
             
-            $user_id = $_SESSION['user_id'];
-            
-            // Insert payment record
-            $insertStmt = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-            
-            if ($insertStmt) {
-                $full_name = $student['first_name'] . ' ' . $student['last_name'];
-                $expected_tuition = floatval($_POST['expected_tuition']);
-                $balance = $expected_tuition - $amount_paid;
-                $admission_fee = floatval($_POST['admission_fee']);
-                $uniform_fee = floatval($_POST['uniform_fee']);
-                $class_name = $classRow['class_name'];
-                
-                // Fixed type string: 17 variables = issssissdddddssi
-                // i=student_id, s=admission_no, s=full_name, s=day_boarding, s=gender, i=class_id, s=class_name, s=term, d=expected_tuition, d=amount_paid, d=balance, d=admission_fee, d=uniform_fee, s=parent_contact, s=parent_email, s=payment_date, i=recorded_by
-                $insertStmt->bind_param("issssissdddddsssi", 
-                    $student_id, $student['admission_no'], $full_name, $student['day_boarding'], 
-                    $student['gender'], $student['class_id'], $class_name, $term, $expected_tuition, 
-                    $amount_paid, $balance, $admission_fee, $uniform_fee, 
-                    $student['parent_contact'], $student['parent_email'], $payment_date, $user_id);
-                
-                if ($insertStmt->execute()) {
-                    header("Location: studentPayments.php?success=1");
-                    exit();
-                } else {
-                    $error = "Error recording payment: " . $insertStmt->error;
-                }
-                $insertStmt->close();
-            }
-        }
-    }
-}
-
-// Handle additional payment
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
-    $payment_id = intval($_POST['payment_id']);
-    $additional_amount = floatval($_POST['additional_amount']);
-    
-    if (!$payment_id || !$additional_amount || $additional_amount <= 0) {
-        $error = "Invalid payment information";
-    } else {
-        // Get current payment record
-        $paymentStmt = $mysqli->prepare("SELECT balance, amount_paid, student_id, admission_no, full_name, status_approved FROM student_payments WHERE id = ?");
-        $paymentStmt->bind_param("i", $payment_id);
-        $paymentStmt->execute();
-        $paymentResult = $paymentStmt->get_result();
-        $paymentRow = $paymentResult->fetch_assoc();
-        $paymentStmt->close();
-        
-        if (!$paymentRow) {
-            $error = "Payment record not found";
-        } else if ($additional_amount > $paymentRow['balance']) {
-            $error = "Payment amount exceeds remaining balance";
-        } else {
-            $original_balance = $paymentRow['balance'];
-            $original_amount_paid = $paymentRow['amount_paid'];
-            $previous_status = $paymentRow['status_approved'];
-            $new_balance = $original_balance - $additional_amount;
-            $new_amount_paid = $original_amount_paid + $additional_amount;
-            
-            // Update payment record - change status to unapproved for top-up approval
-            $new_status = 'unapproved';
-            
-            $updateStmt = $mysqli->prepare("UPDATE student_payments SET amount_paid = ?, balance = ?, status_approved = ? WHERE id = ?");
-            $updateStmt->bind_param("ddsi", $new_amount_paid, $new_balance, $new_status, $payment_id);
-            
-            if ($updateStmt->execute()) {
-                // Log the balance top-up with previous status
-                // Types: i=payment_id, i=student_id, s=admission_no, s=full_name, d=original_balance, d=topup_amount, d=new_balance, s=previous_status
-                $logStmt = $mysqli->prepare("INSERT INTO student_payment_topups (payment_id, student_id, admission_no, full_name, original_balance, topup_amount, new_balance, status_approved, previous_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'unapproved', ?)");
-                $logStmt->bind_param("iissddds", $payment_id, $paymentRow['student_id'], $paymentRow['admission_no'], $paymentRow['full_name'], $original_balance, $additional_amount, $new_balance, $previous_status);
-                $logStmt->execute();
-                $logStmt->close();
-                
-                header("Location: studentPayments.php?success=1");
-                exit();
+            if ($studentResult->num_rows === 0) {
+                $error = "Student not found";
             } else {
-                $error = "Error updating payment: " . $updateStmt->error;
+                $student = $studentResult->fetch_assoc();
+                $studentStmt->close();
+                
+                // Get class and tuition info
+                $classStmt = $mysqli->prepare("SELECT class_name FROM classes WHERE id = ?");
+                $classStmt->bind_param("i", $student['class_id']);
+                $classStmt->execute();
+                $classResult = $classStmt->get_result();
+                $classRow = $classResult->fetch_assoc();
+                $classStmt->close();
+                
+                $user_id = $_SESSION['user_id'];
+                
+                // Insert payment record
+                $insertStmt = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                
+                if ($insertStmt) {
+                    $full_name = $student['first_name'] . ' ' . $student['last_name'];
+                    $expected_tuition = floatval($_POST['expected_tuition']);
+                    $balance = $expected_tuition - $amount_paid;
+                    $admission_fee = floatval($_POST['admission_fee']);
+                    $uniform_fee = floatval($_POST['uniform_fee']);
+                    $class_name = $classRow['class_name'];
+                    
+                    // Fixed type string: 17 variables = issssissdddddssi
+                    // i=student_id, s=admission_no, s=full_name, s=day_boarding, s=gender, i=class_id, s=class_name, s=term, d=expected_tuition, d=amount_paid, d=balance, d=admission_fee, d=uniform_fee, s=parent_contact, s=parent_email, s=payment_date, i=recorded_by
+                    $insertStmt->bind_param("issssissdddddsssi", 
+                        $student_id, $student['admission_no'], $full_name, $student['day_boarding'], 
+                        $student['gender'], $student['class_id'], $class_name, $term, $expected_tuition, 
+                        $amount_paid, $balance, $admission_fee, $uniform_fee, 
+                        $student['parent_contact'], $student['parent_email'], $payment_date, $user_id);
+                    
+                    if ($insertStmt->execute()) {
+                        header("Location: studentPayments.php?success=1");
+                        exit();
+                    } else {
+                        $error = "Error recording payment: " . $insertStmt->error;
+                    }
+                    $insertStmt->close();
+                }
             }
-            $updateStmt->close();
         }
     }
 }
 
 if (isset($_GET['success']) && $_GET['success'] == 1) {
     $message = "Payment updated successfully!";
+}
+if (isset($_GET['corrected']) && $_GET['corrected'] == 1) {
+    $message = "Payment record corrected successfully!";
 }
 
 // Include layout AFTER header operations
@@ -228,7 +258,7 @@ $total_pages = ceil($total_records / $records_per_page);
 
 // Get all payments recorded with filter and pagination
 $paymentsQuery = "SELECT 
-    id, admission_no, full_name, day_boarding, gender, class_name, term,
+    id, student_id, admission_no, full_name, day_boarding, gender, class_name, term,
     expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
     parent_contact, payment_date, created_at, status_approved
 FROM student_payments
@@ -257,14 +287,13 @@ WHERE $filterWhere";
 $totalsResult = $mysqli->query($totalsQuery);
 $totals = $totalsResult->fetch_assoc();
 
-// Get approved students for dropdown - MODIFIED to include unapproved students
-// REMOVED: Don't load students on initial page load
-$approved_students = []; // Empty by default
+// Get approved students for dropdown - MODIFIED to NOT load on page load
+$approved_students = []; // Always empty on initial page load
 
-// Only load students if the form is being submitted
+// Only load students when form is being submitted
 if (isset($_POST['record_payment'])) {
     $approvedStudentsQuery = "SELECT 
-        id, admission_no, first_name, last_name, gender, class_id, day_boarding, 
+        id, admission_no, first_name, gender, class_id, day_boarding, 
         admission_fee, uniform_fee, parent_contact, parent_email, status
     FROM admit_students
     WHERE status IN ('approved', 'unapproved')
@@ -272,7 +301,6 @@ if (isset($_POST['record_payment'])) {
     
     $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
     
-    // Check if query executed successfully
     if (!$approvedStudentsResult) {
         die("Database error: " . $mysqli->error);
     }
@@ -373,45 +401,8 @@ if ($currentTermResult) {
                 <div class="col-md-6">
                     <label class="form-label">Select Student</label>
                     <select name="student_id" id="studentSelect" class="form-control" required onchange="populateStudentData()">
-                        <option value="">-- Select Student --</option>
-                        <?php if (!empty($approved_students)): ?>
-                            <?php foreach ($approved_students as $student): ?>
-                                <?php
-                                // Get class name for this student
-                                $studentClassName = 'N/A';
-                                $classQuery = $mysqli->prepare("SELECT class_name FROM classes WHERE id = ?");
-                                if ($classQuery) {
-                                    $classQuery->bind_param("i", $student['class_id']);
-                                    $classQuery->execute();
-                                    $classResult = $classQuery->get_result();
-                                    if ($classRow = $classResult->fetch_assoc()) {
-                                        $studentClassName = $classRow['class_name'];
-                                    }
-                                    $classQuery->close();
-                                }
-                                ?>
-                                <option value="<?= $student['id'] ?>" 
-                                    data-admission="<?= htmlspecialchars($student['admission_no']) ?>"
-                                    data-first="<?= htmlspecialchars($student['first_name']) ?>"
-                                    data-last="<?= htmlspecialchars($student['last_name']) ?>"
-                                    data-gender="<?= htmlspecialchars($student['gender']) ?>"
-                                    data-class="<?= $student['class_id'] ?>"
-                                    data-class-name="<?= htmlspecialchars($studentClassName) ?>"
-                                    data-boarding="<?= htmlspecialchars($student['day_boarding']) ?>"
-                                    data-admission-fee="<?= $student['admission_fee'] ?>"
-                                    data-uniform-fee="<?= $student['uniform_fee'] ?>"
-                                    data-contact="<?= htmlspecialchars($student['parent_contact']) ?>"
-                                    data-email="<?= htmlspecialchars($student['parent_email']) ?>"
-                                    data-status="<?= htmlspecialchars($student['status']) ?>">
-                                    <?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?> (<?= htmlspecialchars($student['admission_no']) ?>)
-                                    <?php if ($student['status'] === 'unapproved'): ?>
-                                        <span style="color: #f39c12;">● Pending Approval</span>
-                                    <?php endif; ?>
-                                </option>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <option value="">No students available</option>
-                        <?php endif; ?>
+                        <option value="">-- Click to Load Students --</option>
+                        <!-- Students will be loaded via AJAX when dropdown is clicked -->
                     </select>
                     <small class="text-muted d-block mt-2">
                         <i class="bi bi-info-circle"></i> You can record payments for both approved and unapproved students
@@ -606,6 +597,7 @@ if ($currentTermResult) {
                             <th>Approval Status</th>
                             <th>Actions</th>
                             <th>Invoice/Receipt</th>
+                            <th>Corrections</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -659,6 +651,22 @@ if ($currentTermResult) {
                                         </a>
                                     <?php endif; ?>
                                 </td>
+                                <!-- NEW: Corrections Column -->
+                                <td>
+                                    <div class="action-buttons">
+                                        <button type="button" class="btn btn-sm btn-primary" title="Edit Payment"
+                                                data-bs-toggle="modal" data-bs-target="#editPaymentModal"
+                                                onclick="loadEditPayment(<?= $payment['id'] ?>, <?= $payment['amount_paid'] ?>, <?= $payment['admission_fee'] ?>, <?= $payment['uniform_fee'] ?>, <?= $payment['expected_tuition'] ?>, '<?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>')">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this payment record for <?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>? This action cannot be undone.');">
+                                            <input type="hidden" name="delete_payment_id" value="<?= $payment['id'] ?>">
+                                            <button type="submit" name="delete_single_payment" class="btn btn-sm btn-danger" title="Delete Payment">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                         
@@ -670,7 +678,7 @@ if ($currentTermResult) {
                             <td class="totals-balance"><?= number_format($totals['total_balance'] ?? 0, 2) ?></td>
                             <td class="totals-admission-fee"><?= number_format($totals['total_admission'] ?? 0, 2) ?></td>
                             <td class="totals-uniform-fee"><?= number_format($totals['total_uniform'] ?? 0, 2) ?></td>
-                            <td colspan="6"></td>
+                            <td colspan="7"></td>
                         </tr>
                     </tbody>
                 </table>
@@ -840,6 +848,65 @@ if ($currentTermResult) {
     </div>
 <?php endif; ?>
 
+<!-- NEW: Edit Payment Modal -->
+<div class="modal fade" id="editPaymentModal" tabindex="-1" aria-labelledby="editPaymentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST">
+                <div class="modal-header form-header text-white">
+                    <h5 class="modal-title" id="editPaymentModalLabel">
+                        <i class="bi bi-pencil-square"></i> Edit Payment Record
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="edit_payment_id" id="editPaymentId">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Student Name</label>
+                        <p class="form-control-plaintext" id="editPaymentStudentName" style="font-weight: 600; color: #2c3e50;"></p>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Expected Tuition</label>
+                        <input type="number" class="form-control" id="editPaymentExpected" readonly style="background-color: #e9ecef;">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="editPaymentAmountPaid" class="form-label">Amount Paid</label>
+                        <input type="number" class="form-control" id="editPaymentAmountPaid" name="edit_amount_paid" step="0.01" min="0" required oninput="calculateEditBalance()">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">New Balance</label>
+                        <input type="number" class="form-control" id="editPaymentNewBalance" readonly style="background-color: #e9ecef; font-weight: 700;">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="editPaymentAdmissionFee" class="form-label">Admission Fee</label>
+                        <input type="number" class="form-control" id="editPaymentAdmissionFee" name="edit_admission_fee" step="0.01" min="0" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="editPaymentUniformFee" class="form-label">Uniform Fee</label>
+                        <input type="number" class="form-control" id="editPaymentUniformFee" name="edit_uniform_fee" step="0.01" min="0" required>
+                    </div>
+
+                    <div class="alert alert-info small mb-0">
+                        <i class="bi bi-info-circle"></i> After correction, the payment status will be set to <strong>Unapproved</strong> and will need re-approval.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="edit_payment_record" class="btn btn-form-submit">
+                        <i class="bi bi-check-circle"></i> Save Correction
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Expose expected tuition map + current term to JS -->
 <script>
 // filepath: d:\xamp\htdocs\SchoolSystem\app\finance\studentPayments.php (inline JS config)
@@ -850,6 +917,6 @@ window.currentTerm   = <?= json_encode($currentTerm) ?>;
 
 <link rel="stylesheet" href="../../assets/css/studentPayments.css">
 <link rel="stylesheet" href="../../assets/css/studentPreviewCard.css">
-<script src="../../assets/js/studentPayments.js?v=2"></script>
+<script src="../../assets/js/studentPayments.js?v=4"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

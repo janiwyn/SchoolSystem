@@ -10,12 +10,11 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../config/db.php';
 
-// Get approved students for dropdown
+// Get approved students for dropdown (NOTE: only first_name exists, no last_name)
 $approvedStudentsQuery = "SELECT 
     s.id, 
     s.admission_no, 
-    s.first_name, 
-    s.last_name, 
+    s.first_name,
     s.gender, 
     s.class_id, 
     s.day_boarding, 

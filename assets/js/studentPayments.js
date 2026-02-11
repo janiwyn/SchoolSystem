@@ -21,109 +21,76 @@ function togglePaymentForm() {
     }
 }
 
-// Populate form fields when a student is selected
+// Function to populate student data from dropdown
 function populateStudentData() {
     const select = document.getElementById('studentSelect');
-    if (!select) return;
+    const selectedOption = select.options[select.selectedIndex];
 
-    const option = select.options[select.selectedIndex];
-
-    // Form fields
-    const fullNameInput     = document.getElementById('fullName');
-    const statusInput       = document.getElementById('studentStatus');
-    const genderInput       = document.getElementById('gender');
-    const classNameInput    = document.getElementById('className');
-    const termInput         = document.getElementById('term');
-    const dayBoardingInput  = document.getElementById('dayBoarding');
-    const expectedInput     = document.getElementById('expectedTuition');
-    const admissionFeeInput = document.getElementById('admissionFee');
-    const uniformFeeInput   = document.getElementById('uniformFee');
-    const parentContactInput= document.getElementById('parentContact');
-
-    // Preview card elements
-    const previewCard = document.getElementById('studentPreviewCard');
-    const previewName = document.getElementById('previewStudentName');
-    const previewClass = document.getElementById('previewClass');
-    const previewTerm = document.getElementById('previewTerm');
-    const previewDayBoarding = document.getElementById('previewDayBoarding');
-    const previewGender = document.getElementById('previewGender');
-
-    // If any required field is missing, log and stop (avoid JS errors on hosted app)
-    if (!fullNameInput || !statusInput || !genderInput || !classNameInput ||
-        !termInput || !dayBoardingInput || !expectedInput ||
-        !admissionFeeInput || !uniformFeeInput || !parentContactInput) {
-        console.warn('Student payment form fields missing on this page');
-        return;
-    }
-
-    // If no student selected → clear fields and hide preview card
-    if (!option || !option.value) {
-        fullNameInput.value      = '';
-        statusInput.value        = '';
-        genderInput.value        = '';
-        classNameInput.value     = '';
-        termInput.value          = '';
-        dayBoardingInput.value   = '';
-        expectedInput.value      = '';
-        admissionFeeInput.value  = '';
-        uniformFeeInput.value    = '';
-        parentContactInput.value = '';
+    if (!selectedOption || !selectedOption.value) {
+        // Clear all fields if no student selected
+        document.getElementById('fullName').value = '';
+        document.getElementById('gender').value = '';
+        document.getElementById('className').value = '';
+        document.getElementById('dayBoarding').value = '';
+        document.getElementById('expectedTuition').value = '';
+        document.getElementById('admissionFee').value = '';
+        document.getElementById('uniformFee').value = '';
+        document.getElementById('parentContact').value = '';
+        document.getElementById('studentStatus').value = '';
+        document.getElementById('term').value = '';
         
         // Hide preview card
-        if (previewCard) {
-            previewCard.classList.remove('visible');
-        }
+        document.getElementById('studentPreviewCard').style.display = 'none';
         return;
     }
 
-    // Read data-* attributes from <option>
-    const firstName   = option.getAttribute('data-first')   || '';
-    const lastName    = option.getAttribute('data-last')    || '';
-    const gender      = option.getAttribute('data-gender')  || '';
-    const classId     = option.getAttribute('data-class')   || '';
-    const className   = option.getAttribute('data-class-name') || ''; // ADD THIS
-    const dayBoarding = option.getAttribute('data-boarding')|| '';
-    const admFee      = option.getAttribute('data-admission-fee') || '0';
-    const uniFee      = option.getAttribute('data-uniform-fee')   || '0';
-    const contact     = option.getAttribute('data-contact')       || '';
-    const status      = option.getAttribute('data-status')        || '';
+    // Get data from selected option
+    const firstName = selectedOption.dataset.first || '';
+    const classId = selectedOption.dataset.class;
+    const className = selectedOption.dataset.className || '';
+    const boarding = selectedOption.dataset.boarding || '';
+    const admissionFee = selectedOption.dataset.admissionFee || 0;
+    const uniformFee = selectedOption.dataset.uniformFee || 0;
+    const contact = selectedOption.dataset.contact || '';
+    const gender = selectedOption.dataset.gender || '';
+    const status = selectedOption.dataset.status || '';
 
-    const fullName = (firstName + ' ' + lastName).trim();
+    // FIX: Use only first_name
+    const fullName = firstName;
 
-    // Fill text fields
-    fullNameInput.value      = fullName;
-    statusInput.value        = status ? status.charAt(0).toUpperCase() + status.slice(1) : '';
-    genderInput.value        = gender;
-    classNameInput.value     = classId;
-    dayBoardingInput.value   = dayBoarding;
-    admissionFeeInput.value  = parseFloat(admFee || 0).toFixed(2);
-    uniformFeeInput.value    = parseFloat(uniFee || 0).toFixed(2);
-    parentContactInput.value = contact;
+    // Populate form fields
+    document.getElementById('fullName').value = fullName;
+    document.getElementById('gender').value = gender;
+    document.getElementById('className').value = className;
+    document.getElementById('dayBoarding').value = boarding;
+    document.getElementById('admissionFee').value = admissionFee;
+    document.getElementById('uniformFee').value = uniformFee;
+    document.getElementById('parentContact').value = contact;
+    document.getElementById('studentStatus').value = status === 'approved' ? 'Approved' : 'Pending Approval';
 
-    // Term: use server-provided currentTerm if available
-    const termValue = (typeof window.currentTerm === 'string' && window.currentTerm.length > 0) 
-        ? window.currentTerm 
-        : '';
-    termInput.value = termValue;
+    // Get expected tuition and term from window globals
+    const expectedTuition = window.classExpected && window.classExpected[classId] 
+        ? window.classExpected[classId] 
+        : 0;
+    const currentTerm = window.currentTerm || '';
 
-    // Expected tuition: look up by class_id from server-provided map
-    let expected = 0;
-    if (window.classExpected && classId && window.classExpected[classId] !== undefined) {
-        expected = parseFloat(window.classExpected[classId]) || 0;
-    }
-    expectedInput.value = expected.toFixed(2);
+    document.getElementById('expectedTuition').value = expectedTuition.toFixed(2);
+    document.getElementById('term').value = currentTerm;
 
-    // Populate preview card
-    if (previewCard && previewName && previewClass && previewTerm && previewDayBoarding && previewGender) {
-        previewName.textContent = fullName;
-        previewClass.textContent = className || getClassName(classId); // USE className first
-        previewTerm.textContent = termValue || 'N/A';
-        previewDayBoarding.textContent = dayBoarding;
-        previewGender.textContent = gender === 'Male' ? 'M' : 'F';
-        
-        // Show preview card with animation
-        previewCard.classList.add('visible');
-    }
+    // Update preview card
+    document.getElementById('previewStudentName').textContent = fullName;
+    document.getElementById('previewClass').textContent = className;
+    document.getElementById('previewTerm').textContent = currentTerm;
+    document.getElementById('previewDayBoarding').textContent = boarding;
+    document.getElementById('previewGender').textContent = gender;
+    
+    // Show preview card with animation
+    const previewCard = document.getElementById('studentPreviewCard');
+    previewCard.style.display = 'block';
+    setTimeout(() => {
+        previewCard.style.opacity = '1';
+        previewCard.style.transform = 'translateY(0)';
+    }, 10);
 }
 
 // Helper function to get class name from class ID
@@ -148,6 +115,45 @@ function setPaymentId(paymentId, balance) {
     if (amountField)  amountField.value = '';
 }
 
+// Load edit payment data into modal
+function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuition, studentName) {
+    const el = (selector) => document.getElementById(selector);
+    
+    if (!el('editPaymentId')) {
+        console.error('Edit Payment Modal not found on page');
+        return;
+    }
+    
+    el('editPaymentId').value = id;
+    el('editPaymentStudentName').textContent = studentName;
+    el('editPaymentExpected').value = parseFloat(expectedTuition).toFixed(2);
+    el('editPaymentAmountPaid').value = parseFloat(amountPaid).toFixed(2);
+    el('editPaymentAdmissionFee').value = parseFloat(admissionFee).toFixed(2);
+    el('editPaymentUniformFee').value = parseFloat(uniformFee).toFixed(2);
+    calculateEditBalance();
+}
+
+// Calculate new balance when amount paid changes
+function calculateEditBalance() {
+    const expectedField = document.getElementById('editPaymentExpected');
+    const paidField = document.getElementById('editPaymentAmountPaid');
+    const balanceField = document.getElementById('editPaymentNewBalance');
+    
+    if (!expectedField || !paidField || !balanceField) return;
+    
+    const expected = parseFloat(expectedField.value) || 0;
+    const paid = parseFloat(paidField.value) || 0;
+    const balance = expected - paid;
+    balanceField.value = balance.toFixed(2);
+
+    // Color the balance field
+    if (balance <= 0) {
+        balanceField.style.color = '#27ae60'; // green - paid
+    } else {
+        balanceField.style.color = '#e74c3c'; // red - outstanding
+    }
+}
+
 // Initialize behaviour on page load
 document.addEventListener('DOMContentLoaded', function () {
     const select = document.getElementById('studentSelect');
@@ -170,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!studentsLoaded) {
                 loadStudents();
             }
-        }, { once: false }); // Allow retry if first attempt fails
+        }, { once: false });
     }
 });
 
@@ -205,12 +211,14 @@ function loadStudents() {
             students.forEach(student => {
                 const option = document.createElement('option');
                 option.value = student.id;
-                option.textContent = `${student.first_name} ${student.last_name} (${student.admission_no})`;
+                
+                // FIX: Use only first_name (no last_name in your database)
+                option.textContent = `${student.first_name} (${student.admission_no})`;
                 
                 // Set data attributes
                 option.dataset.admission = student.admission_no;
                 option.dataset.first = student.first_name;
-                option.dataset.last = student.last_name;
+                option.dataset.last = ''; // No last_name field
                 option.dataset.gender = student.gender;
                 option.dataset.class = student.class_id;
                 option.dataset.className = student.class_name || 'N/A';
@@ -239,3 +247,28 @@ function loadStudents() {
             studentSelect.disabled = true;
         });
 }
+
+// Prevent double form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const paymentForm = document.getElementById('paymentForm');
+    
+    if (paymentForm) {
+        let isSubmitting = false;
+        
+        paymentForm.addEventListener('submit', function(e) {
+            if (isSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+            
+            // Disable submit button
+            const submitBtn = paymentForm.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Recording...';
+            }
+            
+            isSubmitting = true;
+        });
+    }
+});
