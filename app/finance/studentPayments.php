@@ -287,34 +287,32 @@ WHERE $filterWhere";
 $totalsResult = $mysqli->query($totalsQuery);
 $totals = $totalsResult->fetch_assoc();
 
-// Get approved students for dropdown - MODIFIED to NOT load on page load
-$approved_students = []; // Always empty on initial page load
-
-// Only load students when form is being submitted
-if (isset($_POST['record_payment'])) {
-    $approvedStudentsQuery = "SELECT 
-        id, admission_no, first_name, gender, class_id, day_boarding, 
-        admission_fee, uniform_fee, parent_contact, parent_email, status
-    FROM admit_students
-    WHERE status IN ('approved', 'unapproved')
-    ORDER BY first_name ASC";
-    
-    $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
-    
-    if (!$approvedStudentsResult) {
-        die("Database error: " . $mysqli->error);
-    }
-    
-    $approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
-}
-
-// Get current user role
+// Get current user role - MUST be before student loading
 $userRole = $_SESSION['role'] ?? '';
 $canRecordPayment = in_array($userRole, ['admin', 'bursar']);
 
+// Get approved students for dropdown - LOAD DIRECTLY
+$approved_students = [];
+if ($canRecordPayment) {
+    $approvedStudentsQuery = "SELECT 
+        s.id, s.admission_no, s.first_name, s.gender, s.class_id, 
+        s.day_boarding, s.admission_fee, s.uniform_fee, 
+        s.parent_contact, s.parent_email, s.status,
+        c.class_name
+    FROM admit_students s
+    LEFT JOIN classes c ON s.class_id = c.id
+    WHERE s.status IN ('approved', 'unapproved')
+    ORDER BY s.first_name ASC";
+    
+    $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
+    if ($approvedStudentsResult) {
+        $approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
+    }
+}
+
 // Build expected tuition per class from fee_structure (sum of all terms)
 $classExpected = [];
-$classNames = []; // ADD THIS - Map class IDs to class names
+$classNames = [];
 $classExpectedQuery = "SELECT fs.class_id, c.class_name, SUM(fs.amount) AS expected 
                        FROM fee_structure fs
                        LEFT JOIN classes c ON fs.class_id = c.id
@@ -323,7 +321,7 @@ $classExpectedResult = $mysqli->query($classExpectedQuery);
 if ($classExpectedResult) {
     while ($row = $classExpectedResult->fetch_assoc()) {
         $classExpected[(int)$row['class_id']] = (float)($row['expected'] ?? 0);
-        $classNames[(int)$row['class_id']] = $row['class_name'] ?? 'Unknown'; // ADD THIS
+        $classNames[(int)$row['class_id']] = $row['class_name'] ?? 'Unknown';
     }
 }
 
@@ -401,8 +399,23 @@ if ($currentTermResult) {
                 <div class="col-md-6">
                     <label class="form-label">Select Student</label>
                     <select name="student_id" id="studentSelect" class="form-control" required onchange="populateStudentData()">
-                        <option value="">-- Click to Load Students --</option>
-                        <!-- Students will be loaded via AJAX when dropdown is clicked -->
+                        <option value="">-- Select Student --</option>
+                        <?php foreach ($approved_students as $s): ?>
+                            <option value="<?= $s['id'] ?>"
+                                data-admission="<?= htmlspecialchars($s['admission_no']) ?>"
+                                data-first="<?= htmlspecialchars($s['first_name']) ?>"
+                                data-gender="<?= htmlspecialchars($s['gender']) ?>"
+                                data-class="<?= $s['class_id'] ?>"
+                                data-class-name="<?= htmlspecialchars($s['class_name'] ?? 'N/A') ?>"
+                                data-boarding="<?= htmlspecialchars($s['day_boarding']) ?>"
+                                data-admission-fee="<?= $s['admission_fee'] ?>"
+                                data-uniform-fee="<?= $s['uniform_fee'] ?>"
+                                data-contact="<?= htmlspecialchars($s['parent_contact']) ?>"
+                                data-email="<?= htmlspecialchars($s['parent_email'] ?? '') ?>"
+                                data-status="<?= htmlspecialchars($s['status']) ?>">
+                                <?= htmlspecialchars($s['first_name']) ?> (<?= htmlspecialchars($s['admission_no']) ?>)<?= $s['status'] === 'unapproved' ? ' ● Pending' : '' ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
                     <small class="text-muted d-block mt-2">
                         <i class="bi bi-info-circle"></i> You can record payments for both approved and unapproved students
@@ -909,14 +922,13 @@ if ($currentTermResult) {
 
 <!-- Expose expected tuition map + current term to JS -->
 <script>
-// filepath: d:\xamp\htdocs\SchoolSystem\app\finance\studentPayments.php (inline JS config)
 window.classExpected = <?= json_encode($classExpected, JSON_NUMERIC_CHECK) ?>;
-window.classNames = <?= json_encode($classNames) ?>; // ADD THIS
-window.currentTerm   = <?= json_encode($currentTerm) ?>;
+window.classNames = <?= json_encode($classNames) ?>;
+window.currentTerm = <?= json_encode($currentTerm) ?>;
 </script>
 
 <link rel="stylesheet" href="../../assets/css/studentPayments.css">
 <link rel="stylesheet" href="../../assets/css/studentPreviewCard.css">
-<script src="../../assets/js/studentPayments.js?v=4"></script>
+<script src="../../assets/js/studentPayments.js?v=6"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>
