@@ -395,6 +395,7 @@ if ($currentTermResult) {
             <?php endif; ?>
             
             <form method="POST" id="paymentForm" class="row g-3">
+                <input type="hidden" name="record_payment" value="1">
                 <!-- Student Selection -->
                 <div class="col-md-6">
                     <label class="form-label">Select Student</label>
