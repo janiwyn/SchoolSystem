@@ -59,6 +59,78 @@ if (
     }
 }
 
+// Handle ADD PAYMENT (Top-up) - Admin, Bursar, Principal (if allowed)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
+    $payment_id = intval($_POST['payment_id']);
+    $additional_amount = floatval($_POST['additional_amount']);
+    
+    if ($payment_id > 0 && $additional_amount > 0) {
+        $mysqli->begin_transaction();
+        try {
+            // Get current payment details
+            $stmt = $mysqli->prepare("SELECT student_id, amount_paid, expected_tuition, balance, status_approved FROM student_payments WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("i", $payment_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                
+                if ($row = $res->fetch_assoc()) {
+                    $student_id = $row['student_id'];
+                    $original_balance = $row['balance'];
+                    $current_paid = $row['amount_paid'];
+                    $previous_status = $row['status_approved'];
+                    
+                    // Validation: Ensure we don't overpay (optional, but good practice)
+                    if ($additional_amount > $original_balance + 0.01) { // small buffer for float precision
+                         throw new Exception("Amount exceeds remaining balance.");
+                    }
+                    
+                    $new_amount_paid = $current_paid + $additional_amount;
+                    $new_balance = $original_balance - $additional_amount;
+                    if ($new_balance < 0) $new_balance = 0;
+                    
+                    // 1. Insert into student_payment_topups
+                    $topupSql = "INSERT INTO student_payment_topups (payment_id, student_id, topup_amount, original_balance, new_balance, previous_status, status_approved, created_at) VALUES (?, ?, ?, ?, ?, ?, 'unapproved', NOW())";
+                    $topupStmt = $mysqli->prepare($topupSql);
+                    if ($topupStmt) {
+                        $topupStmt->bind_param("iiddds", $payment_id, $student_id, $additional_amount, $original_balance, $new_balance, $previous_status);
+                        if (!$topupStmt->execute()) {
+                            throw new Exception("Failed to record top-up: " . $topupStmt->error);
+                        }
+                        $topupStmt->close();
+                        
+                        // 2. Update student_payments
+                        // Mark as unapproved so it shows in pending requests
+                        $updateSql = "UPDATE student_payments SET amount_paid = ?, balance = ?, status_approved = 'unapproved' WHERE id = ?";
+                        $updateStmt = $mysqli->prepare($updateSql);
+                        if ($updateStmt) {
+                            $updateStmt->bind_param("ddi", $new_amount_paid, $new_balance, $payment_id);
+                            if (!$updateStmt->execute()) {
+                                throw new Exception("Failed to update payment record: " . $updateStmt->error);
+                            }
+                            $updateStmt->close();
+                            
+                            $mysqli->commit();
+                            header("Location: studentPayments.php?success=1");
+                            exit();
+                        }
+                    } else {
+                         throw new Exception("Database error (prepare topup): " . $mysqli->error);
+                    }
+                } else {
+                    throw new Exception("Payment record not found.");
+                }
+                $stmt->close();
+            }
+        } catch (Throwable $e) {
+            $mysqli->rollback();
+            $error = "Error: " . $e->getMessage();
+        }
+    } else {
+        $error = "Invalid payment ID or amount.";
+    }
+}
+
 // Handle EDIT payment record (Admin, Bursar, Principal)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record'])) {
     $edit_id = intval($_POST['edit_payment_id']);
@@ -263,7 +335,7 @@ $paymentsQuery = "SELECT
     parent_contact, payment_date, created_at, status_approved
 FROM student_payments
 WHERE $filterWhere
-ORDER BY admission_no ASC
+ORDER BY payment_date DESC, id DESC
 LIMIT $offset, $records_per_page";
 
 $paymentsResult = $mysqli->query($paymentsQuery);
