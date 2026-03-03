@@ -204,6 +204,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
         $error = "All fields are required";
     } elseif ($amount_paid < 0) {
         $error = "Amount cannot be negative";
+    } elseif ($payment_date > date('Y-m-d')) {
+        $error = "Payment date cannot be in the future. Today is " . date('Y-m-d') . ".";
     } else {
         // NEW: Check for duplicate payment (same student, term, date, amount)
         $duplicateCheck = $mysqli->prepare("SELECT id FROM student_payments 
