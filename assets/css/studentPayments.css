@@ -25,6 +25,9 @@
 
 .table-container {
     overflow-x: auto;
+    max-height: 75vh;
+    overflow-y: auto;
+    position: relative;
 }
 
 .table {
@@ -33,6 +36,9 @@
 }
 
 .table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
     background-color: #17a2b8;
     color: white;
     font-weight: 600;
@@ -41,6 +47,7 @@
     text-transform: uppercase;
     font-size: 11px;
     letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .table tbody td {
@@ -418,4 +425,20 @@
 .action-buttons form {
     margin: 0;
     padding: 0;
+}
+
+/* Sticky table header for student payments table */
+.table-container {
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.student-payments-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: #17a2b8;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }

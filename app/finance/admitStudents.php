@@ -484,7 +484,7 @@ $totals = $totalsResult->fetch_assoc();
 $userRole = $_SESSION['role'] ?? '';
 $canAdmitStudent = in_array($userRole, ['admin', 'principal']);
 $canEditStudent = in_array($userRole, ['admin', 'principal', 'bursar']); // NEW: Bursar can edit
-$canDeleteStudent = in_array($userRole, ['admin', 'principal']); // NEW: Bursar cannot delete
+$canDeleteStudent = ($userRole === 'admin'); // Only admin can delete
 ?>
 
 <!DOCTYPE html>
@@ -931,10 +931,10 @@ $canDeleteStudent = in_array($userRole, ['admin', 'principal']); // NEW: Bursar 
                 <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
                 <h5 class="mb-3">Cannot Delete Students</h5>
                 <p class="text-muted mb-0">
-                    Only <strong>Admin</strong> and <strong>Principal</strong> have permission to delete student records.
+                    Only <strong>Admin</strong> has permission to delete student records.
                 </p>
                 <p class="text-muted mt-2">
-                    As a <strong class="text-primary">Bursar</strong>, you can view and edit student records but cannot delete them.
+                    As a <strong class="text-primary"><?= htmlspecialchars(ucfirst($userRole)) ?></strong>, you can view and edit student records but cannot delete them.
                 </p>
             </div>
             <div class="modal-footer">

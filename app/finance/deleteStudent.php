@@ -4,6 +4,12 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['admin', 'principal']);
 
+// Only admin can delete students
+if (isset($_SESSION['role']) && $_SESSION['role'] !== 'admin') {
+    header("Location: admitStudents.php?error=1");
+    exit();
+}
+
 // Re-sequence admission_no to 1..N and propagate to related tables
 function resequenceAdmissionNumbers(mysqli $mysqli) {
     // Get all students ordered by current admission_no (numeric)
