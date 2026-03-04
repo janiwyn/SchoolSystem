@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payroll'])) {
                 $updExpense->close();
 
                 $mysqli->commit();
-                header("Location: payroll.php?updated=1");
+                header("Location: payroll.php?payroll_updated=1");
                 exit();
             } catch (Throwable $e) {
                 $mysqli->rollback();
@@ -105,7 +105,7 @@ if (
                 $delExpense->close();
                 
                 $mysqli->commit();
-                header("Location: payroll.php?deleted=1");
+                header("Location: payroll.php?payroll_deleted=1");
                 exit();
             } catch (Throwable $e) {
                 $mysqli->rollback();
@@ -166,7 +166,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_payroll'])) {
                 $updExpense->close();
 
                 $mysqli->commit();
-                header("Location: payroll.php?paid=1");
+                
+                // Redirect with amount and name for custom toast message
+                header("Location: payroll.php?salary_paid=1&amount=" . number_format($payment_amount, 2) . "&name=" . urlencode($payroll['name']));
                 exit();
             } catch (Throwable $e) {
                 $mysqli->rollback();
@@ -233,7 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
                         if ($expenseStmt->execute()) {
                             $expenseStmt->close();
                             $mysqli->commit();
-                            header("Location: payroll.php?success=1");
+                            header("Location: payroll.php?payroll_added=1");
                             exit();
                         } else {
                             throw new Exception("Error recording expense: " . $expenseStmt->error);
@@ -262,19 +264,9 @@ $isAdmin = strtolower($userRole) === 'admin';
 // Include layout AFTER header operations
 require_once __DIR__ . '/../helper/layout.php';
 
-// Show success message if redirected
-if (isset($_GET['success']) && $_GET['success'] == 1) {
-    $message = "Payroll recorded successfully! It has been automatically added to the Salaries expenses.";
-} elseif (isset($_GET['deleted']) && $_GET['deleted'] == 1) {
-    $message = "Payroll record deleted successfully (also removed from Salaries expenses).";
-} elseif (isset($_GET['updated']) && $_GET['updated'] == 1) {
-    $message = "Payroll record updated successfully (also updated in Salaries expenses).";
-} elseif (isset($_GET['paid']) && $_GET['paid'] == 1) {
-    $message = "Salary payment recorded successfully!";
-} elseif (isset($_GET['error']) && $_GET['error'] == 'overpayment') {
+// Keep only error messages inline
+if (!empty($error)) {
     $error = "Payment amount exceeds remaining balance.";
-} elseif (isset($_GET['error']) && $_GET['error'] == 'pay_failed') {
-    $error = "Payment failed. Please try again.";
 }
 
 // Build filter query
@@ -473,30 +465,11 @@ $departments = $departmentsResult->fetch_all(MYSQLI_ASSOC);
     </div>
 </div>
 
-<!-- Show success/error messages -->
-<?php if (isset($_GET['success']) && $_GET['success'] == 1): ?>
-    <div class="alert alert-success">
-        <i class="bi bi-check-circle"></i> Payroll recorded successfully! It has been automatically added to the Salaries expenses.
-    </div>
-<?php elseif (isset($_GET['deleted']) && $_GET['deleted'] == 1): ?>
-    <div class="alert alert-success">
-        <i class="bi bi-check-circle"></i> Payroll record deleted successfully (also removed from Salaries expenses).
-    </div>
-<?php elseif (isset($_GET['updated']) && $_GET['updated'] == 1): ?>
-    <div class="alert alert-success">
-        <i class="bi bi-check-circle"></i> Payroll record updated successfully (also updated in Salaries expenses).
-    </div>
-<?php elseif (isset($_GET['paid']) && $_GET['paid'] == 1): ?>
-    <div class="alert alert-success">
-        <i class="bi bi-check-circle"></i> Salary payment recorded successfully!
-    </div>
-<?php elseif (isset($_GET['error']) && $_GET['error'] == 'overpayment'): ?>
-    <div class="alert alert-danger">
-        <i class="bi bi-exclamation-circle"></i> Payment amount exceeds remaining balance.
-    </div>
-<?php elseif (isset($_GET['error']) && $_GET['error'] == 'pay_failed'): ?>
-    <div class="alert alert-danger">
-        <i class="bi bi-exclamation-circle"></i> Payment failed. Please try again.
+<!-- Keep only error messages inline -->
+<?php if (!empty($error)): ?>
+    <div class="alert alert-danger alert-sm">
+        <i class="bi bi-exclamation-circle"></i>
+        <?= htmlspecialchars($error) ?>
     </div>
 <?php endif; ?>
 

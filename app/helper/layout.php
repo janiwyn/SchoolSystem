@@ -58,6 +58,8 @@ if ($justLoggedIn) {
     <?php elseif ($title === "School Calendar"): ?>
         <link rel="stylesheet" href="../../assets/css/calendar.css">
     <?php endif; ?>
+    <!-- Toast Notifications -->
+    <link rel="stylesheet" href="../../assets/css/toast-notifications.css">
 </head>
 <body>
 
@@ -126,3 +128,186 @@ if ($justLoggedIn) {
 
 
     <div class="container mt-4">
+
+    <!-- Toast Container (add right before closing </body>) -->
+    <div class="toast-container"></div>
+    
+    <!-- Toast Notifications JS (add before closing </body>) -->
+    <script src="../../assets/js/toast-notifications.js"></script>
+    
+    <?php
+    // Convert PHP messages to toast notifications
+    if (isset($message) && !empty($message)) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('" . addslashes($message) . "', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($error) && !empty($error)) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('" . addslashes($error) . "', 'error', 5000);
+            });
+        </script>";
+    }
+    
+    // Handle URL parameters for success/error messages
+    if (isset($_GET['success']) && $_GET['success'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Operation completed successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['error']) && $_GET['error'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('An error occurred. Please try again.', 'error', 5000);
+            });
+        </script>";
+    }
+    
+    // Student Payment Recorded
+    if (isset($_GET['payment_recorded']) && $_GET['payment_recorded'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Student payment recorded successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    // Student Admitted
+    if (isset($_GET['student_admitted']) && $_GET['student_admitted'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Student admitted successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    // Student Edited
+    if (isset($_GET['student_updated']) && $_GET['student_updated'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Student information updated successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    // Expense Added
+    if (isset($_GET['expense_added']) && $_GET['expense_added'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Expense recorded successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    // Expense deletion success messages
+    if (isset($_GET['exp_deleted']) && $_GET['exp_deleted'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Expense record deleted successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['bulk_deleted']) && is_numeric($_GET['bulk_deleted'])) {
+        $count = intval($_GET['bulk_deleted']);
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('{$count} expense record(s) deleted successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    // Balance Top-up
+    if (isset($_GET['topup_success']) && $_GET['topup_success'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Balance top-up added successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])) {
+        $count = intval($_GET['deleted']);
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('{$count} record(s) deleted successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['updated']) && $_GET['updated'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Record updated successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['corrected']) && $_GET['corrected'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Payment record corrected successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['approved']) && $_GET['approved'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Record approved successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['rejected']) && $_GET['rejected'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Record rejected successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    // Payroll-specific success messages
+    if (isset($_GET['payroll_added']) && $_GET['payroll_added'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Payroll added successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['payroll_updated']) && $_GET['payroll_updated'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Payroll record updated successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['payroll_deleted']) && $_GET['payroll_deleted'] == 1) {
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('Payroll record deleted successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    
+    if (isset($_GET['salary_paid']) && isset($_GET['amount']) && isset($_GET['name'])) {
+        $amount = htmlspecialchars($_GET['amount']);
+        $name = htmlspecialchars($_GET['name']);
+        echo "<script>
+            document.addEventListener('DOMContentLoaded', function() {
+                showToast('$" . addslashes($amount) . " paid to " . addslashes($name) . " successfully!', 'success', 5000);
+            });
+        </script>";
+    }
+    ?>
+</body>
+</html>

@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_expense'])) {
         if ($stmt) {
             $stmt->bind_param("ssddddsi", $finalCategory, $item, $quantity, $unit_price, $expected, $amount, $date, $user_id);
             if ($stmt->execute()) {
-                header("Location: expenses.php?success=1&tab=" . strtolower($finalCategory));
+                header("Location: expenses.php?expense_added=1&tab=" . strtolower($finalCategory));
                 exit();
             } else {
                 $error = "Error recording expense: " . $stmt->error;
@@ -393,20 +393,23 @@ $canRecordExpense = in_array($userRole, ['admin', 'bursar']);
 </div>
 
 <!-- Success Message for Deleted Records -->
-<?php if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
+<?php /* REMOVED - toast will handle this
+if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
     <div class="alert alert-success alert-sm">
         <i class="bi bi-check-circle"></i>
         <?= (int)$_GET['deleted'] ?> expense record(s) deleted successfully.
     </div>
-<?php endif; ?>
+<?php endif;
+*/ ?>
 
-<!-- Success alert for single‑row delete -->
+<!-- REMOVED - toast will handle this
 <?php if (isset($_GET['exp_deleted']) && $_GET['exp_deleted'] == 1): ?>
     <div class="alert alert-success alert-sm">
         <i class="bi bi-check-circle"></i>
         Expense record deleted successfully.
     </div>
 <?php endif; ?>
+-->
 
 <!-- Expenses Table -->
 <div class="card shadow-sm border-0">

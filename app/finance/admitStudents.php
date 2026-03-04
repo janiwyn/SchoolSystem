@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admit_student'])) {
                         );
                         
                         if ($stmt->execute()) {
-                            header("Location: admitStudents.php?success=1&day_boarding=" . urlencode($day_boarding));
+                            header("Location: admitStudents.php?student_admitted=1&day_boarding=" . urlencode($day_boarding));
                             exit();
                         } else {
                             $error = "Error admitting student: " . $stmt->error;
@@ -363,7 +363,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_student'])) {
                 }
             }
 
-            header("Location: admitStudents.php?updated=1");
+            header("Location: admitStudents.php?student_updated=1");
             exit();
             
         } catch (Throwable $e) {

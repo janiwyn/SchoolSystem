@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
                             $updateStmt->close();
                             
                             $mysqli->commit();
-                            header("Location: studentPayments.php?success=1");
+                            header("Location: studentPayments.php?topup_success=1");
                             exit();
                         }
                     } else {
@@ -155,6 +155,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
             $updateStmt->bind_param("ddddsi", $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $new_status, $edit_id);
 
             if ($updateStmt->execute()) {
+                $updateStmt->close();
+                $mysqli->commit();
                 header("Location: studentPayments.php?corrected=1");
                 exit();
             }
@@ -266,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
                         $student['parent_contact'], $student['parent_email'], $payment_date, $user_id);
                     
                     if ($insertStmt->execute()) {
-                        header("Location: studentPayments.php?success=1");
+                        header("Location: studentPayments.php?payment_recorded=1");
                         exit();
                     } else {
                         $error = "Error recording payment: " . $insertStmt->error;
@@ -461,13 +463,6 @@ if ($currentTermResult) {
             <h5 class="mb-0">Record Student Payment</h5>
         </div>
         <div class="card-body">
-            <?php if (!empty($message)): ?>
-                <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
-            <?php endif; ?>
-            <?php if (!empty($error)): ?>
-                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-            <?php endif; ?>
-            
             <form method="POST" id="paymentForm" class="row g-3">
                 <input type="hidden" name="record_payment" value="1">
                 <!-- Student Selection -->
@@ -638,14 +633,6 @@ if ($currentTermResult) {
         </form>
     </div>
 </div>
-
-<!-- Success Alert for Deleted Payments -->
-<?php if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
-    <div class="alert alert-success alert-sm">
-        <i class="bi bi-check-circle"></i>
-        <?= (int)$_GET['deleted'] ?> payment record(s) deleted successfully.
-    </div>
-<?php endif; ?>
 
 <!-- Payment Records Table -->
 <div class="card shadow-sm border-0">
