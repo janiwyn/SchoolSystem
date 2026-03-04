@@ -241,6 +241,32 @@
     vertical-align: middle;
 }
 
+/* Totals Row Colors */
+.table-totals .totals-expected {
+    color: #e74c3c;
+    font-weight: 700;
+}
+
+.table-totals .totals-paid {
+    color: #e67e22;
+    font-weight: 700;
+}
+
+.table-totals .totals-balance {
+    color: #e74c3c;
+    font-weight: 700;
+}
+
+.table-totals .totals-admission {
+    color: #27ae60;
+    font-weight: 700;
+}
+
+.table-totals .totals-uniform {
+    color: #2980b9;
+    font-weight: 700;
+}
+
 .totals-expected-tuition {
     color: #4a7c4e !important;
     font-weight: 700;

@@ -760,13 +760,13 @@ if ($currentTermResult) {
                         
                         <!-- Totals Row -->
                         <tr class="table-totals">
-                            <td colspan="6" class="text-end fw-bold">TOTALS:</td>
-                            <td class="totals-expected-tuition"><?= number_format($totals['total_tuition'] ?? 0, 2) ?></td>
-                            <td class="totals-amount-paid"><?= number_format($totals['total_paid'] ?? 0, 2) ?></td>
+                            <td colspan="5" class="text-end fw-bold">TOTALS:</td>
+                            <td class="totals-expected"><?= number_format($totals['total_tuition'] ?? 0, 2) ?></td>
+                            <td class="totals-paid"><?= number_format($totals['total_paid'] ?? 0, 2) ?></td>
                             <td class="totals-balance"><?= number_format($totals['total_balance'] ?? 0, 2) ?></td>
-                            <td class="totals-admission-fee"><?= number_format($totals['total_admission'] ?? 0, 2) ?></td>
-                            <td class="totals-uniform-fee"><?= number_format($totals['total_uniform'] ?? 0, 2) ?></td>
-                            <td colspan="7"></td>
+                            <td class="totals-admission"><?= number_format($totals['total_admission'] ?? 0, 2) ?></td>
+                            <td class="totals-uniform"><?= number_format($totals['total_uniform'] ?? 0, 2) ?></td>
+                            <td colspan="4"></td>
                         </tr>
                     </tbody>
                 </table>
