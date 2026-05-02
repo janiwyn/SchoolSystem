@@ -295,14 +295,15 @@ $filterWhere = "1=1";
 $search_filter = $_GET['search'] ?? '';
 $class_filter = $_GET['class'] ?? '';
 $term_filter = $_GET['term'] ?? '';
-$status_filter = $_GET['status'] ?? '';
+$approval_filter = $_GET['approval'] ?? ''; // Standardized to match form
+$pay_status_filter = $_GET['pay_status'] ?? ''; // Standardized to match form
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
-$sort_order = $_GET['sort'] ?? 'ASC'; // Changed default to ASC (ascending order)
+$sort_order = $_GET['sort'] ?? 'ASC';
 
 if ($search_filter) {
     $searchTerm = '%' . $mysqli->real_escape_string($search_filter) . '%';
-    $filterWhere .= " AND (full_name LIKE '$searchTerm')";
+    $filterWhere .= " AND (full_name LIKE '$searchTerm' OR admission_no LIKE '$searchTerm')";
 }
 if ($date_from) {
     $filterWhere .= " AND DATE(payment_date) >= '" . $mysqli->real_escape_string($date_from) . "'";
@@ -313,8 +314,15 @@ if ($date_to) {
 if ($term_filter) {
     $filterWhere .= " AND term = '" . $mysqli->real_escape_string($term_filter) . "'";
 }
-if ($status_filter) {
-    $filterWhere .= " AND status_approved = '" . $mysqli->real_escape_string($status_filter) . "'";
+if ($approval_filter) {
+    $filterWhere .= " AND status_approved = '" . $mysqli->real_escape_string($approval_filter) . "'";
+}
+if ($pay_status_filter) {
+    if ($pay_status_filter === 'paid') {
+        $filterWhere .= " AND balance <= 0";
+    } elseif ($pay_status_filter === 'unpaid') {
+        $filterWhere .= " AND balance > 0";
+    }
 }
 if ($class_filter) {
     $filterWhere .= " AND class_id = '" . intval($class_filter) . "'";
@@ -348,7 +356,12 @@ $payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
 // Get unique terms for filter
 $termsQuery = "SELECT DISTINCT term FROM student_payments ORDER BY term ASC";
 $termsResult = $mysqli->query($termsQuery);
-$terms = $termsResult->fetch_all(MYSQLI_ASSOC);
+$terms = $termsResult ? $termsResult->fetch_all(MYSQLI_ASSOC) : [];
+
+// Get classes for filter
+$classesQuery = "SELECT id, class_name FROM classes ORDER BY class_name ASC";
+$classesResult = $mysqli->query($classesQuery);
+$all_classes = $classesResult ? $classesResult->fetch_all(MYSQLI_ASSOC) : [];
 
 // Calculate totals for all payments (not just current page)
 $totalsQuery = "SELECT 
@@ -602,6 +615,18 @@ if ($currentTermResult) {
                 </div>
 
                 <div class="filter-group">
+                    <label>Class</label>
+                    <select name="class" class="form-control">
+                        <option value="">All Classes</option>
+                        <?php foreach ($all_classes as $c): ?>
+                            <option value="<?= $c['id'] ?>" <?= (int)$class_filter === (int)$c['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($c['class_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="filter-group">
                     <label>Approval</label>
                     <select name="approval" class="form-control">
                         <option value="">All Status</option>
@@ -765,7 +790,7 @@ if ($currentTermResult) {
                     <ul class="pagination justify-content-center">
                         <!-- Previous Button -->
                         <li class="page-item <?= $current_page <= 1 ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>" aria-label="Previous">
+                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : ''); ?>" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
@@ -777,7 +802,7 @@ if ($currentTermResult) {
 
                         if ($start_page > 1): ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>">1</a>
+                                <a class="page-link" href="?page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : ''); ?>">1</a>
                             </li>
                             <?php if ($start_page > 2): ?>
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -786,7 +811,7 @@ if ($currentTermResult) {
 
                         <?php for ($page = $start_page; $page <= $end_page; $page++): ?>
                             <li class="page-item <?= $page === $current_page ? 'active' : '' ?>">
-                                <a class="page-link" href="?page=<?= $page ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>">
+                                <a class="page-link" href="?page=<?= $page ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : ''); ?>">
                                     <?= $page ?>
                                 </a>
                             </li>
@@ -797,13 +822,13 @@ if ($currentTermResult) {
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             <?php endif; ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>"><?= $total_pages ?></a>
+                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : ''); ?>"><?= $total_pages ?></a>
                             </li>
                         <?php endif; ?>
 
                         <!-- Next Button -->
                         <li class="page-item <?= $current_page >= $total_pages ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . $approval_filter : '') . ($pay_status_filter ? '&pay_status=' . $pay_status_filter : ''); ?>" aria-label="Next">
+                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : ''); ?>" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
