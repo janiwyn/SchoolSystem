@@ -8,25 +8,22 @@ $usersQuery = "SELECT COUNT(*) as total FROM users WHERE status = 1";
 $usersResult = $mysqli->query($usersQuery);
 $totalUsers = $usersResult->fetch_assoc()['total'] ?? 0;
 
-// Total Admitted Students
-$studentsQuery = "SELECT COUNT(*) as total FROM admit_students WHERE status = 'approved'";
+// 1. Total Admitted Students (Total records in the payment table)
+$studentsQuery = "SELECT COUNT(*) as total FROM student_payments";
 $studentsResult = $mysqli->query($studentsQuery);
 $totalStudents = $studentsResult->fetch_assoc()['total'] ?? 0;
 
-// Total Expected Tuition (from admit_students)
-$expectedQuery = "SELECT SUM(expected_tuition) as total FROM admit_students WHERE status = 'approved'";
+// 2. Total Expected Tuition (Total of expected_tuition column in payment table)
+$expectedQuery = "SELECT SUM(expected_tuition) as total FROM student_payments";
 $expectedResult = $mysqli->query($expectedQuery);
 $totalExpected = $expectedResult ? (float)($expectedResult->fetch_assoc()['total'] ?? 0) : 0;
 
-// Total Tuition Collected
-$tuitionBaseQuery = "SELECT SUM(amount_paid) as total FROM student_payments"; // removed status filter
+// 3. Total Tuition Collected (Total of all payments made)
+$tuitionBaseQuery = "SELECT SUM(amount_paid) as total FROM student_payments";
 $tuitionBaseResult = $mysqli->query($tuitionBaseQuery);
-$baseTuition = $tuitionBaseResult ? (float)($tuitionBaseResult->fetch_assoc()['total'] ?? 0) : 0;
+$totalTuition = $tuitionBaseResult ? (float)($tuitionBaseResult->fetch_assoc()['total'] ?? 0) : 0;
 
-// Only use amount_paid from student_payments
-$totalTuition = $baseTuition;
-
-// Tuition Balance
+// 4. Tuition Balance (Expected - Collected)
 $tuitionBalance = $totalExpected - $totalTuition;
 
 // Pending Approvals
