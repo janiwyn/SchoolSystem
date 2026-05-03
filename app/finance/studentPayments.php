@@ -5,6 +5,15 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['bursar', 'admin', 'principal']);
 
+// Helper to generate next serial number for new admissions
+function generateSerialNumber($mysqli) {
+    $query = "SELECT MAX(CAST(admission_no AS UNSIGNED)) as max_sn FROM admit_students";
+    $result = $mysqli->query($query);
+    $row = $result->fetch_assoc();
+    $nextSN = ($row['max_sn'] ?? 0) + 1;
+    return $nextSN;
+}
+
 // ADMIN‑ONLY: bulk delete payments by date range
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST'
@@ -193,89 +202,129 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_single_payment
     }
 }
 
-// Handle payment recording
+// Handle payment recording (Admit & Pay)
 $message = '';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
-    $student_id = intval($_POST['student_id']);
-    $amount_paid = floatval($_POST['amount_paid']);
-    $payment_date = trim($_POST['payment_date']);
-    $term = trim($_POST['term']);
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+    $full_name = trim($_POST['full_name'] ?? '');
+    $amount_paid = floatval($_POST['amount_paid'] ?? 0);
+    $payment_date = trim($_POST['payment_date'] ?? '');
+    $term = trim($_POST['term'] ?? '');
     
-    if (!$student_id || !$payment_date || !$term) {
-        $error = "All fields are required";
+    // Additional fields for new admission
+    $gender = trim($_POST['gender'] ?? '');
+    $class_id = intval($_POST['class_id'] ?? 0);
+    $day_boarding = trim($_POST['day_boarding'] ?? '');
+    $admission_fee = floatval($_POST['admission_fee'] ?? 0);
+    $uniform_fee = floatval($_POST['uniform_fee'] ?? 0);
+    $expected_tuition = floatval($_POST['expected_tuition'] ?? 0);
+    $parent_contact = trim($_POST['parent_contact'] ?? '');
+    $parent_email = trim($_POST['parent_email'] ?? '');
+    
+    if (!$full_name || !$payment_date || !$term || !$gender || !$class_id || !$day_boarding) {
+        $error = "All required fields must be filled (Name, Gender, Class, Day/Boarding, Term, Date)";
     } elseif ($amount_paid < 0) {
         $error = "Amount cannot be negative";
     } elseif ($payment_date > date('Y-m-d')) {
-        $error = "Payment date cannot be in the future. Today is " . date('Y-m-d') . ".";
+        $error = "Payment date cannot be in the future.";
     } else {
-        // NEW: Check for duplicate payment (same student, term, date, amount)
-        $duplicateCheck = $mysqli->prepare("SELECT id FROM student_payments 
-            WHERE student_id = ? 
-            AND term = ? 
-            AND payment_date = ? 
-            AND amount_paid = ? 
-            LIMIT 1");
-        $duplicateCheck->bind_param("issd", $student_id, $term, $payment_date, $amount_paid);
-        $duplicateCheck->execute();
-        $duplicateResult = $duplicateCheck->get_result();
-        
-        if ($duplicateResult->num_rows > 0) {
-            $error = "Duplicate payment detected! This student already has a payment record for $term on $payment_date with the same amount.";
-            $duplicateCheck->close();
-        } else {
-            $duplicateCheck->close();
-            
-            // Get student info
-            $studentStmt = $mysqli->prepare("SELECT admission_no, first_name, last_name, gender, class_id, day_boarding, parent_contact, parent_email FROM admit_students WHERE id = ?");
-            $studentStmt->bind_param("i", $student_id);
-            $studentStmt->execute();
-            $studentResult = $studentStmt->get_result();
-            
-            if ($studentResult->num_rows === 0) {
-                $error = "Student not found";
-            } else {
-                $student = $studentResult->fetch_assoc();
-                $studentStmt->close();
-                
-                // Get class and tuition info
-                $classStmt = $mysqli->prepare("SELECT class_name FROM classes WHERE id = ?");
-                $classStmt->bind_param("i", $student['class_id']);
-                $classStmt->execute();
-                $classResult = $classStmt->get_result();
-                $classRow = $classResult->fetch_assoc();
-                $classStmt->close();
-                
-                $user_id = $_SESSION['user_id'];
-                
-                // Insert payment record
-                $insertStmt = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-                
-                if ($insertStmt) {
-                    $full_name = $student['first_name'] . ' ' . $student['last_name'];
-                    $expected_tuition = floatval($_POST['expected_tuition']);
-                    $balance = $expected_tuition - $amount_paid;
-                    $admission_fee = floatval($_POST['admission_fee']);
-                    $uniform_fee = floatval($_POST['uniform_fee']);
-                    $class_name = $classRow['class_name'];
-                    
-                    // Fixed type string: 17 variables = issssissdddddssi
-                    // i=student_id, s=admission_no, s=full_name, s=day_boarding, s=gender, i=class_id, s=class_name, s=term, d=expected_tuition, d=amount_paid, d=balance, d=admission_fee, d=uniform_fee, s=parent_contact, s=parent_email, s=payment_date, i=recorded_by
-                    $insertStmt->bind_param("issssissdddddsssi", 
-                        $student_id, $student['admission_no'], $full_name, $student['day_boarding'], 
-                        $student['gender'], $student['class_id'], $class_name, $term, $expected_tuition, 
-                        $amount_paid, $balance, $admission_fee, $uniform_fee, 
-                        $student['parent_contact'], $student['parent_email'], $payment_date, $user_id);
-                    
-                    if ($insertStmt->execute()) {
-                        header("Location: studentPayments.php?payment_recorded=1");
-                        exit();
-                    } else {
-                        $error = "Error recording payment: " . $insertStmt->error;
-                    }
-                    $insertStmt->close();
+        $mysqli->begin_transaction();
+        try {
+            // 1. If student_id is 0, this is a new admission
+            if ($student_id === 0) {
+                // GLOBAL CHECK: Check if student with same name already exists anywhere in the school
+                $checkStmt = $mysqli->prepare("SELECT id FROM admit_students WHERE first_name = ?");
+                $checkStmt->bind_param("s", $full_name);
+                $checkStmt->execute();
+                if ($checkStmt->get_result()->num_rows > 0) {
+                    throw new Exception("A student named '$full_name' is already registered in the school. Please select them from the list instead of creating a new admission.");
                 }
+                $checkStmt->close();
+
+                // Admit student
+                $admission_no = generateSerialNumber($mysqli);
+                $status = 'approved';
+                $user_id = $_SESSION['user_id'];
+
+                $admitStmt = $mysqli->prepare(
+                    "INSERT INTO admit_students 
+                        (admission_no, first_name, gender, class_id, day_boarding, 
+                         admission_fee, uniform_fee, expected_tuition, parent_contact, 
+                         parent_email, status, created_by, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                );
+                
+                if (!$admitStmt) {
+                    throw new Exception("Database prepare error: " . $mysqli->error);
+                }
+
+                // s,s,s,i,s,d,d,d,s,s,s,i  => "sssisdddsssi"
+                $admitStmt->bind_param("sssisdddsssi", 
+                    $admission_no, $full_name, $gender, $class_id, $day_boarding,
+                    $admission_fee, $uniform_fee, $expected_tuition, $parent_contact,
+                    $parent_email, $status, $user_id);
+                
+                if (!$admitStmt->execute()) {
+                    throw new Exception("Error admitting student: " . $admitStmt->error);
+                }
+                $student_id = $admitStmt->insert_id;
+                $admitStmt->close();
+            } else {
+                // For existing students, verify they exist
+                $verifyStmt = $mysqli->prepare("SELECT admission_no FROM admit_students WHERE id = ?");
+                $verifyStmt->bind_param("i", $student_id);
+                $verifyStmt->execute();
+                $vRes = $verifyStmt->get_result();
+                if ($vRes->num_rows === 0) {
+                    throw new Exception("Student ID not found in admission records.");
+                }
+                $studentData = $vRes->fetch_assoc();
+                $admission_no = $studentData['admission_no'];
+                $verifyStmt->close();
             }
+
+            // 2. Check for duplicate payment record
+            $dupCheck = $mysqli->prepare("SELECT id FROM student_payments WHERE student_id = ? AND term = ? AND payment_date = ? AND amount_paid = ? LIMIT 1");
+            $dupCheck->bind_param("issd", $student_id, $term, $payment_date, $amount_paid);
+            $dupCheck->execute();
+            if ($dupCheck->get_result()->num_rows > 0) {
+                throw new Exception("Duplicate payment detected for this student.");
+            }
+            $dupCheck->close();
+
+            // 3. Get class name
+            $classStmt = $mysqli->prepare("SELECT class_name FROM classes WHERE id = ?");
+            $classStmt->bind_param("i", $class_id);
+            $classStmt->execute();
+            $classRow = $classStmt->get_result()->fetch_assoc();
+            $class_name = $classRow['class_name'] ?? 'N/A';
+            $classStmt->close();
+
+            // 4. Record payment
+            $balance = $expected_tuition - $amount_paid;
+            $user_id = $_SESSION['user_id'];
+            
+            $insertPay = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            
+            $insertPay->bind_param("issssissdddddsssi", 
+                $student_id, $admission_no, $full_name, $day_boarding, 
+                $gender, $class_id, $class_name, $term, $expected_tuition, 
+                $amount_paid, $balance, $admission_fee, $uniform_fee, 
+                $parent_contact, $parent_email, $payment_date, $user_id);
+            
+            if (!$insertPay->execute()) {
+                throw new Exception("Error recording payment: " . $insertPay->error);
+            }
+            $insertPay->close();
+
+            $mysqli->commit();
+            header("Location: studentPayments.php?payment_recorded=1");
+            exit();
+
+        } catch (Throwable $e) {
+            $mysqli->rollback();
+            $error = $e->getMessage();
         }
     }
 }
@@ -428,12 +477,14 @@ if ($currentTermResult) {
 }
 ?>
 
-<!-- Toggle Button for Record Student Payment Form -->
-<div class="mb-3">
+<div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
     <?php if ($canRecordPayment): ?>
         <button type="button" class="btn-toggle-form" onclick="togglePaymentForm()">
             <i class="bi bi-chevron-right"></i> Record Student Payment
         </button>
+        <a href="../../sync_students.php" class="btn btn-outline-info btn-sm rounded-pill px-3" target="_blank" title="Sync students from Admission to Payments">
+            <i class="bi bi-arrow-repeat"></i> Sync Missing Students
+        </a>
     <?php else: ?>
         <button type="button" class="btn-toggle-form" data-bs-toggle="modal" data-bs-target="#restrictionModal">
             <i class="bi bi-chevron-right"></i> Record Student Payment
@@ -480,105 +531,121 @@ if ($currentTermResult) {
             <h5 class="mb-0">Record Student Payment</h5>
         </div>
         <div class="card-body">
+            <?php if ($error): ?>
+                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+            
             <form method="POST" id="paymentForm" class="row g-3">
                 <input type="hidden" name="record_payment" value="1">
-                <!-- Student Selection -->
+                <input type="hidden" name="student_id" id="studentIdHidden" value="0">
+                
+                <!-- Student Selection (Text with Datalist) -->
                 <div class="col-md-6">
-                    <label class="form-label">Select Student</label>
-                    <select name="student_id" id="studentSelect" class="form-control" required onchange="populateStudentData()">
-                        <option value="">-- Select Student --</option>
+                    <label class="form-label">Type Student Name</label>
+                    <input type="text" name="full_name" id="studentNameInput" class="form-control" placeholder="Search or type new name..." list="studentList" oninput="handleStudentInput()" required>
+                    <datalist id="studentList">
                         <?php foreach ($approved_students as $s): ?>
-                            <option value="<?= $s['id'] ?>"
-                                data-admission="<?= htmlspecialchars($s['admission_no']) ?>"
-                                data-first="<?= htmlspecialchars($s['first_name']) ?>"
-                                data-gender="<?= htmlspecialchars($s['gender']) ?>"
-                                data-class="<?= $s['class_id'] ?>"
-                                data-class-name="<?= htmlspecialchars($s['class_name'] ?? 'N/A') ?>"
-                                data-boarding="<?= htmlspecialchars($s['day_boarding']) ?>"
-                                data-admission-fee="<?= $s['admission_fee'] ?>"
-                                data-uniform-fee="<?= $s['uniform_fee'] ?>"
-                                data-contact="<?= htmlspecialchars($s['parent_contact']) ?>"
-                                data-email="<?= htmlspecialchars($s['parent_email'] ?? '') ?>"
-                                data-status="<?= htmlspecialchars($s['status']) ?>">
-                                <?= htmlspecialchars($s['first_name']) ?> (<?= htmlspecialchars($s['admission_no']) ?>)<?= $s['status'] === 'unapproved' ? ' ● Pending' : '' ?>
+                            <option value="<?= htmlspecialchars($s['first_name']) ?>" 
+                                    data-id="<?= $s['id'] ?>"
+                                    data-gender="<?= htmlspecialchars($s['gender']) ?>"
+                                    data-class="<?= $s['class_id'] ?>"
+                                    data-boarding="<?= htmlspecialchars($s['day_boarding']) ?>"
+                                    data-admission-fee="<?= $s['admission_fee'] ?>"
+                                    data-uniform-fee="<?= $s['uniform_fee'] ?>"
+                                    data-contact="<?= htmlspecialchars($s['parent_contact']) ?>"
+                                    data-email="<?= htmlspecialchars($s['parent_email'] ?? '') ?>"
+                                    data-status="<?= htmlspecialchars($s['status']) ?>"
+                                    data-class-name="<?= htmlspecialchars($s['class_name'] ?? 'N/A') ?>">
+                                (SN: <?= htmlspecialchars($s['admission_no']) ?>)
                             </option>
                         <?php endforeach; ?>
-                    </select>
+                    </datalist>
                     <small class="text-muted d-block mt-2">
-                        <i class="bi bi-info-circle"></i> You can record payments for both approved and unapproved students
+                        <i class="bi bi-info-circle"></i> If the student is new, just type the full name and fill other fields below.
                     </small>
                 </div>
                 
-                <!-- Auto-filled Student Information -->
-                <div class="col-md-6">
-                    <label class="form-label">Student Name</label>
-                    <input type="text" id="fullName" class="form-control readonly-field" readonly>
-                </div>
-
-                <!-- Student Status Badge -->
+                <!-- Active Form Fields -->
                 <div class="col-md-3">
                     <label class="form-label">Status</label>
-                    <input type="text" id="studentStatus" class="form-control readonly-field" readonly>
+                    <input type="text" id="studentStatus" class="form-control" readonly placeholder="Auto-set on save">
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">Sex</label>
-                    <input type="text" id="gender" class="form-control readonly-field" readonly>
+                    <select name="gender" id="gender" class="form-control" required>
+                        <option value="">Select</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                    </select>
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">Class</label>
-                    <input type="text" id="className" class="form-control readonly-field" readonly>
+                    <select name="class_id" id="classSelect" class="form-control" required onchange="handleClassChange()">
+                        <option value="">Select Class</option>
+                        <?php foreach ($all_classes as $cls): ?>
+                            <option value="<?= $cls['id'] ?>"><?= htmlspecialchars($cls['class_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">Term</label>
-                    <input type="text" name="term" id="term" class="form-control readonly-field" readonly>
+                    <input type="text" name="term" id="term" class="form-control" required placeholder="Term 1">
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">Day/Boarding</label>
-                    <input type="text" id="dayBoarding" class="form-control readonly-field" readonly>
+                    <select name="day_boarding" id="dayBoarding" class="form-control" required>
+                        <option value="">Select</option>
+                        <option value="Day">Day</option>
+                        <option value="Boarding">Boarding</option>
+                    </select>
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">Expected Tuition</label>
-                    <input type="number" name="expected_tuition" id="expectedTuition" class="form-control readonly-field" step="0.01" readonly>
+                    <input type="number" name="expected_tuition" id="expectedTuition" class="form-control" step="0.01" required>
                 </div>
                 
                 <!-- Payment Information -->
                 <div class="col-md-3">
                     <label class="form-label">Amount Paid</label>
                     <input type="number" name="amount_paid" id="amountPaid" class="form-control" step="0.01" min="0" placeholder="0.00" required>
-                    <small class="text-muted">Enter 0 for no payment</small>
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">Admission Fee</label>
-                    <input type="number" name="admission_fee" id="admissionFee" class="form-control readonly-field" step="0.01" readonly>
+                    <input type="number" name="admission_fee" id="admissionFee" class="form-control" step="0.01">
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">Uniform Fee</label>
-                    <input type="number" name="uniform_fee" id="uniformFee" class="form-control readonly-field" step="0.01" readonly>
+                    <input type="number" name="uniform_fee" id="uniformFee" class="form-control" step="0.01">
                 </div>
                 
                 <!-- Parent Information -->
                 <div class="col-md-6">
                     <label class="form-label">Parent Contact</label>
-                    <input type="text" id="parentContact" class="form-control readonly-field" readonly>
+                    <input type="text" name="parent_contact" id="parentContact" class="form-control" placeholder="07...">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Parent Email</label>
+                    <input type="email" name="parent_email" id="parentEmail" class="form-control" placeholder="optional@email.com">
                 </div>
                 
                 <!-- Payment Date -->
                 <div class="col-md-3">
                     <label class="form-label">Payment Date</label>
-                    <input type="date" name="payment_date" class="form-control" required>
+                    <input type="date" name="payment_date" class="form-control" value="<?= date('Y-m-d') ?>" required>
                 </div>
                 
                 <!-- Submit Button -->
                 <div class="col-12">
                     <button type="submit" name="record_payment" class="btn btn-form-submit">
-                        <i class="bi bi-check-circle"></i> Record Payment
+                        <i class="bi bi-person-plus-fill"></i> Admit & Record Payment
                     </button>
                 </div>
             </form>

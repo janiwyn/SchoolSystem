@@ -13,58 +13,104 @@ function togglePaymentForm() {
     }
 }
 
-// Populate form fields when a student is selected from dropdown
-function populateStudentData() {
-    const select = document.getElementById('studentSelect');
-    const opt = select.options[select.selectedIndex];
-
-    if (!opt || !opt.value) {
-        // Clear all fields
-        ['fullName','gender','className','term','dayBoarding','expectedTuition',
-         'admissionFee','uniformFee','parentContact','studentStatus'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        const preview = document.getElementById('studentPreviewCard');
-        if (preview) preview.style.display = 'none';
-        return;
+// Handle student name input from datalist
+function handleStudentInput() {
+    const input = document.getElementById('studentNameInput');
+    const hiddenId = document.getElementById('studentIdHidden');
+    const list = document.getElementById('studentList');
+    const val = input.value;
+    
+    // Find matching option in datalist
+    let matchingOption = null;
+    for (let i = 0; i < list.options.length; i++) {
+        if (list.options[i].value === val) {
+            matchingOption = list.options[i];
+            break;
+        }
     }
 
-    const firstName = opt.dataset.first || '';
-    const classId = opt.dataset.class;
-    const className = opt.dataset.className || 'N/A';
-    const boarding = opt.dataset.boarding || '';
-    const admissionFee = opt.dataset.admissionFee || 0;
-    const uniformFee = opt.dataset.uniformFee || 0;
-    const contact = opt.dataset.contact || '';
-    const gender = opt.dataset.gender || '';
-    const status = opt.dataset.status || '';
+    if (matchingOption) {
+        // Existing student selected
+        const data = matchingOption.dataset;
+        hiddenId.value = data.id;
+        input.style.borderColor = '#27ae60'; // Green for recognized student
+        
+        document.getElementById('gender').value = data.gender || '';
+        document.getElementById('classSelect').value = data.class || '';
+        document.getElementById('dayBoarding').value = data.boarding || '';
+        document.getElementById('admissionFee').value = parseFloat(data.admissionFee || 0).toFixed(2);
+        document.getElementById('uniformFee').value = parseFloat(data.uniformFee || 0).toFixed(2);
+        document.getElementById('parentContact').value = data.contact || '';
+        document.getElementById('parentEmail').value = data.email || '';
+        document.getElementById('studentStatus').value = data.status === 'approved' ? 'Approved' : 'Pending Approval';
+        document.getElementById('term').value = window.currentTerm || 'Term 1';
+        
+        // Auto-fill tuition for this class
+        handleClassChange();
+        
+        updatePreview(val, data.className, window.currentTerm, data.boarding, data.gender);
+    } else {
+        // New student or manual typing
+        hiddenId.value = '0';
+        document.getElementById('studentStatus').value = 'New Admission';
+        
+        // CHECK FOR DUPLICATE NAME MANUALLY
+        let isDuplicate = false;
+        for (let i = 0; i < list.options.length; i++) {
+            if (list.options[i].value.toLowerCase() === val.toLowerCase()) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        
+        if (isDuplicate && val.length > 2) {
+            input.style.borderColor = '#e74c3c'; // Red for duplicate warning
+            const existingNote = document.querySelector('.text-muted.d-block.mt-2');
+            if (existingNote) {
+                existingNote.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-danger"></i> <span class="text-danger fw-bold">Warning: A student with this name already exists! Select them from the list to avoid duplicates.</span>';
+            }
+        } else {
+            input.style.borderColor = ''; // Reset
+            const existingNote = document.querySelector('.text-muted.d-block.mt-2');
+            if (existingNote) {
+                existingNote.innerHTML = '<i class="bi bi-info-circle"></i> If the student is new, just type the full name and fill other fields below.';
+            }
+        }
 
-    document.getElementById('fullName').value = firstName;
-    document.getElementById('gender').value = gender;
-    document.getElementById('className').value = className;
-    document.getElementById('dayBoarding').value = boarding;
-    document.getElementById('admissionFee').value = parseFloat(admissionFee).toFixed(2);
-    document.getElementById('uniformFee').value = parseFloat(uniformFee).toFixed(2);
-    document.getElementById('parentContact').value = contact;
-    document.getElementById('studentStatus').value = status === 'approved' ? 'Approved' : 'Pending Approval';
+        const preview = document.getElementById('studentPreviewCard');
+        if (preview) preview.style.display = 'none';
+    }
+}
 
-    // Expected tuition from class fee structure
-    const expected = window.classExpected && window.classExpected[classId]
-        ? window.classExpected[classId] : 0;
-    document.getElementById('expectedTuition').value = expected.toFixed(2);
+// Auto-fill expected tuition when class changes
+function handleClassChange() {
+    const classSelect = document.getElementById('classSelect');
+    const classId = classSelect.value;
+    const tuitionInput = document.getElementById('expectedTuition');
+    
+    if (window.classExpected && window.classExpected[classId]) {
+        tuitionInput.value = parseFloat(window.classExpected[classId]).toFixed(2);
+    }
+    
+    // Update preview if name is present
+    const name = document.getElementById('studentNameInput').value;
+    if (name) {
+        const className = classSelect.options[classSelect.selectedIndex].text;
+        const term = document.getElementById('term').value;
+        const boarding = document.getElementById('dayBoarding').value;
+        const gender = document.getElementById('gender').value;
+        updatePreview(name, className, term, boarding, gender);
+    }
+}
 
-    // Term
-    document.getElementById('term').value = window.currentTerm || '';
-
-    // Update preview card
+function updatePreview(name, className, term, boarding, gender) {
     const previewCard = document.getElementById('studentPreviewCard');
     if (previewCard) {
-        document.getElementById('previewStudentName').textContent = firstName;
+        document.getElementById('previewStudentName').textContent = name;
         document.getElementById('previewClass').textContent = className;
-        document.getElementById('previewTerm').textContent = window.currentTerm || '-';
-        document.getElementById('previewDayBoarding').textContent = boarding;
-        document.getElementById('previewGender').textContent = gender;
+        document.getElementById('previewTerm').textContent = term || '-';
+        document.getElementById('previewDayBoarding').textContent = boarding || '-';
+        document.getElementById('previewGender').textContent = gender || '-';
         previewCard.style.display = 'block';
     }
 }
