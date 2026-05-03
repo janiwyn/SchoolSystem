@@ -26,6 +26,9 @@ $totalTuition = $tuitionBaseResult ? (float)($tuitionBaseResult->fetch_assoc()['
 // 4. Tuition Balance (Expected - Collected)
 $tuitionBalance = $totalExpected - $totalTuition;
 
+// 5. Payment Percentage
+$paymentPercentage = ($totalExpected > 0) ? round(($totalTuition / $totalExpected) * 100, 1) : 0;
+
 // Pending Approvals
 $pendingQuery = "SELECT COUNT(*) as total FROM student_payments WHERE status_approved = 'unapproved' AND id NOT IN (SELECT DISTINCT payment_id FROM student_payment_topups WHERE status_approved = 'unapproved')";
 $pendingResult = $mysqli->query($pendingQuery);
@@ -169,11 +172,27 @@ foreach ($dateRange as $date => $data) {
 
 <div id="adminStatsCarousel" class="carousel slide stats-carousel mb-4">
     <div class="carousel-inner">
-        <!-- Slide 1: first 4 cards -->
+        <!-- Slide 1: main 5 cards -->
         <div class="carousel-item active">
-            <div class="row g-4">
+            <div class="row g-3 row-cols-1 row-cols-md-3 row-cols-lg-5">
+                <!-- 0. Collection Progress -->
+                <div class="col">
+                    <div class="card stat-card purple">
+                        <div class="card-body stat-card-body d-flex align-items-center">
+                            <div class="stat-content">
+                                <div class="stat-label">Collection Progress</div>
+                                <div class="circular-progress-container mt-2">
+                                    <div class="circular-progress" style="background: conic-gradient(#fff <?= $paymentPercentage * 3.6 ?>deg, rgba(255,255,255,0.2) 0deg);">
+                                        <div class="progress-value"><?= $paymentPercentage ?>%</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 1. Admitted Students -->
-                <div class="col-md-6 col-lg-3">
+                <div class="col">
                     <div class="card stat-card green">
                         <div class="card-body stat-card-body">
                             <div class="stat-content">
@@ -188,7 +207,7 @@ foreach ($dateRange as $date => $data) {
                 </div>
 
                 <!-- 2. Expected Tuition -->
-                <div class="col-md-6 col-lg-3">
+                <div class="col">
                     <div class="card stat-card blue">
                         <div class="card-body stat-card-body">
                             <div class="stat-content">
@@ -203,7 +222,7 @@ foreach ($dateRange as $date => $data) {
                 </div>
 
                 <!-- 3. Tuition Collected -->
-                <div class="col-md-6 col-lg-3">
+                <div class="col">
                     <div class="card stat-card orange">
                         <div class="card-body stat-card-body">
                             <div class="stat-content">
@@ -217,8 +236,8 @@ foreach ($dateRange as $date => $data) {
                     </div>
                 </div>
 
-                <!-- 4. Balance (Expected - Collected) -->
-                <div class="col-md-6 col-lg-3">
+                <!-- 4. Balance -->
+                <div class="col">
                     <div class="card stat-card red">
                         <div class="card-body stat-card-body">
                             <div class="stat-content">
