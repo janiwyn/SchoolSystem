@@ -452,18 +452,27 @@ if ($canRecordPayment) {
     }
 }
 
-// Build expected tuition per class from fee_structure (sum of all terms)
-$classExpected = [];
+// Build expected tuition map: [class_id][term] => amount
+$classTermExpected = [];
 $classNames = [];
-$classExpectedQuery = "SELECT fs.class_id, c.class_name, SUM(fs.amount) AS expected 
-                       FROM fee_structure fs
-                       LEFT JOIN classes c ON fs.class_id = c.id
-                       GROUP BY fs.class_id, c.class_name";
+$classExpectedQuery = "SELECT class_id, term, amount FROM fee_structure";
 $classExpectedResult = $mysqli->query($classExpectedQuery);
 if ($classExpectedResult) {
     while ($row = $classExpectedResult->fetch_assoc()) {
-        $classExpected[(int)$row['class_id']] = (float)($row['expected'] ?? 0);
-        $classNames[(int)$row['class_id']] = $row['class_name'] ?? 'Unknown';
+        $cid = (int)$row['class_id'];
+        $trm = $row['term'];
+        if (!isset($classTermExpected[$cid])) {
+            $classTermExpected[$cid] = [];
+        }
+        $classTermExpected[$cid][$trm] = (float)$row['amount'];
+    }
+}
+
+// Also get class names for the map
+$cnResult = $mysqli->query("SELECT id, class_name FROM classes");
+if ($cnResult) {
+    while ($row = $cnResult->fetch_assoc()) {
+        $classNames[(int)$row['id']] = $row['class_name'];
     }
 }
 
@@ -592,7 +601,11 @@ if ($currentTermResult) {
                 
                 <div class="col-md-3">
                     <label class="form-label">Term</label>
-                    <input type="text" name="term" id="term" class="form-control" required placeholder="Term 1">
+                    <select name="term" id="term" class="form-control" required onchange="handleClassChange()">
+                        <option value="Term 1">Term 1</option>
+                        <option value="Term 2">Term 2</option>
+                        <option value="Term 3">Term 3</option>
+                    </select>
                 </div>
                 
                 <div class="col-md-3">
@@ -1088,9 +1101,9 @@ if ($currentTermResult) {
 
 <!-- Expose expected tuition map + current term to JS -->
 <script>
-window.classExpected = <?= json_encode($classExpected, JSON_NUMERIC_CHECK) ?>;
+window.classTermTuition = <?= json_encode($classTermExpected, JSON_NUMERIC_CHECK) ?>;
 window.classNames = <?= json_encode($classNames) ?>;
-window.currentTerm = <?= json_encode($currentTerm) ?>;
+window.currentTerm = <?= json_encode($currentTerm ?: 'Term 1') ?>;
 </script>
 
 <link rel="stylesheet" href="../../assets/css/studentPayments.css">

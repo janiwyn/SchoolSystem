@@ -16,17 +16,29 @@ $date_to   = $_GET['date_to']   ?? date('Y-m-d');
 $dateFilter = "DATE(sp.payment_date) BETWEEN '$date_from' AND '$date_to'";
 
 // ------------------ MAIN AUDIT DATA: ONE ROW PER CLASS ------------------
-// For the selected period, aggregate per class (no repetition of class)
+// 1. Get unique students and their expected tuition per class
+// 2. Join with the actual payments made in the selected period
 $auditQuery = "
     SELECT 
-        sp.class_name,
-        SUM(sp.expected_tuition) AS total_expected,
-        SUM(sp.amount_paid)      AS total_received,
-        SUM(sp.expected_tuition) - SUM(sp.amount_paid) AS balance
-    FROM student_payments sp
-    WHERE $dateFilter
-    GROUP BY sp.class_name
-    ORDER BY sp.class_name ASC
+        classes.class_name,
+        COALESCE(expected_data.total_expected, 0) AS total_expected,
+        COALESCE(payments_data.total_received, 0) AS total_received,
+        COALESCE(expected_data.total_expected, 0) - COALESCE(payments_data.total_received, 0) AS balance
+    FROM (SELECT DISTINCT class_name FROM student_payments) AS classes
+    LEFT JOIN (
+        -- Sum expected tuition for unique students in each class
+        SELECT class_name, SUM(expected_tuition) AS total_expected
+        FROM (SELECT DISTINCT student_id, class_name, expected_tuition FROM student_payments) AS t
+        GROUP BY class_name
+    ) AS expected_data ON classes.class_name = expected_data.class_name
+    LEFT JOIN (
+        -- Sum actual payments made in the period
+        SELECT class_name, SUM(amount_paid) AS total_received
+        FROM student_payments sp
+        WHERE $dateFilter
+        GROUP BY class_name
+    ) AS payments_data ON classes.class_name = payments_data.class_name
+    ORDER BY classes.class_name ASC
 ";
 $auditResult = $mysqli->query($auditQuery);
 if (!$auditResult) {
@@ -34,17 +46,19 @@ if (!$auditResult) {
 }
 $auditData = $auditResult->fetch_all(MYSQLI_ASSOC);
 
-// ------------------ GRAND TOTALS (FILTERED BY DATE) ------------------
+// ------------------ GRAND TOTALS (PICKING FROM student_payments) ------------------
 $grandTotalQuery = "
     SELECT 
-        SUM(sp.expected_tuition) AS grand_expected,
-        SUM(sp.amount_paid)      AS grand_received,
-        SUM(sp.expected_tuition) - SUM(sp.amount_paid) AS grand_balance
-    FROM student_payments sp
-    WHERE $dateFilter
+        (SELECT SUM(t.expected_tuition) FROM (SELECT DISTINCT student_id, expected_tuition FROM student_payments) AS t) AS grand_expected,
+        (SELECT SUM(amount_paid) FROM student_payments sp WHERE $dateFilter) AS grand_received
 ";
 $grandResult  = $mysqli->query($grandTotalQuery);
-$grandTotals  = $grandResult->fetch_assoc() ?: ['grand_expected' => 0, 'grand_received' => 0, 'grand_balance' => 0];
+$res = $grandResult->fetch_assoc();
+$grandTotals = [
+    'grand_expected' => (float)($res['grand_expected'] ?? 0),
+    'grand_received' => (float)($res['grand_received'] ?? 0),
+    'grand_balance'  => (float)($res['grand_expected'] ?? 0) - (float)($res['grand_received'] ?? 0)
+];
 
 // ------------------ EXPENSES (FILTERED BY DATE) ------------------
 $expensesQuery = "

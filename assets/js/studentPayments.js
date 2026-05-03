@@ -82,21 +82,24 @@ function handleStudentInput() {
     }
 }
 
-// Auto-fill expected tuition when class changes
+// Auto-fill expected tuition when class or term changes
 function handleClassChange() {
     const classSelect = document.getElementById('classSelect');
     const classId = classSelect.value;
+    const term = document.getElementById('term').value;
     const tuitionInput = document.getElementById('expectedTuition');
     
-    if (window.classExpected && window.classExpected[classId]) {
-        tuitionInput.value = parseFloat(window.classExpected[classId]).toFixed(2);
+    if (window.classTermTuition && window.classTermTuition[classId] && window.classTermTuition[classId][term]) {
+        tuitionInput.value = parseFloat(window.classTermTuition[classId][term]).toFixed(2);
+    } else {
+        // Fallback or clear if no specific mapping found
+        // tuitionInput.value = ''; // Or keep as is
     }
     
     // Update preview if name is present
     const name = document.getElementById('studentNameInput').value;
     if (name) {
-        const className = classSelect.options[classSelect.selectedIndex].text;
-        const term = document.getElementById('term').value;
+        const className = classSelect.options[classSelect.selectedIndex] ? classSelect.options[classSelect.selectedIndex].text : '-';
         const boarding = document.getElementById('dayBoarding').value;
         const gender = document.getElementById('gender').value;
         updatePreview(name, className, term, boarding, gender);
