@@ -1080,7 +1080,7 @@ if ($currentTermResult) {
                     </div>
 
                     <div class="alert alert-info small mb-0">
-                        <i class="bi bi-info-circle"></i> After correction, the payment status will be set to <strong>Unapproved</strong> and will need re-approval.
+                        <i class="bi bi-info-circle"></i> After correction, the payment status will be updated to <strong>Approved</strong> automatically.
                     </div>
                 </div>
                 <div class="modal-footer">

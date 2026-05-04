@@ -511,7 +511,7 @@ if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
                     <ul class="pagination justify-content-center">
                         <!-- Previous Button -->
                         <li class="page-item <?= $current_page <= 1 ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" aria-label="Previous">
+                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?>&tab=<?= urlencode($active_tab) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
@@ -523,7 +523,7 @@ if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
 
                         if ($start_page > 1): ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=1<?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">1</a>
+                                <a class="page-link" href="?page=1&tab=<?= urlencode($active_tab) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">1</a>
                             </li>
                             <?php if ($start_page > 2): ?>
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -532,7 +532,7 @@ if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
 
                         <?php for ($page = $start_page; $page <= $end_page; $page++): ?>
                             <li class="page-item <?= $page === $current_page ? 'active' : '' ?>">
-                                <a class="page-link" href="?page=<?= $page ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
+                                <a class="page-link" href="?page=<?= $page ?>&tab=<?= urlencode($active_tab) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>">
                                     <?= $page ?>
                                 </a>
                             </li>
@@ -543,13 +543,13 @@ if (isset($_GET['deleted']) && is_numeric($_GET['deleted'])): ?>
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             <?php endif; ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>"><?= $total_pages ?></a>
+                                <a class="page-link" href="?page=<?= $total_pages ?>&tab=<?= urlencode($active_tab) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>"><?= $total_pages ?></a>
                             </li>
                         <?php endif; ?>
 
                         <!-- Next Button -->
                         <li class="page-item <?= $current_page >= $total_pages ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" aria-label="Next">
+                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?>&tab=<?= urlencode($active_tab) ?><?php echo ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : ''); ?>" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
