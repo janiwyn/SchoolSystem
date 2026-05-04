@@ -242,6 +242,7 @@ $canModifyTuition = ($userRole === 'admin');
                         <option value="Term 1">Term 1</option>
                         <option value="Term 2">Term 2</option>
                         <option value="Term 3">Term 3</option>
+                        <option value="Annual">Annual</option>
                     </select>
                 </div>
 
@@ -393,7 +394,12 @@ $canModifyTuition = ($userRole === 'admin');
 
                         <div class="col-md-6">
                             <label class="form-label">Term</label>
-                            <input type="text" name="term" id="editTerm" class="form-control" readonly>
+                            <select name="term" id="editTerm" class="form-control" required>
+                                <option value="Term 1">Term 1</option>
+                                <option value="Term 2">Term 2</option>
+                                <option value="Term 3">Term 3</option>
+                                <option value="Annual">Annual</option>
+                            </select>
                         </div>
 
                         <div class="col-md-12">

@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
                     if ($new_balance < 0) $new_balance = 0;
                     
                     // 1. Insert into student_payment_topups
-                    $topupSql = "INSERT INTO student_payment_topups (payment_id, student_id, topup_amount, original_balance, new_balance, previous_status, status_approved, created_at) VALUES (?, ?, ?, ?, ?, ?, 'unapproved', NOW())";
+                    $topupSql = "INSERT INTO student_payment_topups (payment_id, student_id, topup_amount, original_balance, new_balance, previous_status, status_approved, created_at) VALUES (?, ?, ?, ?, ?, ?, 'approved', NOW())";
                     $topupStmt = $mysqli->prepare($topupSql);
                     if ($topupStmt) {
                         $topupStmt->bind_param("iiddds", $payment_id, $student_id, $additional_amount, $original_balance, $new_balance, $previous_status);
@@ -109,8 +109,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
                         $topupStmt->close();
                         
                         // 2. Update student_payments
-                        // Mark as unapproved so it shows in pending requests
-                        $updateSql = "UPDATE student_payments SET amount_paid = ?, balance = ?, status_approved = 'unapproved' WHERE id = ?";
+                        // Mark as approved immediately
+                        $updateSql = "UPDATE student_payments SET amount_paid = ?, balance = ?, status_approved = 'approved' WHERE id = ?";
                         $updateStmt = $mysqli->prepare($updateSql);
                         if ($updateStmt) {
                             $updateStmt->bind_param("ddi", $new_amount_paid, $new_balance, $payment_id);
@@ -157,11 +157,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
 
         if ($currentRow) {
             $new_balance = $currentRow['expected_tuition'] - $edit_amount_paid;
-            // Set status to unapproved after correction
-            $new_status = 'unapproved';
-
-            $updateStmt = $mysqli->prepare("UPDATE student_payments SET amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, status_approved = ? WHERE id = ?");
-            $updateStmt->bind_param("ddddsi", $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $new_status, $edit_id);
+            
+            // Set status to approved after correction
+            $updateStmt = $mysqli->prepare("UPDATE student_payments SET amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, status_approved = 'approved' WHERE id = ?");
+            $updateStmt->bind_param("ddddi", $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_id);
 
             if ($updateStmt->execute()) {
                 $updateStmt->close();
@@ -304,14 +303,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
             // 4. Record payment
             $balance = $expected_tuition - $amount_paid;
             $user_id = $_SESSION['user_id'];
+            $status_approved = 'approved';
             
-            $insertPay = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $insertPay = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, status_approved, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
             
-            $insertPay->bind_param("issssissdddddsssi", 
+            $insertPay->bind_param("issssissdddddssssi", 
                 $student_id, $admission_no, $full_name, $day_boarding, 
                 $gender, $class_id, $class_name, $term, $expected_tuition, 
                 $amount_paid, $balance, $admission_fee, $uniform_fee, 
-                $parent_contact, $parent_email, $payment_date, $user_id);
+                $parent_contact, $parent_email, $payment_date, $status_approved, $user_id);
             
             if (!$insertPay->execute()) {
                 throw new Exception("Error recording payment: " . $insertPay->error);
@@ -452,19 +452,34 @@ if ($canRecordPayment) {
     }
 }
 
-// Build expected tuition map: [class_id][term] => amount
+// Build expected tuition map: [class_id][term] => total_amount
 $classTermExpected = [];
+$classNameTuition = [];
 $classNames = [];
-$classExpectedQuery = "SELECT class_id, term, amount FROM fee_structure";
+
+// Use JOIN to get class names along with IDs for name-based fallback
+$classExpectedQuery = "SELECT fs.class_id, c.class_name, fs.term, SUM(fs.amount) AS total_expected 
+                       FROM fee_structure fs 
+                       LEFT JOIN classes c ON fs.class_id = c.id
+                       GROUP BY fs.class_id, fs.term";
 $classExpectedResult = $mysqli->query($classExpectedQuery);
 if ($classExpectedResult) {
     while ($row = $classExpectedResult->fetch_assoc()) {
         $cid = (int)$row['class_id'];
+        $name = strtolower(trim($row['class_name'] ?? ''));
         $trm = $row['term'];
+        
         if (!isset($classTermExpected[$cid])) {
             $classTermExpected[$cid] = [];
         }
-        $classTermExpected[$cid][$trm] = (float)$row['amount'];
+        $classTermExpected[$cid][$trm] = (float)$row['total_expected'];
+
+        if ($name) {
+            $classNameTuition[$name][$trm] = (float)$row['total_expected'];
+            // Store a dot-free version for fuzzy matching (e.g. S.4S matches S4S)
+            $cleanName = str_replace('.', '', $name);
+            $classNameTuition[$cleanName][$trm] = (float)$row['total_expected'];
+        }
     }
 }
 
@@ -601,11 +616,7 @@ if ($currentTermResult) {
                 
                 <div class="col-md-3">
                     <label class="form-label">Term</label>
-                    <select name="term" id="term" class="form-control" required onchange="handleClassChange()">
-                        <option value="Term 1">Term 1</option>
-                        <option value="Term 2">Term 2</option>
-                        <option value="Term 3">Term 3</option>
-                    </select>
+                    <input type="text" name="term" id="term" class="form-control" readonly placeholder="Auto-filled from tuition">
                 </div>
                 
                 <div class="col-md-3">
@@ -619,7 +630,7 @@ if ($currentTermResult) {
                 
                 <div class="col-md-3">
                     <label class="form-label">Expected Tuition</label>
-                    <input type="number" name="expected_tuition" id="expectedTuition" class="form-control" step="0.01" required>
+                    <input type="number" name="expected_tuition" id="expectedTuition" class="form-control" step="0.01" readonly placeholder="Auto-filled">
                 </div>
                 
                 <!-- Payment Information -->
@@ -1101,13 +1112,14 @@ if ($currentTermResult) {
 
 <!-- Expose expected tuition map + current term to JS -->
 <script>
-window.classTermTuition = <?= json_encode($classTermExpected, JSON_NUMERIC_CHECK) ?>;
-window.classNames = <?= json_encode($classNames) ?>;
+window.classTermTuition = <?= json_encode($classTermExpected, JSON_NUMERIC_CHECK | JSON_FORCE_OBJECT) ?>;
+window.classNameTuition = <?= json_encode($classNameTuition, JSON_FORCE_OBJECT) ?>;
+window.classNames = <?= json_encode($classNames, JSON_FORCE_OBJECT) ?>;
 window.currentTerm = <?= json_encode($currentTerm ?: 'Term 1') ?>;
 </script>
 
 <link rel="stylesheet" href="../../assets/css/studentPayments.css">
 <link rel="stylesheet" href="../../assets/css/studentPreviewCard.css">
-<script src="../../assets/js/studentPayments.js?v=6"></script>
+<script src="../../assets/js/studentPayments.js?v=9"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

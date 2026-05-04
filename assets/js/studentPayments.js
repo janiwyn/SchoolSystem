@@ -52,7 +52,7 @@ function handleStudentInput() {
     } else {
         // New student or manual typing
         hiddenId.value = '0';
-        document.getElementById('studentStatus').value = 'New Admission';
+        document.getElementById('studentStatus').value = 'Approved (New)';
         
         // CHECK FOR DUPLICATE NAME MANUALLY
         let isDuplicate = false;
@@ -86,23 +86,69 @@ function handleStudentInput() {
 function handleClassChange() {
     const classSelect = document.getElementById('classSelect');
     const classId = classSelect.value;
-    const term = document.getElementById('term').value;
+    const termInput = document.getElementById('term');
     const tuitionInput = document.getElementById('expectedTuition');
     
-    if (window.classTermTuition && window.classTermTuition[classId] && window.classTermTuition[classId][term]) {
-        tuitionInput.value = parseFloat(window.classTermTuition[classId][term]).toFixed(2);
+    if (!classId) {
+        termInput.value = '';
+        tuitionInput.value = '';
+        return;
+    }
+
+    const selectedOption = classSelect.options[classSelect.selectedIndex];
+    const className = selectedOption ? selectedOption.text : '';
+    console.log('Class Change triggered:', { classId, className });
+    
+    // 1. Try to find tuition data by ID
+    let tuitionData = window.classTermTuition[classId] || window.classTermTuition[parseInt(classId)];
+
+    // 2. Fallback: Try to find by exact Name (normalized for casing/spaces)
+    if (!tuitionData && className) {
+        const normalizedName = className.trim().toLowerCase();
+        tuitionData = window.classNameTuition[normalizedName];
+        
+        // 3. Fallback: Try fuzzy matching (no dots)
+        if (!tuitionData) {
+            const fuzzyName = normalizedName.replace(/\./g, '');
+            tuitionData = window.classNameTuition[fuzzyName];
+        }
+    }
+
+    if (tuitionData) {
+        const availableTerms = Object.keys(tuitionData);
+        let termToSelect = '';
+
+        // Prefer the current system term if it's available for this class
+        if (availableTerms.includes(window.currentTerm)) {
+            termToSelect = window.currentTerm;
+        } else if (availableTerms.length > 0) {
+            // Otherwise pick the first available one (e.g. Term 1 or Annual)
+            termToSelect = availableTerms[0];
+        }
+
+        if (termToSelect) {
+            termInput.value = termToSelect;
+        }
+
+        // Now update tuition based on the auto-filled term
+        const finalTerm = termInput.value;
+        if (tuitionData[finalTerm] !== undefined) {
+            tuitionInput.value = parseFloat(tuitionData[finalTerm]).toFixed(2);
+        } else {
+            tuitionInput.value = '';
+        }
     } else {
-        // Fallback or clear if no specific mapping found
-        // tuitionInput.value = ''; // Or keep as is
+        console.warn('No tuition data found for:', className);
+        termInput.value = '';
+        tuitionInput.value = '';
     }
     
     // Update preview if name is present
     const name = document.getElementById('studentNameInput').value;
     if (name) {
-        const className = classSelect.options[classSelect.selectedIndex] ? classSelect.options[classSelect.selectedIndex].text : '-';
         const boarding = document.getElementById('dayBoarding').value;
         const gender = document.getElementById('gender').value;
-        updatePreview(name, className, term, boarding, gender);
+        updatePreview(name, className, termInput.value, boarding, gender);
     }
 }
 
