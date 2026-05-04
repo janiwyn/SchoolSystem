@@ -214,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
 
         try {
             // Insert into payroll (expected_salary + salary)
-            $stmt = $mysqli->prepare("INSERT INTO payroll (name, department, expected_salary, salary, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, NOW(), 'unapproved')");
+            $stmt = $mysqli->prepare("INSERT INTO payroll (name, department, expected_salary, salary, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, NOW(), 'approved')");
             if ($stmt) {
                 $stmt->bind_param("ssddsi", $name, $department, $expected_salary, $salary, $date, $user_id);
                 if ($stmt->execute()) {
@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payroll'])) {
                     $item = $name;
                     $quantity = 0;        // Changed from 1 to 0
                     $unit_price = 0;      // Changed from $salary to 0
-                    $status = 'unapproved';
+                    $status = 'approved';
 
                     $expenseStmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)");
                     if ($expenseStmt) {

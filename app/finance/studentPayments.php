@@ -344,7 +344,6 @@ $filterWhere = "1=1";
 $search_filter = $_GET['search'] ?? '';
 $class_filter = $_GET['class'] ?? '';
 $term_filter = $_GET['term'] ?? '';
-$approval_filter = $_GET['approval'] ?? ''; // Standardized to match form
 $pay_status_filter = $_GET['pay_status'] ?? ''; // Standardized to match form
 $show_duplicates = $_GET['duplicates'] ?? ''; // Added duplicates filter
 $date_from = $_GET['date_from'] ?? '';
@@ -367,9 +366,7 @@ if ($term_filter) {
 if ($show_duplicates) {
     $filterWhere .= " AND full_name IN (SELECT full_name FROM student_payments GROUP BY full_name HAVING COUNT(*) > 1)";
 }
-if ($approval_filter) {
-    $filterWhere .= " AND status_approved = '" . $mysqli->real_escape_string($approval_filter) . "'";
-}
+
 if ($pay_status_filter) {
     if ($pay_status_filter === 'paid') {
         $filterWhere .= " AND balance <= 0";
@@ -721,14 +718,7 @@ if ($currentTermResult) {
                     </select>
                 </div>
 
-                <div class="filter-group">
-                    <label>Approval</label>
-                    <select name="approval" class="form-control">
-                        <option value="">All Status</option>
-                        <option value="approved" <?= $approval_filter === 'approved' ? 'selected' : '' ?>>Approved</option>
-                        <option value="unapproved" <?= $approval_filter === 'unapproved' ? 'selected' : '' ?>>Unapproved</option>
-                    </select>
-                </div>
+
 
                 <div class="filter-group">
                     <label>Pay Status</label>
@@ -797,7 +787,7 @@ if ($currentTermResult) {
                             <th>Parent Contact</th>
                             <th>Payment Date</th>
                             <th>Pay Status</th>
-                            <th>Approval Status</th>
+
                             <th>Actions</th>
                             <th>Invoice/Receipt</th>
                             <th>Corrections</th>
@@ -825,13 +815,7 @@ if ($currentTermResult) {
                                         <span class="status-incomplete">Incomplete</span>
                                     <?php endif; ?>
                                 </td>
-                                <td>
-                                    <?php if ($payment['status_approved'] === 'approved'): ?>
-                                        <span class="status-approved">Approved</span>
-                                    <?php else: ?>
-                                        <span class="status-unapproved">Unapproved</span>
-                                    <?php endif; ?>
-                                </td>
+
                                 <td>
                                     <?php if ($payment['balance'] > 0): ?>
                                         <button type="button" class="btn-pay" data-bs-toggle="modal" data-bs-target="#paymentModal" onclick="setPaymentId(<?= $payment['id'] ?>, <?= $payment['balance'] ?>)">
@@ -893,7 +877,7 @@ if ($currentTermResult) {
                     <ul class="pagination justify-content-center">
                         <!-- Previous Button -->
                         <li class="page-item <?= $current_page <= 1 ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>" aria-label="Previous">
+                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
@@ -905,7 +889,7 @@ if ($currentTermResult) {
 
                         if ($start_page > 1): ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>">1</a>
+                                <a class="page-link" href="?page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>">1</a>
                             </li>
                             <?php if ($start_page > 2): ?>
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -925,13 +909,13 @@ if ($currentTermResult) {
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             <?php endif; ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>"><?= $total_pages ?></a>
+                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>"><?= $total_pages ?></a>
                             </li>
                         <?php endif; ?>
 
                         <!-- Next Button -->
                         <li class="page-item <?= $current_page >= $total_pages ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>" aria-label="Next">
+                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>

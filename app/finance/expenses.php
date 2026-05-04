@@ -94,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_expense'])) {
         // Store sub_category in the 'category' field for General Expenses
         $finalCategory = ($category === 'General Expenses') ? $sub_category : $category;
         
-        $stmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'unapproved')");
+        $stmt = $mysqli->prepare("INSERT INTO expenses (category, item, quantity, unit_price, expected, amount, date, recorded_by, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'approved')");
         
         if ($stmt) {
             $stmt->bind_param("ssddddsi", $finalCategory, $item, $quantity, $unit_price, $expected, $amount, $date, $user_id);
