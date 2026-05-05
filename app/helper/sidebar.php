@@ -26,13 +26,7 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             <span>Tuition</span>
         </a>
         
-        <!-- Pending Requests - Only for Admin -->
-        <?php if ($role === 'admin'): ?>
-            <a href="../admin/pendingrequest.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'pendingrequest.php' ? 'active' : '' ?>">
-                <i class="bi bi-clock-history"></i>
-                <span>Pending Requests</span>
-            </a>
-        <?php endif; ?>
+
         
         <a href="../finance/admitStudents.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'admitStudents.php' ? 'active' : '' ?>">
             <i class="bi bi-people-fill"></i>

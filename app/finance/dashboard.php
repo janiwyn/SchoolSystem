@@ -29,17 +29,7 @@ $tuitionBalance = $totalExpected - $totalTuition;
 // 5. Payment Percentage
 $paymentPercentage = ($totalExpected > 0) ? round(($totalTuition / $totalExpected) * 100, 1) : 0;
 
-// Pending Approvals (same as admin/principal)
-$pendingQuery = "SELECT COUNT(*) as total 
-                 FROM student_payments 
-                 WHERE status_approved = 'unapproved' 
-                   AND id NOT IN (
-                       SELECT DISTINCT payment_id 
-                       FROM student_payment_topups 
-                       WHERE status_approved = 'unapproved'
-                   )";
-$pendingResult = $mysqli->query($pendingQuery);
-$pendingPayments = $pendingResult->fetch_assoc()['total'] ?? 0;
+
 
 // Get chart filter parameter (default to 30 days)
 $days = intval($_GET['days'] ?? 30);
@@ -264,20 +254,7 @@ foreach ($dateRange as $date => $data) {
         <!-- Slide 2: Pending Approvals + Total Users -->
         <div class="carousel-item">
             <div class="row g-4">
-                <!-- Pending Approvals -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="card stat-card red">
-                        <div class="card-body stat-card-body">
-                            <div class="stat-content">
-                                <div class="stat-label">Pending Approvals</div>
-                                <div class="stat-value"><?= $pendingPayments ?></div>
-                            </div>
-                            <div class="stat-icon">
-                                <i class="bi bi-exclamation-circle-fill"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+
 
                 <!-- Total Users -->
                 <div class="col-md-6 col-lg-3">
