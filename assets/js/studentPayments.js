@@ -179,7 +179,7 @@ function setPaymentId(id, balance) {
 }
 
 // Load edit payment data into modal
-function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuition, studentName) {
+function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuition, studentName, studentId) {
     const el = (selector) => document.getElementById(selector);
 
     if (!el('editPaymentId')) {
@@ -188,7 +188,8 @@ function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuiti
     }
 
     el('editPaymentId').value = id;
-    el('editPaymentStudentName').textContent = studentName;
+    el('editStudentId').value = studentId || 0;
+    el('editPaymentStudentName').value = studentName;
     el('editPaymentExpected').value = parseFloat(expectedTuition).toFixed(2);
     el('editPaymentAmountPaid').value = parseFloat(amountPaid).toFixed(2);
     el('editPaymentAdmissionFee').value = parseFloat(admissionFee).toFixed(2);

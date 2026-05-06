@@ -143,32 +143,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
 // Handle EDIT payment record (Admin, Bursar, Principal)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record'])) {
     $edit_id = intval($_POST['edit_payment_id']);
+    $edit_student_id = intval($_POST['edit_student_id']);
+    $edit_full_name = trim($_POST['edit_full_name']);
     $edit_amount_paid = floatval($_POST['edit_amount_paid']);
     $edit_admission_fee = floatval($_POST['edit_admission_fee']);
     $edit_uniform_fee = floatval($_POST['edit_uniform_fee']);
 
-    if ($edit_id > 0 && $edit_amount_paid >= 0 && $edit_admission_fee >= 0 && $edit_uniform_fee >= 0) {
-        // Get current expected_tuition to recalculate balance
-        $getStmt = $mysqli->prepare("SELECT expected_tuition FROM student_payments WHERE id = ?");
-        $getStmt->bind_param("i", $edit_id);
-        $getStmt->execute();
-        $currentRow = $getStmt->get_result()->fetch_assoc();
-        $getStmt->close();
+    if ($edit_id > 0 && $edit_full_name !== '' && $edit_amount_paid >= 0 && $edit_admission_fee >= 0 && $edit_uniform_fee >= 0) {
+        $mysqli->begin_transaction();
+        try {
+            // Get current expected_tuition to recalculate balance
+            $getStmt = $mysqli->prepare("SELECT expected_tuition FROM student_payments WHERE id = ?");
+            $getStmt->bind_param("i", $edit_id);
+            $getStmt->execute();
+            $currentRow = $getStmt->get_result()->fetch_assoc();
+            $getStmt->close();
 
-        if ($currentRow) {
-            $new_balance = $currentRow['expected_tuition'] - $edit_amount_paid;
-            
-            // Set status to approved after correction
-            $updateStmt = $mysqli->prepare("UPDATE student_payments SET amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, status_approved = 'approved' WHERE id = ?");
-            $updateStmt->bind_param("ddddi", $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_id);
-
-            if ($updateStmt->execute()) {
+            if ($currentRow) {
+                $new_balance = $currentRow['expected_tuition'] - $edit_amount_paid;
+                
+                // 1. Update student_payments (including full_name)
+                $updateStmt = $mysqli->prepare("UPDATE student_payments SET full_name = ?, amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, status_approved = 'approved' WHERE id = ?");
+                $updateStmt->bind_param("sddddi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_id);
+                $updateStmt->execute();
                 $updateStmt->close();
+
+                // 2. Sync name change to admit_students if possible
+                if ($edit_student_id > 0) {
+                    $admitUpdate = $mysqli->prepare("UPDATE admit_students SET first_name = ? WHERE id = ?");
+                    $admitUpdate->bind_param("si", $edit_full_name, $edit_student_id);
+                    $admitUpdate->execute();
+                    $admitUpdate->close();
+                }
+
                 $mysqli->commit();
                 header("Location: studentPayments.php?corrected=1");
                 exit();
             }
-            $updateStmt->close();
+        } catch (Throwable $e) {
+            $mysqli->rollback();
+            $error = "Error updating record: " . $e->getMessage();
         }
     }
 }
@@ -889,7 +903,7 @@ if ($currentTermResult) {
                                     <div class="action-buttons">
                                         <button type="button" class="btn btn-sm btn-primary" title="Edit Payment"
                                                 data-bs-toggle="modal" data-bs-target="#editPaymentModal"
-                                                onclick="loadEditPayment(<?= $payment['id'] ?>, <?= $payment['amount_paid'] ?>, <?= $payment['admission_fee'] ?>, <?= $payment['uniform_fee'] ?>, <?= $payment['expected_tuition'] ?>, '<?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>')">
+                                                onclick="loadEditPayment(<?= $payment['id'] ?>, <?= $payment['amount_paid'] ?>, <?= $payment['admission_fee'] ?>, <?= $payment['uniform_fee'] ?>, <?= $payment['expected_tuition'] ?>, '<?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>', <?= $payment['student_id'] ?>)">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
                                         <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this payment record for <?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>? This action cannot be undone.');">
@@ -1097,10 +1111,11 @@ if ($currentTermResult) {
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="edit_payment_id" id="editPaymentId">
+                    <input type="hidden" name="edit_student_id" id="editStudentId">
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Student Name</label>
-                        <p class="form-control-plaintext" id="editPaymentStudentName" style="font-weight: 600; color: #2c3e50;"></p>
+                        <label for="editPaymentStudentName" class="form-label fw-bold">Student Name</label>
+                        <input type="text" class="form-control" name="edit_full_name" id="editPaymentStudentName" required>
                     </div>
 
                     <div class="mb-3">
@@ -1153,6 +1168,6 @@ window.currentTerm = <?= json_encode($currentTerm ?: 'Term 1') ?>;
 
 <link rel="stylesheet" href="../../assets/css/studentPayments.css">
 <link rel="stylesheet" href="../../assets/css/studentPreviewCard.css">
-<script src="../../assets/js/studentPayments.js?v=9"></script>
+<script src="../../assets/js/studentPayments.js?v=10"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>
