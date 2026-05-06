@@ -152,34 +152,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
     if ($edit_id > 0 && $edit_full_name !== '' && $edit_amount_paid >= 0 && $edit_admission_fee >= 0 && $edit_uniform_fee >= 0) {
         $mysqli->begin_transaction();
         try {
-            // Get current expected_tuition to recalculate balance
-            $getStmt = $mysqli->prepare("SELECT expected_tuition FROM student_payments WHERE id = ?");
-            $getStmt->bind_param("i", $edit_id);
-            $getStmt->execute();
-            $currentRow = $getStmt->get_result()->fetch_assoc();
-            $getStmt->close();
+                // 1. Get existing data to enforce role-based restrictions
+                $oldDataStmt = $mysqli->prepare("SELECT full_name, amount_paid, admission_fee, uniform_fee, expected_tuition FROM student_payments WHERE id = ?");
+                $oldDataStmt->bind_param("i", $edit_id);
+                $oldDataStmt->execute();
+                $old = $oldDataStmt->get_result()->fetch_assoc();
+                $oldDataStmt->close();
 
-            if ($currentRow) {
-                $new_balance = $currentRow['expected_tuition'] - $edit_amount_paid;
-                
-                // 1. Update student_payments (including full_name)
-                $updateStmt = $mysqli->prepare("UPDATE student_payments SET full_name = ?, amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, status_approved = 'approved' WHERE id = ?");
-                $updateStmt->bind_param("sddddi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_id);
-                $updateStmt->execute();
-                $updateStmt->close();
+                if ($old) {
+                    $userRole = strtolower($_SESSION['role'] ?? '');
+                    
+                    // Role-based field enforcement
+                    if ($userRole === 'principal') {
+                        // Principal cannot change money
+                        $edit_amount_paid = (float)$old['amount_paid'];
+                        $edit_admission_fee = (float)$old['admission_fee'];
+                        $edit_uniform_fee = (float)$old['uniform_fee'];
+                    } elseif ($userRole === 'bursar') {
+                        // Bursar cannot change name
+                        $edit_full_name = $old['full_name'];
+                    }
 
-                // 2. Sync name change to admit_students if possible
-                if ($edit_student_id > 0) {
-                    $admitUpdate = $mysqli->prepare("UPDATE admit_students SET first_name = ? WHERE id = ?");
-                    $admitUpdate->bind_param("si", $edit_full_name, $edit_student_id);
-                    $admitUpdate->execute();
-                    $admitUpdate->close();
+                    $new_balance = $old['expected_tuition'] - $edit_amount_paid;
+                    
+                    // 1. Update student_payments
+                    $updateStmt = $mysqli->prepare("UPDATE student_payments SET full_name = ?, amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, status_approved = 'approved' WHERE id = ?");
+                    $updateStmt->bind_param("sddddi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_id);
+                    $updateStmt->execute();
+                    $updateStmt->close();
+
+                    // 2. Sync name change to admit_students if possible
+                    if ($edit_student_id > 0 && $userRole !== 'bursar') {
+                        $admitUpdate = $mysqli->prepare("UPDATE admit_students SET first_name = ? WHERE id = ?");
+                        $admitUpdate->bind_param("si", $edit_full_name, $edit_student_id);
+                        $admitUpdate->execute();
+                        $admitUpdate->close();
+                    }
+
+                    $mysqli->commit();
+                    header("Location: studentPayments.php?corrected=1");
+                    exit();
                 }
-
-                $mysqli->commit();
-                header("Location: studentPayments.php?corrected=1");
-                exit();
-            }
         } catch (Throwable $e) {
             $mysqli->rollback();
             $error = "Error updating record: " . $e->getMessage();
@@ -187,31 +200,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
     }
 }
 
-// Handle DELETE single payment record (Admin, Bursar, Principal)
+// Handle DELETE single payment record (Admin and Principal only)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_single_payment'])) {
-    $delete_id = intval($_POST['delete_payment_id']);
+    if (isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'principal'])) {
+        $delete_id = intval($_POST['delete_payment_id']);
 
-    if ($delete_id > 0) {
-        $mysqli->begin_transaction();
-        try {
-            // Delete related topups first
-            $delTopups = $mysqli->prepare("DELETE FROM student_payment_topups WHERE payment_id = ?");
-            $delTopups->bind_param("i", $delete_id);
-            $delTopups->execute();
-            $delTopups->close();
+        if ($delete_id > 0) {
+            $mysqli->begin_transaction();
+            try {
+                // Delete related topups first
+                $delTopups = $mysqli->prepare("DELETE FROM student_payment_topups WHERE payment_id = ?");
+                $delTopups->bind_param("i", $delete_id);
+                $delTopups->execute();
+                $delTopups->close();
 
-            // Delete the payment record
-            $delPayment = $mysqli->prepare("DELETE FROM student_payments WHERE id = ?");
-            $delPayment->bind_param("i", $delete_id);
-            $delPayment->execute();
-            $delPayment->close();
+                // Delete the payment record
+                $delPayment = $mysqli->prepare("DELETE FROM student_payments WHERE id = ?");
+                $delPayment->bind_param("i", $delete_id);
+                $delPayment->execute();
+                $delPayment->close();
 
-            $mysqli->commit();
-            header("Location: studentPayments.php?deleted=1");
-            exit();
-        } catch (Throwable $e) {
-            $mysqli->rollback();
+                $mysqli->commit();
+                header("Location: studentPayments.php?deleted=1");
+                exit();
+            } catch (Throwable $e) {
+                $mysqli->rollback();
+            }
         }
+    } else {
+        // Unauthorized attempt
+        header("Location: studentPayments.php?error=unauthorized_delete");
+        exit();
     }
 }
 
@@ -419,6 +438,12 @@ if ($pay_status_filter) {
             break;
         case 'unpaid':
             $filterWhere .= " AND amount_paid <= 0.01";
+            break;
+        case 'unpaid_admission':
+            $filterWhere .= " AND admission_fee <= 0.01";
+            break;
+        case 'unpaid_uniform':
+            $filterWhere .= " AND uniform_fee <= 0.01";
             break;
     }
 }
@@ -800,6 +825,8 @@ if ($currentTermResult) {
                 <option value="t2_paid" <?= $pay_status_filter === 't2_paid' ? 'selected' : '' ?>>Term 2: Cleared</option>
                 <option value="t3_partial" <?= $pay_status_filter === 't3_partial' ? 'selected' : '' ?>>Term 3: Partial</option>
                 <option value="t3_paid" <?= $pay_status_filter === 't3_paid' ? 'selected' : '' ?>>Term 3: Cleared (Annual)</option>
+                <option value="unpaid_admission" <?= $pay_status_filter === 'unpaid_admission' ? 'selected' : '' ?>>Unpaid Admission Fee</option>
+                <option value="unpaid_uniform" <?= $pay_status_filter === 'unpaid_uniform' ? 'selected' : '' ?>>Unpaid Uniform Fee</option>
             </select>
                 </div>
 
@@ -983,12 +1010,14 @@ if ($currentTermResult) {
                                                 onclick="loadEditPayment(<?= $payment['id'] ?>, <?= $payment['amount_paid'] ?>, <?= $payment['admission_fee'] ?>, <?= $payment['uniform_fee'] ?>, <?= $payment['expected_tuition'] ?>, '<?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>', <?= $payment['student_id'] ?>)">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
-                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this payment record for <?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>? This action cannot be undone.');">
-                                            <input type="hidden" name="delete_payment_id" value="<?= $payment['id'] ?>">
-                                            <button type="submit" name="delete_single_payment" class="btn btn-sm btn-danger" title="Delete Payment">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
+                                        <?php if (isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'principal'])): ?>
+                                            <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this payment record for <?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>? This action cannot be undone.');">
+                                                <input type="hidden" name="delete_payment_id" value="<?= $payment['id'] ?>">
+                                                <button type="submit" name="delete_single_payment" class="btn btn-sm btn-danger" title="Delete Payment">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>
@@ -1193,7 +1222,7 @@ if ($currentTermResult) {
 
                     <div class="mb-3">
                         <label for="editPaymentStudentName" class="form-label fw-bold">Student Name</label>
-                        <input type="text" class="form-control" name="edit_full_name" id="editPaymentStudentName" required>
+                        <input type="text" class="form-control" name="edit_full_name" id="editPaymentStudentName" required <?= ($userRole === 'bursar') ? 'readonly' : '' ?>>
                     </div>
 
                     <div class="mb-3">
@@ -1203,7 +1232,7 @@ if ($currentTermResult) {
 
                     <div class="mb-3">
                         <label for="editPaymentAmountPaid" class="form-label">Amount Paid</label>
-                        <input type="number" class="form-control" id="editPaymentAmountPaid" name="edit_amount_paid" step="0.01" min="0" required oninput="calculateEditBalance()">
+                        <input type="number" class="form-control" id="editPaymentAmountPaid" name="edit_amount_paid" step="0.01" min="0" required oninput="calculateEditBalance()" <?= ($userRole === 'principal') ? 'readonly' : '' ?>>
                     </div>
 
                     <div class="mb-3">
@@ -1213,12 +1242,12 @@ if ($currentTermResult) {
 
                     <div class="mb-3">
                         <label for="editPaymentAdmissionFee" class="form-label">Admission Fee</label>
-                        <input type="number" class="form-control" id="editPaymentAdmissionFee" name="edit_admission_fee" step="0.01" min="0" required>
+                        <input type="number" class="form-control" id="editPaymentAdmissionFee" name="edit_admission_fee" step="0.01" min="0" required <?= ($userRole === 'principal') ? 'readonly' : '' ?>>
                     </div>
 
                     <div class="mb-3">
                         <label for="editPaymentUniformFee" class="form-label">Uniform Fee</label>
-                        <input type="number" class="form-control" id="editPaymentUniformFee" name="edit_uniform_fee" step="0.01" min="0" required>
+                        <input type="number" class="form-control" id="editPaymentUniformFee" name="edit_uniform_fee" step="0.01" min="0" required <?= ($userRole === 'principal') ? 'readonly' : '' ?>>
                     </div>
 
                     <div class="alert alert-info small mb-0">
