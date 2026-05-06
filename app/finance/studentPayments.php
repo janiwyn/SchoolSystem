@@ -526,14 +526,12 @@ if ($currentTermResult) {
 <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
     <?php if ($canRecordPayment): ?>
         <button type="button" class="btn-toggle-form" onclick="togglePaymentForm()">
-            <i class="bi bi-chevron-right"></i> Admit and Record Payment
+            <i class="bi bi-chevron-right"></i> Admit
         </button>
-        <a href="../../sync_students.php" class="btn btn-outline-info btn-sm rounded-pill px-3" target="_blank" title="Sync students from Admission to Payments">
-            <i class="bi bi-arrow-repeat"></i> Sync Missing Students
-        </a>
+
     <?php else: ?>
         <button type="button" class="btn-toggle-form" data-bs-toggle="modal" data-bs-target="#restrictionModal">
-            <i class="bi bi-chevron-right"></i> Admit and Record Payment
+            <i class="bi bi-chevron-right"></i> Admit 
         </button>
     <?php endif; ?>
 </div>
@@ -574,7 +572,7 @@ if ($currentTermResult) {
 <?php if ($canRecordPayment): ?>
     <div class="card shadow-sm border-0 mb-4" id="paymentFormCard" style="display: none;">
         <div class="card-header form-header text-white">
-            <h5 class="mb-0">Admit and Record Payments</h5>
+            <h5 class="mb-0">Admit</h5>
         </div>
         <div class="card-body">
             <?php if ($error): ?>
