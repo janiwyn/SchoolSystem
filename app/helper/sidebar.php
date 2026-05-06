@@ -28,14 +28,11 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
         
 
         
-        <a href="../finance/admitStudents.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'admitStudents.php' ? 'active' : '' ?>">
-            <i class="bi bi-people-fill"></i>
-            <span>Admitted Students</span>
-        </a>
+
         
         <a href="../finance/studentPayments.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'studentPayments.php' ? 'active' : '' ?>">
             <i class="bi bi-credit-card"></i>
-            <span>Student Payments</span>
+            <span>Admit and Pay</span>
         </a>
         
         <a href="../finance/audit.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'audit.php' ? 'active' : '' ?>">

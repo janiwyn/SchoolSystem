@@ -336,6 +336,21 @@ if (isset($_GET['corrected']) && $_GET['corrected'] == 1) {
     $message = "Payment record corrected successfully!";
 }
 
+// Sorting logic for Student Payments
+$sort_by = $_GET['sort_by'] ?? $_COOKIE['student_payments_sort_by'] ?? 'payment_date';
+$sort_order = $_GET['sort_order'] ?? $_COOKIE['student_payments_sort_order'] ?? 'DESC';
+
+// Sanitize
+$allowed_cols = ['admission_no', 'payment_date'];
+if (!in_array($sort_by, $allowed_cols)) $sort_by = 'payment_date';
+if (!in_array(strtoupper($sort_order), ['ASC', 'DESC'])) $sort_order = 'DESC';
+
+// Persist via cookie if explicitly changed in URL
+if (isset($_GET['sort_by']) || isset($_GET['sort_order'])) {
+    setcookie('student_payments_sort_by', $sort_by, time() + (86400 * 30 * 12), "/"); 
+    setcookie('student_payments_sort_order', $sort_order, time() + (86400 * 30 * 12), "/");
+}
+
 // Include layout AFTER header operations
 require_once __DIR__ . '/../helper/layout.php';
 
@@ -348,7 +363,8 @@ $pay_status_filter = $_GET['pay_status'] ?? ''; // Standardized to match form
 $show_duplicates = $_GET['duplicates'] ?? ''; // Added duplicates filter
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
-$sort_order = $_GET['sort'] ?? 'ASC';
+// These are now handled by the sorting logic above
+// $sort_order = $_GET['sort'] ?? 'ASC';
 
 if ($search_filter) {
     $searchTerm = '%' . $mysqli->real_escape_string($search_filter) . '%';
@@ -390,6 +406,15 @@ $countRow = $countResult->fetch_assoc();
 $total_records = $countRow['total'];
 $total_pages = ceil($total_records / $records_per_page);
 
+// Build Order By clause
+$orderBy = "payment_date DESC"; // Default
+if ($sort_by === 'admission_no') {
+    $orderBy = "CAST(admission_no AS UNSIGNED) $sort_order";
+} else {
+    $orderBy = "payment_date $sort_order";
+}
+$orderBy .= ", id DESC"; // Stability
+
 // Get all payments recorded with filter and pagination
 $paymentsQuery = "SELECT 
     id, student_id, admission_no, full_name, day_boarding, gender, class_name, term,
@@ -397,7 +422,7 @@ $paymentsQuery = "SELECT
     parent_contact, payment_date, created_at, status_approved
 FROM student_payments
 WHERE $filterWhere
-ORDER BY payment_date DESC, id DESC
+ORDER BY $orderBy
 LIMIT $offset, $records_per_page";
 
 $paymentsResult = $mysqli->query($paymentsQuery);
@@ -501,14 +526,14 @@ if ($currentTermResult) {
 <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
     <?php if ($canRecordPayment): ?>
         <button type="button" class="btn-toggle-form" onclick="togglePaymentForm()">
-            <i class="bi bi-chevron-right"></i> Record Student Payment
+            <i class="bi bi-chevron-right"></i> Admit and Record Payment
         </button>
         <a href="../../sync_students.php" class="btn btn-outline-info btn-sm rounded-pill px-3" target="_blank" title="Sync students from Admission to Payments">
             <i class="bi bi-arrow-repeat"></i> Sync Missing Students
         </a>
     <?php else: ?>
         <button type="button" class="btn-toggle-form" data-bs-toggle="modal" data-bs-target="#restrictionModal">
-            <i class="bi bi-chevron-right"></i> Record Student Payment
+            <i class="bi bi-chevron-right"></i> Admit and Record Payment
         </button>
     <?php endif; ?>
 </div>
@@ -549,7 +574,7 @@ if ($currentTermResult) {
 <?php if ($canRecordPayment): ?>
     <div class="card shadow-sm border-0 mb-4" id="paymentFormCard" style="display: none;">
         <div class="card-header form-header text-white">
-            <h5 class="mb-0">Record Student Payment</h5>
+            <h5 class="mb-0">Admit and Record Payments</h5>
         </div>
         <div class="card-body">
             <?php if ($error): ?>
@@ -774,7 +799,12 @@ if ($currentTermResult) {
                 <table class="table table-striped student-payments-table">
                     <thead>
                         <tr>
-                            <th>Adm No</th>
+                            <th>
+                                <a href="?<?= http_build_query(array_merge($_GET, ['sort_by' => 'admission_no', 'sort_order' => ($sort_by === 'admission_no' && $sort_order === 'ASC' ? 'DESC' : 'ASC')])) ?>" class="text-decoration-none text-white d-flex align-items-center justify-content-between">
+                                    Adm No
+                                    <i class="bi <?= ($sort_by === 'admission_no' ? ($sort_order === 'ASC' ? 'bi-sort-numeric-down' : 'bi-sort-numeric-up-alt') : 'bi-arrow-down-up') ?> ms-1"></i>
+                                </a>
+                            </th>
                             <th>Name</th>
                             <th>F/M</th>
                             <th>Class</th>
