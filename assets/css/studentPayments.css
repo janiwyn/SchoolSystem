@@ -442,3 +442,61 @@
     color: white;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+/* Multi-term progress bar */
+.term-progress-container {
+    width: 120px;
+    position: relative;
+    padding: 2px 0;
+}
+
+.term-progress {
+    height: 10px;
+    background-color: #e9ecef;
+    border-radius: 5px;
+    display: flex;
+    overflow: hidden;
+    border: 1px solid #dee2e6;
+}
+
+.term-segment {
+    height: 100%;
+    transition: width 0.6s ease;
+}
+
+.term-segment.t1 { background-color: #dc3545; } /* Red */
+.term-segment.t2 { background-color: #ffc107; } /* Yellow */
+.term-segment.t3 { background-color: #28a745; } /* Green */
+
+.term-calibrations {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8px;
+    color: #6c757d;
+    margin-top: 2px;
+    padding: 0 2px;
+}
+
+.terms-paid-badges {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+}
+
+.term-badge {
+    font-size: 9px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.term-badge.paid {
+    background-color: #28a745;
+    color: white;
+}
+
+.term-badge.unpaid {
+    background-color: #f8f9fa;
+    color: #dee2e6;
+    border: 1px solid #dee2e6;
+}

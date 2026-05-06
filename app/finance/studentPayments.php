@@ -398,10 +398,28 @@ if ($show_duplicates) {
 }
 
 if ($pay_status_filter) {
-    if ($pay_status_filter === 'paid') {
-        $filterWhere .= " AND balance <= 0";
-    } elseif ($pay_status_filter === 'unpaid') {
-        $filterWhere .= " AND balance > 0";
+    switch ($pay_status_filter) {
+        case 't1_paid':
+            $filterWhere .= " AND amount_paid >= (expected_tuition / 3 - 0.01)";
+            break;
+        case 't1_partial':
+            $filterWhere .= " AND amount_paid > 0.01 AND amount_paid < (expected_tuition / 3 - 0.01)";
+            break;
+        case 't2_paid':
+            $filterWhere .= " AND amount_paid >= (2 * expected_tuition / 3 - 0.01)";
+            break;
+        case 't2_partial':
+            $filterWhere .= " AND amount_paid > (expected_tuition / 3 + 0.01) AND amount_paid < (2 * expected_tuition / 3 - 0.01)";
+            break;
+        case 't3_paid':
+            $filterWhere .= " AND amount_paid >= (expected_tuition - 0.01)";
+            break;
+        case 't3_partial':
+            $filterWhere .= " AND amount_paid > (2 * expected_tuition / 3 + 0.01) AND amount_paid < (expected_tuition - 0.01)";
+            break;
+        case 'unpaid':
+            $filterWhere .= " AND amount_paid <= 0.01";
+            break;
     }
 }
 if ($class_filter) {
@@ -773,11 +791,16 @@ if ($currentTermResult) {
 
                 <div class="filter-group">
                     <label>Pay Status</label>
-                    <select name="pay_status" class="form-control">
-                        <option value="">All Status</option>
-                        <option value="paid" <?= $pay_status_filter === 'paid' ? 'selected' : '' ?>>Paid</option>
-                        <option value="unpaid" <?= $pay_status_filter === 'unpaid' ? 'selected' : '' ?>>Unpaid</option>
-                    </select>
+                  <select name="pay_status" class="form-select form-select-sm">
+                <option value="">All Pay Statuses</option>
+                <option value="unpaid" <?= $pay_status_filter === 'unpaid' ? 'selected' : '' ?>>Not Paid Anything</option>
+                <option value="t1_partial" <?= $pay_status_filter === 't1_partial' ? 'selected' : '' ?>>Term 1: Partial</option>
+                <option value="t1_paid" <?= $pay_status_filter === 't1_paid' ? 'selected' : '' ?>>Term 1: Cleared</option>
+                <option value="t2_partial" <?= $pay_status_filter === 't2_partial' ? 'selected' : '' ?>>Term 2: Partial</option>
+                <option value="t2_paid" <?= $pay_status_filter === 't2_paid' ? 'selected' : '' ?>>Term 2: Cleared</option>
+                <option value="t3_partial" <?= $pay_status_filter === 't3_partial' ? 'selected' : '' ?>>Term 3: Partial</option>
+                <option value="t3_paid" <?= $pay_status_filter === 't3_paid' ? 'selected' : '' ?>>Term 3: Cleared (Annual)</option>
+            </select>
                 </div>
 
                 <div class="filter-group">
@@ -828,12 +851,12 @@ if ($currentTermResult) {
         
         <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
             <!-- Admin‑only bulk delete button, just above the student payments table -->
-            <button type="button"
+            <!-- <button type="button"
                     class="btn btn-danger mb-3"
                     data-bs-toggle="modal"
                     data-bs-target="#deletePaymentsByDateModal">
                 <i class="bi bi-trash"></i> Delete Payments by Date
-            </button>
+            </button> -->
 
             <!-- Admin‑only re-sequence button -->
             <form method="POST" action="../admin/resequence_adm_nos.php" style="display:inline;" onsubmit="return confirm('WARNING: This will re-assign Admission Numbers for ALL students in the system to remove gaps (1, 2, 3...). Existing numbers will be changed. This action is irreversible. Proceed?');">
@@ -863,6 +886,8 @@ if ($currentTermResult) {
                             <th>Expected Tuition</th>
                             <th>Amount Paid</th>
                             <th>Balance</th>
+                            <th>Tuition Progress</th>
+                            <th>Terms Cleared</th>
                             <th>Admission Fee</th>
                             <th>Uniform Fee</th>
                             <th>Parent Contact</th>
@@ -885,6 +910,37 @@ if ($currentTermResult) {
                                 <td><?= number_format($payment['expected_tuition'], 2) ?></td>
                                 <td><?= number_format($payment['amount_paid'], 2) ?></td>
                                 <td><?= number_format($payment['balance'], 2) ?></td>
+                                <td>
+                                    <?php
+                                    $total = (float)$payment['expected_tuition'];
+                                    $paid = (float)$payment['amount_paid'];
+                                    $t_threshold = $total / 3;
+                                    
+                                    // Calculate segment widths (each term is 33.33% of the bar)
+                                    $w1 = ($total > 0) ? (min($paid, $t_threshold) / $total) * 100 : 0;
+                                    $w2 = ($total > 0) ? (max(0, min($paid - $t_threshold, $t_threshold)) / $total) * 100 : 0;
+                                    $w3 = ($total > 0) ? (max(0, min($paid - (2 * $t_threshold), $t_threshold)) / $total) * 100 : 0;
+                                    ?>
+                                    <div class="term-progress-container" title="Paid: <?= number_format($paid, 2) ?> / <?= number_format($total, 2) ?>">
+                                        <div class="term-progress">
+                                            <div class="term-segment t1" style="width: <?= $w1 ?>%"></div>
+                                            <div class="term-segment t2" style="width: <?= $w2 ?>%"></div>
+                                            <div class="term-segment t3" style="width: <?= $w3 ?>%"></div>
+                                        </div>
+                                        <div class="term-calibrations">
+                                            <span>T1</span>
+                                            <span>T2</span>
+                                            <span>T3</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="terms-paid-badges">
+                                        <span class="term-badge <?= ($paid >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T1</span>
+                                        <span class="term-badge <?= ($paid >= (2 * $t_threshold) - 0.01) ? 'paid' : 'unpaid' ?>">T2</span>
+                                        <span class="term-badge <?= ($paid >= $total - 0.01) ? 'paid' : 'unpaid' ?>">T3</span>
+                                    </div>
+                                </td>
                                 <td><?= number_format($payment['admission_fee'], 2) ?></td>
                                 <td><?= number_format($payment['uniform_fee'], 2) ?></td>
                                 <td><?= htmlspecialchars($payment['parent_contact']) ?></td>
@@ -944,6 +1000,7 @@ if ($currentTermResult) {
                             <td class="totals-expected"><?= number_format($totals['total_tuition'] ?? 0, 2) ?></td>
                             <td class="totals-paid"><?= number_format($totals['total_paid'] ?? 0, 2) ?></td>
                             <td class="totals-balance"><?= number_format($totals['total_balance'] ?? 0, 2) ?></td>
+                            <td colspan="2"></td> <!-- Progress & Terms columns -->
                             <td class="totals-admission"><?= number_format($totals['total_admission'] ?? 0, 2) ?></td>
                             <td class="totals-uniform"><?= number_format($totals['total_uniform'] ?? 0, 2) ?></td>
                             <td colspan="4"></td>
