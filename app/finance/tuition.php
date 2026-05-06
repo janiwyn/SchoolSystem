@@ -237,13 +237,7 @@ $canModifyTuition = ($userRole === 'admin');
 
                 <div class="col-md-4">
                     <label class="form-label">Term</label>
-                    <select name="term" class="form-control" required>
-                        <option value="">Select Term</option>
-                        <option value="Term 1">Term 1</option>
-                        <option value="Term 2">Term 2</option>
-                        <option value="Term 3">Term 3</option>
-                        <option value="Annual">Annual</option>
-                    </select>
+                    <input type="text" name="term" class="form-control" placeholder="e.g., Term 1, Term 2..." required>
                 </div>
 
                 <div class="col-md-4">
@@ -389,17 +383,12 @@ $canModifyTuition = ($userRole === 'admin');
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Class</label>
-                            <input type="text" name="class_name" id="editClassName" class="form-control" readonly>
+                            <input type="text" name="class_name" id="editClassName" class="form-control" required>
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">Term</label>
-                            <select name="term" id="editTerm" class="form-control" required>
-                                <option value="Term 1">Term 1</option>
-                                <option value="Term 2">Term 2</option>
-                                <option value="Term 3">Term 3</option>
-                                <option value="Annual">Annual</option>
-                            </select>
+                            <input type="text" name="term" id="editTerm" class="form-control" required>
                         </div>
 
                         <div class="col-md-12">
