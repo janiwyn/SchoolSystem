@@ -778,7 +778,25 @@ if ($currentTermResult) {
 <!-- Payment Records Table -->
 <div class="card shadow-sm border-0">
     <div class="card-body">
-        <h5 class="mb-3">Payment Records</h5>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Payment Records</h5>
+            <div class="text-primary fw-bold" style="font-size: 1.1rem; letter-spacing: 0.5px;">
+                <?php
+                $summary_text = "TOTAL: " . number_format($total_records) . " STUDENTS";
+                if ($class_filter) {
+                    $selected_class_name = 'N/A';
+                    foreach ($all_classes as $cls) {
+                        if ((int)$cls['id'] === (int)$class_filter) {
+                            $selected_class_name = $cls['class_name'];
+                            break;
+                        }
+                    }
+                    $summary_text = "TOTAL ($selected_class_name): " . number_format($total_records) . " STUDENTS";
+                }
+                echo htmlspecialchars($summary_text);
+                ?>
+            </div>
+        </div>
         
         <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
             <!-- Admin‑only bulk delete button, just above the student payments table -->
@@ -950,10 +968,13 @@ if ($currentTermResult) {
                     </ul>
                 </nav>
 
-                <!-- Pagination Info -->
+            <?php endif; ?>
+            
+            <!-- Pagination Info - Always show if records exist -->
+            <?php if ($total_records > 0): ?>
                 <div class="text-center mt-3">
                     <p class="text-muted" style="font-size: 13px;">
-                        Showing <?= ($offset + 1) ?> to <?= min($offset + $records_per_page, $total_records) ?> of <?= $total_records ?> payments
+                        Showing <?= ($total_records > 0 ? $offset + 1 : 0) ?> to <?= min($offset + $records_per_page, $total_records) ?> of <?= $total_records ?> payments
                     </p>
                 </div>
             <?php endif; ?>
