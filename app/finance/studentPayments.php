@@ -447,8 +447,8 @@ $termsQuery = "SELECT DISTINCT term FROM student_payments ORDER BY term ASC";
 $termsResult = $mysqli->query($termsQuery);
 $terms = $termsResult ? $termsResult->fetch_all(MYSQLI_ASSOC) : [];
 
-// Get classes for filter
-$classesQuery = "SELECT id, class_name FROM classes ORDER BY class_name ASC";
+// Get classes for filter (Only those that have a fee structure defined)
+$classesQuery = "SELECT id, class_name FROM classes WHERE id IN (SELECT DISTINCT class_id FROM fee_structure) ORDER BY class_name ASC";
 $classesResult = $mysqli->query($classesQuery);
 $all_classes = $classesResult ? $classesResult->fetch_all(MYSQLI_ASSOC) : [];
 
