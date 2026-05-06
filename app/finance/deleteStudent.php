@@ -13,60 +13,29 @@ if (isset($_SESSION['role']) && $_SESSION['role'] !== 'admin') {
 // Re-sequence admission_no to 1..N and propagate to related tables
 function resequenceAdmissionNumbers(mysqli $mysqli) {
     // Get all students ordered by current admission_no (numeric)
-    $result = $mysqli->query("SELECT id, admission_no FROM admit_students ORDER BY CAST(admission_no AS UNSIGNED) ASC");
+    $result = $mysqli->query("SELECT id, admission_no FROM admit_students ORDER BY CAST(admission_no AS UNSIGNED) ASC, id ASC");
     if (!$result) {
         return;
     }
 
-    $students = $result->fetch_all(MYSQLI_ASSOC);
-    $result->free();
-
-    if (empty($students)) {
-        return;
-    }
-
-    // Build mapping old_sn => new_sn (1..N)
-    $mapping = [];
-    $new_sn = 1;
-    foreach ($students as $row) {
-        $old_sn = (int)$row['admission_no'];
-        $mapping[$old_sn] = $new_sn;
-        $new_sn++;
-    }
-
-    $mysqli->begin_transaction();
-    try {
-        foreach ($students as $row) {
-            $old_sn = (int)$row['admission_no'];
-            $new_sn = $mapping[$old_sn];
-            if ($old_sn === $new_sn) {
-                continue; // nothing to change
-            }
-            $id = (int)$row['id'];
-
-            // Update admit_students
-            $s1 = $mysqli->prepare("UPDATE admit_students SET admission_no = ? WHERE id = ?");
-            $s1->bind_param("ii", $new_sn, $id);
-            $s1->execute();
-            $s1->close();
-
-            // Update student_payments
-            $s2 = $mysqli->prepare("UPDATE student_payments SET admission_no = ? WHERE admission_no = ?");
-            $s2->bind_param("ii", $new_sn, $old_sn);
-            $s2->execute();
-            $s2->close();
-
-            // Update student_payment_topups
-            $s3 = $mysqli->prepare("UPDATE student_payment_topups SET admission_no = ? WHERE admission_no = ?");
-            $s3->bind_param("ii", $new_sn, $old_sn);
-            $s3->execute();
-            $s3->close();
-        }
-
-        $mysqli->commit();
-    } catch (Throwable $e) {
-        $mysqli->rollback();
-        // silently ignore on failure to avoid breaking delete
+    $counter = 1;
+    while ($row = $result->fetch_assoc()) {
+        $student_id = $row['id'];
+        $new_adm_no = (string)$counter;
+        
+        // Update admit_students table
+        $s1 = $mysqli->prepare("UPDATE admit_students SET admission_no = ? WHERE id = ?");
+        $s1->bind_param("si", $new_adm_no, $student_id);
+        $s1->execute();
+        $s1->close();
+        
+        // Update student_payments table (to keep in sync)
+        $s2 = $mysqli->prepare("UPDATE student_payments SET admission_no = ? WHERE student_id = ?");
+        $s2->bind_param("si", $new_adm_no, $student_id);
+        $s2->execute();
+        $s2->close();
+        
+        $counter++;
     }
 }
 

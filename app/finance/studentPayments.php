@@ -466,8 +466,8 @@ $totalsResult = $mysqli->query($totalsQuery);
 $totals = $totalsResult->fetch_assoc();
 
 // Get current user role - MUST be before student loading
-$userRole = $_SESSION['role'] ?? '';
-$canRecordPayment = in_array($userRole, ['admin', 'bursar']);
+$userRole = strtolower($_SESSION['role'] ?? '');
+$canRecordPayment = in_array($userRole, ['admin', 'bursar', 'principal']);
 
 // Get approved students for dropdown - LOAD DIRECTLY
 $approved_students = [];
@@ -536,6 +536,20 @@ if ($currentTermResult) {
     $currentTerm = $termRow['term'] ?? '';
 }
 ?>
+
+<?php if (isset($_GET['corrected'])): ?>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-2"></i> Payment record corrected and approved successfully.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+<?php endif; ?>
+
+<?php if (isset($_GET['resequenced'])): ?>
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-2"></i> Admission numbers have been re-sequenced successfully. All gaps have been removed.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+<?php endif; ?>
 
 <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
     <?php if ($canRecordPayment): ?>
@@ -820,6 +834,13 @@ if ($currentTermResult) {
                     data-bs-target="#deletePaymentsByDateModal">
                 <i class="bi bi-trash"></i> Delete Payments by Date
             </button>
+
+            <!-- Admin‑only re-sequence button -->
+            <form method="POST" action="../admin/resequence_adm_nos.php" style="display:inline;" onsubmit="return confirm('WARNING: This will re-assign Admission Numbers for ALL students in the system to remove gaps (1, 2, 3...). Existing numbers will be changed. This action is irreversible. Proceed?');">
+                <button type="submit" name="resequence_adm_nos" class="btn btn-warning mb-3 ms-2 text-dark fw-bold">
+                    <i class="bi bi-sort-numeric-down"></i> Fix Adm No Gaps
+                </button>
+            </form>
         <?php endif; ?>
         
         <?php if (empty($payments)): ?>
@@ -1042,10 +1063,10 @@ if ($currentTermResult) {
                 <i class="bi bi-shield-lock" style="font-size: 64px; color: #dc3545; margin-bottom: 20px;"></i>
                 <h5 class="mb-3">Cannot Record Student Payment</h5>
                 <p class="text-muted mb-0">
-                    Only <strong>Admin</strong> and <strong>Bursar</strong> roles have permission to record student payments.
+                    Only <strong>Admin</strong>, <strong>Bursar</strong>, and <strong>Principal</strong> roles have permission to record student payments.
                 </p>
                 <p class="text-muted mt-2">
-                    As a <strong class="text-primary">Principal</strong>, you can view payment records but cannot create new ones.
+                    Please contact the system administrator if you believe this is an error.
                 </p>
             </div>
             <div class="modal-footer">

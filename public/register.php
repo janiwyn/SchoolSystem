@@ -22,14 +22,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Hash the password
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
-        // Check if email already exists
-        $checkStmt = $mysqli->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
-        $checkStmt->bind_param("s", $email);
+        // Check if email or username already exists
+        $checkStmt = $mysqli->prepare("SELECT id FROM users WHERE email = ? OR username = ? LIMIT 1");
+        $checkStmt->bind_param("ss", $email, $username);
         $checkStmt->execute();
         $checkResult = $checkStmt->get_result();
 
         if ($checkResult->num_rows > 0) {
-            $error = "Email already exists";
+            $error = "Email or Username already exists";
         } else {
             // Insert new user with status = 0 (pending approval)
             $status = 0; // Pending approval
@@ -297,49 +297,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <!-- Form -->
-        <form method="POST">
-            <div class="form-group">
-                <label for="name">Full Name</label>
-                <input type="text" id="name" name="name" class="form-control" placeholder="Enter your full name" required>
-            </div>
-
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" class="form-control" placeholder="Choose a username" required>
-            </div>
-
-            <div class="form-group">
-                <label for="email">Email Address</label>
-                <input type="email" id="email" name="email" class="form-control" placeholder="Enter your email" required>
-            </div>
-
-            <div class="form-row">
+        <!-- Form (Hidden on success) -->
+        <?php if (empty($message)): ?>
+            <form method="POST">
                 <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" class="form-control" placeholder="Create password" required>
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="name" class="form-control" placeholder="Enter your full name" required>
                 </div>
 
                 <div class="form-group">
-                    <label for="confirm">Confirm Password</label>
-                    <input type="password" id="confirm" name="confirm" class="form-control" placeholder="Confirm password" required>
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" class="form-control" placeholder="Choose a username" required>
                 </div>
-            </div>
 
-            <div class="form-row">
                 <div class="form-group">
-                    <label for="role">Role</label>
-                    <select id="role" name="role" class="form-control" required>
-                        <option value="">Select role</option>
-                        <option value="admin">Admin</option>
-                        <option value="principal">Principal</option>
-                        <option value="bursar">Bursar</option>
-                    </select>
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" class="form-control" placeholder="Enter your email" required>
                 </div>
-            </div>
 
-            <button type="submit" class="btn-register">Create Account</button>
-        </form>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" class="form-control" placeholder="Create password" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm">Confirm Password</label>
+                        <input type="password" id="confirm" name="confirm" class="form-control" placeholder="Confirm password" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="role">Role</label>
+                        <select id="role" name="role" class="form-control" required>
+                            <option value="">Select role</option>
+                            <option value="admin">Admin</option>
+                            <option value="principal">Principal</option>
+                            <option value="bursar">Bursar</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-register">Create Account</button>
+            </form>
+        <?php else: ?>
+            <div class="text-center mt-4">
+                <a href="login.php" class="btn btn-primary px-4 py-2 rounded-pill">
+                    <i class="bi bi-box-arrow-in-right"></i> Go to Login
+                </a>
+            </div>
+        <?php endif; ?>
 
         <!-- Footer -->
         <div class="register-footer">
