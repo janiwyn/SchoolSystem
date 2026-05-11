@@ -5,6 +5,18 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['bursar', 'admin', 'principal']);
 
+// Get System Settings for dynamic permissions
+$settingsRes = $mysqli->query("SELECT setting_key, setting_value FROM system_settings");
+$sys_settings = [];
+if ($settingsRes) {
+    while ($row = $settingsRes->fetch_assoc()) {
+        $sys_settings[$row['setting_key']] = (int)$row['setting_value'];
+    }
+}
+
+$canPrincipalEdit = (isset($sys_settings['principal_edit_payments']) && $sys_settings['principal_edit_payments'] === 1);
+$canBursarEdit = (isset($sys_settings['bursar_edit_payments']) && $sys_settings['bursar_edit_payments'] === 1);
+
 // Helper to generate next serial number for new admissions
 function generateSerialNumber($mysqli) {
     $query = "SELECT MAX(CAST(admission_no AS UNSIGNED)) as max_sn FROM admit_students";
@@ -148,12 +160,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
     $edit_amount_paid = floatval($_POST['edit_amount_paid']);
     $edit_admission_fee = floatval($_POST['edit_admission_fee']);
     $edit_uniform_fee = floatval($_POST['edit_uniform_fee']);
+    $edit_class_id = intval($_POST['edit_class_id']);
+    $edit_category = trim($_POST['edit_category'] ?? 'Normal');
+    $edit_day_boarding = trim($_POST['edit_day_boarding']);
+    $edit_expected_tuition = floatval($_POST['edit_expected_tuition']);
 
     if ($edit_id > 0 && $edit_full_name !== '' && $edit_amount_paid >= 0 && $edit_admission_fee >= 0 && $edit_uniform_fee >= 0) {
         $mysqli->begin_transaction();
         try {
                 // 1. Get existing data to enforce role-based restrictions
-                $oldDataStmt = $mysqli->prepare("SELECT full_name, amount_paid, admission_fee, uniform_fee, expected_tuition FROM student_payments WHERE id = ?");
+                $oldDataStmt = $mysqli->prepare("SELECT full_name, amount_paid, admission_fee, uniform_fee, expected_tuition, comment FROM student_payments WHERE id = ?");
                 $oldDataStmt->bind_param("i", $edit_id);
                 $oldDataStmt->execute();
                 $old = $oldDataStmt->get_result()->fetch_assoc();
@@ -173,18 +189,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
                         $edit_full_name = $old['full_name'];
                     }
 
-                    $new_balance = $old['expected_tuition'] - $edit_amount_paid;
+                    $new_balance = $edit_expected_tuition - $edit_amount_paid;
                     
+                    // Get new class name
+                    $cnStmt = $mysqli->prepare("SELECT class_name FROM classes WHERE id = ?");
+                    $cnStmt->bind_param("i", $edit_class_id);
+                    $cnStmt->execute();
+                    $cnRow = $cnStmt->get_result()->fetch_assoc();
+                    $edit_class_name = $cnRow['class_name'] ?? 'N/A';
+                    $cnStmt->close();
+
                     // 1. Update student_payments
-                    $updateStmt = $mysqli->prepare("UPDATE student_payments SET full_name = ?, amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, status_approved = 'approved' WHERE id = ?");
-                    $updateStmt->bind_param("sddddi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_id);
+                    $updateStmt = $mysqli->prepare("UPDATE student_payments SET full_name = ?, amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, class_id = ?, class_name = ?, category = ?, day_boarding = ?, expected_tuition = ?, status_approved = 'approved' WHERE id = ?");
+                    $updateStmt->bind_param("sddddisssdi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_class_id, $edit_class_name, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_id);
                     $updateStmt->execute();
                     $updateStmt->close();
 
-                    // 2. Sync name change to admit_students if possible
-                    if ($edit_student_id > 0 && $userRole !== 'bursar') {
-                        $admitUpdate = $mysqli->prepare("UPDATE admit_students SET first_name = ? WHERE id = ?");
-                        $admitUpdate->bind_param("si", $edit_full_name, $edit_student_id);
+                    // 2. Sync to admit_students
+                    if ($edit_student_id > 0) {
+                        $admitUpdate = $mysqli->prepare("UPDATE admit_students SET first_name = ?, class_id = ?, category = ?, day_boarding = ?, expected_tuition = ? WHERE id = ?");
+                        // s(1):full_name, i(2):class_id, s(3):category, s(4):day_boarding, d(5):expected_tuition, i(6):student_id
+                        $admitUpdate->bind_param("sissdi", $edit_full_name, $edit_class_id, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_student_id);
                         $admitUpdate->execute();
                         $admitUpdate->close();
                     }
@@ -247,6 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     // Additional fields for new admission
     $gender = trim($_POST['gender'] ?? '');
     $class_id = intval($_POST['class_id'] ?? 0);
+    $category = trim($_POST['category'] ?? 'Normal');
     $day_boarding = trim($_POST['day_boarding'] ?? '');
     $admission_fee = floatval($_POST['admission_fee'] ?? 0);
     $uniform_fee = floatval($_POST['uniform_fee'] ?? 0);
@@ -254,8 +280,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     $parent_contact = trim($_POST['parent_contact'] ?? '');
     $parent_email = trim($_POST['parent_email'] ?? '');
     
-    if (!$full_name || !$payment_date || !$term || !$gender || !$class_id || !$day_boarding) {
-        $error = "All required fields must be filled (Name, Gender, Class, Day/Boarding, Term, Date)";
+    if (!$full_name || !$payment_date || !$term || !$gender || !$class_id || !$category || !$day_boarding) {
+        $error = "All required fields must be filled (Name, Gender, Class, Category, Day/Boarding, Term, Date)";
     } elseif ($amount_paid < 0) {
         $error = "Amount cannot be negative";
     } elseif ($payment_date > date('Y-m-d')) {
@@ -281,19 +307,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
 
                 $admitStmt = $mysqli->prepare(
                     "INSERT INTO admit_students 
-                        (admission_no, first_name, gender, class_id, day_boarding, 
+                        (admission_no, first_name, gender, class_id, category, day_boarding, 
                          admission_fee, uniform_fee, expected_tuition, parent_contact, 
                          parent_email, status, created_by, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
                 );
                 
                 if (!$admitStmt) {
                     throw new Exception("Database prepare error: " . $mysqli->error);
                 }
 
-                // s,s,s,i,s,d,d,d,s,s,s,i  => "sssisdddsssi"
-                $admitStmt->bind_param("sssisdddsssi", 
-                    $admission_no, $full_name, $gender, $class_id, $day_boarding,
+                // s(1), s(2), s(3), i(4), s(5), s(6), d(7), d(8), d(9), s(10), s(11), s(12), i(13)
+                $admitStmt->bind_param("sssissdddsssi", 
+                    $admission_no, $full_name, $gender, $class_id, $category, $day_boarding,
                     $admission_fee, $uniform_fee, $expected_tuition, $parent_contact,
                     $parent_email, $status, $user_id);
                 
@@ -338,11 +364,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
             $user_id = $_SESSION['user_id'];
             $status_approved = 'approved';
             
-            $insertPay = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, status_approved, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $insertPay = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, category, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, status_approved, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
             
-            $insertPay->bind_param("issssissdddddssssi", 
+            $insertPay->bind_param("issssisssdddddssssi", 
                 $student_id, $admission_no, $full_name, $day_boarding, 
-                $gender, $class_id, $class_name, $term, $expected_tuition, 
+                $gender, $class_id, $class_name, $category, $term, $expected_tuition, 
                 $amount_paid, $balance, $admission_fee, $uniform_fee, 
                 $parent_contact, $parent_email, $payment_date, $status_approved, $user_id);
             
@@ -396,6 +422,7 @@ $pay_status_filter = $_GET['pay_status'] ?? ''; // Standardized to match form
 $show_duplicates = $_GET['duplicates'] ?? ''; // Added duplicates filter
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
+$category_filter = $_GET['category'] ?? ''; // New Category Filter
 // These are now handled by the sorting logic above
 // $sort_order = $_GET['sort'] ?? 'ASC';
 
@@ -450,6 +477,9 @@ if ($pay_status_filter) {
 if ($class_filter) {
     $filterWhere .= " AND class_id = '" . intval($class_filter) . "'";
 }
+if ($category_filter) {
+    $filterWhere .= " AND category = '" . $mysqli->real_escape_string($category_filter) . "'";
+}
 
 // Pagination setup
 $records_per_page = 60;
@@ -474,9 +504,9 @@ $orderBy .= ", id DESC"; // Stability
 
 // Get all payments recorded with filter and pagination
 $paymentsQuery = "SELECT 
-    id, student_id, admission_no, full_name, day_boarding, gender, class_name, term,
+    id, student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, category, term,
     expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
-    parent_contact, payment_date, created_at, status_approved
+    parent_contact, payment_date, created_at, status_approved, comment
 FROM student_payments
 WHERE $filterWhere
 ORDER BY $orderBy
@@ -490,8 +520,11 @@ $termsQuery = "SELECT DISTINCT term FROM student_payments ORDER BY term ASC";
 $termsResult = $mysqli->query($termsQuery);
 $terms = $termsResult ? $termsResult->fetch_all(MYSQLI_ASSOC) : [];
 
-// Get classes for filter (Only those that have a fee structure defined)
-$classesQuery = "SELECT id, class_name FROM classes WHERE id IN (SELECT DISTINCT class_id FROM fee_structure) ORDER BY class_name ASC";
+// Get active classes (those with fees or students) for filter and modals
+$classesQuery = "SELECT id, class_name FROM classes 
+                 WHERE id IN (SELECT DISTINCT class_id FROM fee_structure) 
+                 OR id IN (SELECT DISTINCT class_id FROM admit_students)
+                 ORDER BY class_name ASC";
 $classesResult = $mysqli->query($classesQuery);
 $all_classes = $classesResult ? $classesResult->fetch_all(MYSQLI_ASSOC) : [];
 
@@ -517,7 +550,7 @@ $approved_students = [];
 if ($canRecordPayment) {
     $approvedStudentsQuery = "SELECT 
         s.id, s.admission_no, s.first_name, s.gender, s.class_id, 
-        s.day_boarding, s.admission_fee, s.uniform_fee, 
+        s.category, s.day_boarding, s.admission_fee, s.uniform_fee, 
         s.parent_contact, s.parent_email, s.status,
         c.class_name
     FROM admit_students s
@@ -562,6 +595,21 @@ if ($classExpectedResult) {
     }
 }
 
+// Build category-based expected tuition map: [category_name][term] => amount
+$categoryExpected = [];
+$catQuery = "SELECT category_name, term, amount FROM category_fees";
+$catResult = $mysqli->query($catQuery);
+if ($catResult) {
+    while ($row = $catResult->fetch_assoc()) {
+        $cname = strtolower(trim($row['category_name']));
+        $trm = $row['term'];
+        if (!isset($categoryExpected[$cname])) {
+            $categoryExpected[$cname] = [];
+        }
+        $categoryExpected[$cname][$trm] = (float)$row['amount'];
+    }
+}
+
 // Also get class names for the map
 $cnResult = $mysqli->query("SELECT id, class_name FROM classes");
 if ($cnResult) {
@@ -578,6 +626,19 @@ if ($currentTermResult) {
     $termRow = $currentTermResult->fetch_assoc();
     $currentTerm = $termRow['term'] ?? '';
 }
+
+// Get dynamic student categories from category_fees table
+$db_categories = [];
+$catNamesQuery = "SELECT DISTINCT category_name FROM category_fees ORDER BY category_name ASC";
+$catNamesRes = $mysqli->query($catNamesQuery);
+if ($catNamesRes) {
+    while ($cRow = $catNamesRes->fetch_assoc()) {
+        if (strtolower($cRow['category_name']) !== 'normal') {
+            $db_categories[] = $cRow['category_name'];
+        }
+    }
+}
+$student_categories = array_merge(['Normal'], $db_categories);
 ?>
 
 <?php if (isset($_GET['corrected'])): ?>
@@ -670,7 +731,8 @@ if ($currentTermResult) {
                                     data-contact="<?= htmlspecialchars($s['parent_contact']) ?>"
                                     data-email="<?= htmlspecialchars($s['parent_email'] ?? '') ?>"
                                     data-status="<?= htmlspecialchars($s['status']) ?>"
-                                    data-class-name="<?= htmlspecialchars($s['class_name'] ?? 'N/A') ?>">
+                                    data-class-name="<?= htmlspecialchars($s['class_name'] ?? 'N/A') ?>"
+                                    data-category="<?= htmlspecialchars($s['category'] ?? 'Normal') ?>">
                                 (SN: <?= htmlspecialchars($s['admission_no']) ?>)
                             </option>
                         <?php endforeach; ?>
@@ -701,6 +763,15 @@ if ($currentTermResult) {
                         <option value="">Select Class</option>
                         <?php foreach ($all_classes as $cls): ?>
                             <option value="<?= $cls['id'] ?>"><?= htmlspecialchars($cls['class_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Category</label>
+                    <select name="category" id="category" class="form-control" required>
+                        <?php foreach ($student_categories as $cat): ?>
+                            <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -812,6 +883,18 @@ if ($currentTermResult) {
                     </select>
                 </div>
 
+                <div class="filter-group">
+                    <label>Category</label>
+                    <select name="category" class="form-control">
+                        <option value="">All Categories</option>
+                        <?php foreach ($student_categories as $cat): ?>
+                            <option value="<?= htmlspecialchars($cat) ?>" <?= $category_filter === $cat ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($cat) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
 
 
                 <div class="filter-group">
@@ -909,6 +992,7 @@ if ($currentTermResult) {
                             <th>Name</th>
                             <th>F/M</th>
                             <th>Class</th>
+                            <th>Category</th>
                             <th>Day/Boarding</th>
                             <th>Expected Tuition</th>
                             <th>Amount Paid</th>
@@ -920,10 +1004,10 @@ if ($currentTermResult) {
                             <th>Parent Contact</th>
                             <th>Payment Date</th>
                             <th>Pay Status</th>
-
-                            <th>Actions</th>
+                            <th>Topup</th>
                             <th>Invoice/Receipt</th>
                             <th>Corrections</th>
+                            <th style="min-width: 300px;">Comments</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -933,6 +1017,7 @@ if ($currentTermResult) {
                                 <td><?= htmlspecialchars($payment['full_name']) ?></td>
                                 <td><?= $payment['gender'] === 'Male' ? 'M' : 'F' ?></td>
                                 <td><?= htmlspecialchars($payment['class_name']) ?></td>
+                                <td><?= htmlspecialchars($payment['category'] ?? 'Normal') ?></td>
                                 <td><?= htmlspecialchars($payment['day_boarding']) ?></td>
                                 <td><?= number_format($payment['expected_tuition'], 2) ?></td>
                                 <td><?= number_format($payment['amount_paid'], 2) ?></td>
@@ -1007,7 +1092,7 @@ if ($currentTermResult) {
                                     <div class="action-buttons">
                                         <button type="button" class="btn btn-sm btn-primary" title="Edit Payment"
                                                 data-bs-toggle="modal" data-bs-target="#editPaymentModal"
-                                                onclick="loadEditPayment(<?= $payment['id'] ?>, <?= $payment['amount_paid'] ?>, <?= $payment['admission_fee'] ?>, <?= $payment['uniform_fee'] ?>, <?= $payment['expected_tuition'] ?>, '<?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>', <?= $payment['student_id'] ?>)">
+                                                onclick="loadEditPayment(<?= $payment['id'] ?>, <?= $payment['amount_paid'] ?>, <?= $payment['admission_fee'] ?>, <?= $payment['uniform_fee'] ?>, <?= $payment['expected_tuition'] ?>, '<?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>', <?= $payment['student_id'] ?>, '<?= htmlspecialchars($payment['class_id'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['category'] ?? 'Normal', ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['day_boarding'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['term'], ENT_QUOTES) ?>')">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
                                         <?php if (isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'principal'])): ?>
@@ -1018,6 +1103,23 @@ if ($currentTermResult) {
                                                 </button>
                                             </form>
                                         <?php endif; ?>
+                                    </div>
+                                </td>
+                                <!-- Inline Comment Column -->
+                                <td>
+                                    <div class="d-flex align-items-start gap-1">
+                                        <div class="input-group input-group-sm" style="width: 240px;">
+                                            <textarea class="form-control comment-input auto-expand" 
+                                                   id="comment_<?= $payment['id'] ?>" 
+                                                   placeholder="Type comment..."
+                                                   rows="1"
+                                                   oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
+                                                   onblur="saveComment(<?= $payment['id'] ?>)"><?= htmlspecialchars($payment['comment'] ?? '') ?></textarea>
+                                            <button class="btn btn-success" type="button" onclick="saveComment(<?= $payment['id'] ?>)" style="align-self: flex-start;">
+                                                <i class="bi bi-check2"></i>
+                                            </button>
+                                        </div>
+                                        <div id="comment_status_<?= $payment['id'] ?>" class="ms-1" style="min-width: 60px; line-height: 1; padding-top: 5px;"></div>
                                     </div>
                                 </td>
                             </tr>
@@ -1033,6 +1135,10 @@ if ($currentTermResult) {
                             <td class="totals-admission"><?= number_format($totals['total_admission'] ?? 0, 2) ?></td>
                             <td class="totals-uniform"><?= number_format($totals['total_uniform'] ?? 0, 2) ?></td>
                             <td colspan="4"></td>
+                            <td></td> <!-- Topup -->
+                            <td></td> <!-- Invoice/Receipt -->
+                            <td></td> <!-- Corrections -->
+                            <td></td> <!-- Comment column -->
                         </tr>
                     </tbody>
                 </table>
@@ -1044,7 +1150,7 @@ if ($currentTermResult) {
                     <ul class="pagination justify-content-center">
                         <!-- Previous Button -->
                         <li class="page-item <?= $current_page <= 1 ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>" aria-label="Previous">
+                            <a class="page-link" href="?page=<?= max(1, $current_page - 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($category_filter ? '&category=' . urlencode($category_filter) : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>" aria-label="Previous">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
@@ -1056,7 +1162,7 @@ if ($currentTermResult) {
 
                         if ($start_page > 1): ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>">1</a>
+                                <a class="page-link" href="?page=1<?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($category_filter ? '&category=' . urlencode($category_filter) : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>">1</a>
                             </li>
                             <?php if ($start_page > 2): ?>
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -1065,7 +1171,7 @@ if ($currentTermResult) {
 
                         <?php for ($page = $start_page; $page <= $end_page; $page++): ?>
                             <li class="page-item <?= $page === $current_page ? 'active' : '' ?>">
-                                <a class="page-link" href="?page=<?= $page ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>">
+                                <a class="page-link" href="?page=<?= $page ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($approval_filter ? '&approval=' . urlencode($approval_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($category_filter ? '&category=' . urlencode($category_filter) : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>">
                                     <?= $page ?>
                                 </a>
                             </li>
@@ -1076,13 +1182,13 @@ if ($currentTermResult) {
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             <?php endif; ?>
                             <li class="page-item">
-                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>"><?= $total_pages ?></a>
+                                <a class="page-link" href="?page=<?= $total_pages ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($category_filter ? '&category=' . urlencode($category_filter) : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>"><?= $total_pages ?></a>
                             </li>
                         <?php endif; ?>
 
                         <!-- Next Button -->
                         <li class="page-item <?= $current_page >= $total_pages ? 'disabled' : '' ?>">
-                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>" aria-label="Next">
+                            <a class="page-link" href="?page=<?= min($total_pages, $current_page + 1) ?><?php echo ($search_filter ? '&search=' . urlencode($search_filter) : '') . ($date_from ? '&date_from=' . $date_from : '') . ($date_to ? '&date_to=' . $date_to : '') . ($term_filter ? '&term=' . urlencode($term_filter) : '') . ($pay_status_filter ? '&pay_status=' . urlencode($pay_status_filter) : '') . ($class_filter ? '&class=' . $class_filter : '') . ($category_filter ? '&category=' . urlencode($category_filter) : '') . ($show_duplicates ? '&duplicates=' . $show_duplicates : ''); ?>" aria-label="Next">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
@@ -1222,17 +1328,54 @@ if ($currentTermResult) {
 
                     <div class="mb-3">
                         <label for="editPaymentStudentName" class="form-label fw-bold">Student Name</label>
-                        <input type="text" class="form-control" name="edit_full_name" id="editPaymentStudentName" required <?= ($userRole === 'bursar') ? 'readonly' : '' ?>>
+                        <input type="text" class="form-control" name="edit_full_name" id="editPaymentStudentName" required>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-6 mb-3">
+                            <label for="editPaymentClass" class="form-label fw-bold">Class</label>
+                            <select class="form-select" name="edit_class_id" id="editPaymentClass" onchange="handleEditClassChange()" required>
+                                <?php foreach ($all_classes as $cls): ?>
+                                    <option value="<?= $cls['id'] ?>"><?= htmlspecialchars($cls['class_name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editPaymentCategory" class="form-label fw-bold">Category</label>
+                            <select class="form-select" name="edit_category" id="editPaymentCategory" onchange="handleEditClassChange()" required>
+                                <?php foreach ($student_categories as $cat): ?>
+                                    <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editPaymentBoarding" class="form-label fw-bold">Day/Boarding</label>
+                            <select class="form-select" name="edit_day_boarding" id="editPaymentBoarding" required>
+                                <option value="Day">Day</option>
+                                <option value="Boarding">Boarding</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Expected Tuition</label>
-                        <input type="number" class="form-control" id="editPaymentExpected" readonly style="background-color: #e9ecef;">
+                        <label for="editPaymentTerm" class="form-label fw-bold">Term</label>
+                        <input type="text" class="form-control" name="edit_term" id="editPaymentTerm" oninput="handleEditClassChange()" placeholder="e.g. Term 1" required>
                     </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Expected Tuition</label>
+                        <input type="number" class="form-control" name="edit_expected_tuition" id="editPaymentExpected" readonly style="background-color: #f8f9fa; font-weight: bold; border: 2px solid #17a2b8;">
+                    </div>
+
+                    <?php
+                    $moneyReadonly = '';
+                    if ($userRole === 'principal' && !$canPrincipalEdit) $moneyReadonly = 'readonly';
+                    if ($userRole === 'bursar' && !$canBursarEdit) $moneyReadonly = 'readonly';
+                    ?>
 
                     <div class="mb-3">
                         <label for="editPaymentAmountPaid" class="form-label">Amount Paid</label>
-                        <input type="number" class="form-control" id="editPaymentAmountPaid" name="edit_amount_paid" step="0.01" min="0" required oninput="calculateEditBalance()" <?= ($userRole === 'principal') ? 'readonly' : '' ?>>
+                        <input type="number" class="form-control" id="editPaymentAmountPaid" name="edit_amount_paid" step="0.01" min="0" required oninput="calculateEditBalance()" <?= $moneyReadonly ?>>
                     </div>
 
                     <div class="mb-3">
@@ -1242,12 +1385,12 @@ if ($currentTermResult) {
 
                     <div class="mb-3">
                         <label for="editPaymentAdmissionFee" class="form-label">Admission Fee</label>
-                        <input type="number" class="form-control" id="editPaymentAdmissionFee" name="edit_admission_fee" step="0.01" min="0" required <?= ($userRole === 'principal') ? 'readonly' : '' ?>>
+                        <input type="number" class="form-control" id="editPaymentAdmissionFee" name="edit_admission_fee" step="0.01" min="0" required <?= $moneyReadonly ?>>
                     </div>
 
                     <div class="mb-3">
                         <label for="editPaymentUniformFee" class="form-label">Uniform Fee</label>
-                        <input type="number" class="form-control" id="editPaymentUniformFee" name="edit_uniform_fee" step="0.01" min="0" required <?= ($userRole === 'principal') ? 'readonly' : '' ?>>
+                        <input type="number" class="form-control" id="editPaymentUniformFee" name="edit_uniform_fee" step="0.01" min="0" required <?= $moneyReadonly ?>>
                     </div>
 
                     <div class="alert alert-info small mb-0">
@@ -1269,6 +1412,7 @@ if ($currentTermResult) {
 <script>
 window.classTermTuition = <?= json_encode($classTermExpected, JSON_NUMERIC_CHECK | JSON_FORCE_OBJECT) ?>;
 window.classNameTuition = <?= json_encode($classNameTuition, JSON_FORCE_OBJECT) ?>;
+window.categoryTuition = <?= json_encode($categoryExpected, JSON_FORCE_OBJECT) ?>;
 window.classNames = <?= json_encode($classNames, JSON_FORCE_OBJECT) ?>;
 window.currentTerm = <?= json_encode($currentTerm ?: 'Term 1') ?>;
 </script>

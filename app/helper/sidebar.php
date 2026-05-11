@@ -4,7 +4,8 @@ $role = $_SESSION['role'] ?? 'bursar';
 $dashboardLinks = [
     'admin' => '../admin/dashboard.php',
     'principal' => '../principal/dashboard.php',
-    'bursar' => '../finance/dashboard.php'
+    'bursar' => '../finance/dashboard.php',
+    'dean' => '../dean/dashboard.php'
 ];
 $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
 ?>
@@ -71,6 +72,32 @@ $dashboardLink = $dashboardLinks[$role] ?? '../finance/dashboard.php';
             <i class="bi bi-calendar3"></i>
             <span>School Calendar</span>
         </a>
+
+        <!-- Dean's Academic Modules -->
+        <?php if (in_array($role, ['dean', 'admin', 'principal'])): ?>
+            <hr class="sidebar-divider my-2" style="border-top: 1px solid rgba(255,255,255,0.1);">
+            <div class="nav-section-title px-3 mb-2 small text-uppercase" style="color: rgba(255,255,255,0.5); font-size: 10px; font-weight: 700; letter-spacing: 1px;">Academic (Dean)</div>
+            
+            <a href="../dean/subjects.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'subjects.php' ? 'active' : '' ?>">
+                <i class="bi bi-book"></i>
+                <span>Subjects</span>
+            </a>
+            
+            <a href="../dean/teachers.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'teachers.php' ? 'active' : '' ?>">
+                <i class="bi bi-person-workspace"></i>
+                <span>Teacher Allocation</span>
+            </a>
+            
+            <a href="../dean/results.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'results.php' ? 'active' : '' ?>">
+                <i class="bi bi-journal-check"></i>
+                <span>Results Entry</span>
+            </a>
+            
+            <a href="../dean/performance.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'performance.php' ? 'active' : '' ?>">
+                <i class="bi bi-bar-chart-fill"></i>
+                <span>Performance</span>
+            </a>
+        <?php endif; ?>
     </nav>
 
     <style>

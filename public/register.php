@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$name || !$email || !$role || !$password || !$confirm) {
         $error = "All fields are required";
-    } elseif(!in_array($role, ['admin', 'principal', 'bursar'])){
+    } elseif(!in_array($role, ['admin', 'principal', 'bursar', 'dean'])){
          $error = "Invalid role selected";
     } elseif ($password !== $confirm) {
         $error = "Passwords do not match";
@@ -335,6 +335,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <option value="admin">Admin</option>
                             <option value="principal">Principal</option>
                             <option value="bursar">Bursar</option>
+                            <option value="dean">Dean</option>
                         </select>
                     </div>
                 </div>

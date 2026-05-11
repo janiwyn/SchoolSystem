@@ -44,6 +44,7 @@ function handleStudentInput() {
         document.getElementById('parentEmail').value = data.email || '';
         document.getElementById('studentStatus').value = data.status === 'approved' ? 'Approved' : 'Pending Approval';
         document.getElementById('term').value = window.currentTerm || 'Term 1';
+        document.getElementById('category').value = data.category || 'Normal';
         
         // Auto-fill tuition for this class
         handleClassChange();
@@ -97,10 +98,24 @@ function handleClassChange() {
 
     const selectedOption = classSelect.options[classSelect.selectedIndex];
     const className = selectedOption ? selectedOption.text : '';
-    console.log('Class Change triggered:', { classId, className });
+    const category = document.getElementById('category').value;
+    console.log('Class Change triggered:', { classId, className, category });
     
-    // 1. Try to find tuition data by ID
-    let tuitionData = window.classTermTuition[classId] || window.classTermTuition[parseInt(classId)];
+    // 1. Try to find tuition data by Category first (if not Normal)
+    let tuitionData = null;
+    const termToUse = document.getElementById('term').value || window.currentTerm || 'Term 1';
+
+    if (category && category.toLowerCase() !== 'normal') {
+        const catTuition = window.categoryTuition[category.toLowerCase()];
+        if (catTuition && catTuition[termToUse] !== undefined) {
+            tuitionData = { [termToUse]: catTuition[termToUse] };
+        }
+    }
+
+    // 2. Fallback to Class Tuition Data if no category fee found
+    if (!tuitionData) {
+        tuitionData = window.classTermTuition[classId] || window.classTermTuition[parseInt(classId)];
+    }
 
     // 2. Fallback: Try to find by exact Name (normalized for casing/spaces)
     if (!tuitionData && className) {
@@ -148,11 +163,19 @@ function handleClassChange() {
     if (name) {
         const boarding = document.getElementById('dayBoarding').value;
         const gender = document.getElementById('gender').value;
-        updatePreview(name, className, termInput.value, boarding, gender);
+        updatePreview(name, className, termInput.value, boarding, gender, category);
     }
 }
 
-function updatePreview(name, className, term, boarding, gender) {
+// Ensure category change also triggers tuition recalculation
+document.addEventListener('DOMContentLoaded', function() {
+    const catSelect = document.getElementById('category');
+    if (catSelect) {
+        catSelect.addEventListener('change', handleClassChange);
+    }
+});
+
+function updatePreview(name, className, term, boarding, gender, category) {
     const previewCard = document.getElementById('studentPreviewCard');
     if (previewCard) {
         document.getElementById('previewStudentName').textContent = name;
@@ -160,6 +183,10 @@ function updatePreview(name, className, term, boarding, gender) {
         document.getElementById('previewTerm').textContent = term || '-';
         document.getElementById('previewDayBoarding').textContent = boarding || '-';
         document.getElementById('previewGender').textContent = gender || '-';
+        // If category is not normal, show it in the preview
+        if (category && category.toLowerCase() !== 'normal') {
+             document.getElementById('previewClass').textContent = className + ' (' + category + ')';
+        }
         previewCard.style.display = 'block';
     }
 }
@@ -179,7 +206,7 @@ function setPaymentId(id, balance) {
 }
 
 // Load edit payment data into modal
-function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuition, studentName, studentId) {
+function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuition, studentName, studentId, classId, category, dayBoarding, term) {
     const el = (selector) => document.getElementById(selector);
 
     if (!el('editPaymentId')) {
@@ -194,6 +221,65 @@ function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuiti
     el('editPaymentAmountPaid').value = parseFloat(amountPaid).toFixed(2);
     el('editPaymentAdmissionFee').value = parseFloat(admissionFee).toFixed(2);
     el('editPaymentUniformFee').value = parseFloat(uniformFee).toFixed(2);
+    
+    // Set Class and Boarding
+    if (el('editPaymentClass')) el('editPaymentClass').value = classId || '';
+    if (el('editPaymentCategory')) el('editPaymentCategory').value = category || 'Normal';
+    if (el('editPaymentBoarding')) el('editPaymentBoarding').value = dayBoarding || '';
+    if (el('editPaymentTerm')) el('editPaymentTerm').value = term || '';
+
+    calculateEditBalance();
+}
+
+// Handle class change in EDIT modal to update expected tuition
+function handleEditClassChange() {
+    const classId = document.getElementById('editPaymentClass').value;
+    const termInput = document.getElementById('editPaymentTerm');
+    const tuitionInput = document.getElementById('editPaymentExpected');
+
+    if (!classId) return;
+
+    const category = document.getElementById('editPaymentCategory').value;
+    const termToUse = termInput.value || window.currentTerm || 'Term 1';
+    
+    // 1. Try category fee first
+    let tuitionData = null;
+    if (category && category.toLowerCase() !== 'normal') {
+        const catTuition = window.categoryTuition[category.toLowerCase()];
+        if (catTuition && catTuition[termToUse] !== undefined) {
+             tuitionData = { [termToUse]: catTuition[termToUse] };
+        }
+    }
+
+    // 2. Fallback to Class Tuition Data
+    if (!tuitionData) {
+        tuitionData = window.classTermTuition[classId] || window.classTermTuition[parseInt(classId)];
+    }
+    
+    if (tuitionData) {
+        const availableTerms = Object.keys(tuitionData);
+        let currentVal = termInput.value;
+
+        // If the current term typed is not in this new class, auto-pick one
+        if (!availableTerms.includes(currentVal)) {
+            if (availableTerms.includes(window.currentTerm)) {
+                termInput.value = window.currentTerm;
+            } else if (availableTerms.length > 0) {
+                termInput.value = availableTerms[0];
+            }
+        }
+
+        const finalTerm = termInput.value;
+        if (tuitionData[finalTerm] !== undefined) {
+            tuitionInput.value = parseFloat(tuitionData[finalTerm]).toFixed(2);
+        } else {
+            tuitionInput.value = '';
+        }
+    } else {
+        console.warn('No tuition data found for this class in edit modal');
+        tuitionInput.value = '';
+    }
+
     calculateEditBalance();
 }
 
@@ -213,8 +299,53 @@ function calculateEditBalance() {
     balanceField.style.color = balance <= 0 ? '#27ae60' : '#e74c3c';
 }
 
+// AJAX to save inline comment
+function saveComment(id) {
+    const input = document.getElementById('comment_' + id);
+    const statusDiv = document.getElementById('comment_status_' + id);
+    if (!input) return;
+
+    const comment = input.value;
+    
+    // Visual feedback: sending...
+    statusDiv.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Saving...</span>';
+    
+    const formData = new FormData();
+    formData.append('payment_id', id);
+    formData.append('comment', comment);
+
+    fetch('save_comment.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Saved</span>';
+            // Fade out after 2 seconds
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 2000);
+        } else {
+            statusDiv.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> Error: ' + data.message + '</span>';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        statusDiv.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> Connection Error</span>';
+    });
+}
+
 // Prevent double form submission
 document.addEventListener('DOMContentLoaded', function() {
+    // Auto-expand all comment textareas on page load
+    const textareas = document.querySelectorAll('.auto-expand');
+    textareas.forEach(textarea => {
+        if (textarea.value) {
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+    });
+
     const paymentForm = document.getElementById('paymentForm');
 
     if (paymentForm) {
