@@ -1313,94 +1313,127 @@ $student_categories = array_merge(['Normal'], $db_categories);
 
 <!-- NEW: Edit Payment Modal -->
 <div class="modal fade" id="editPaymentModal" tabindex="-1" aria-labelledby="editPaymentModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
             <form method="POST">
-                <div class="modal-header form-header text-white">
+                <div class="modal-header form-header text-white py-3">
                     <h5 class="modal-title" id="editPaymentModalLabel">
-                        <i class="bi bi-pencil-square"></i> Edit Payment Record
+                        <i class="bi bi-pencil-square me-2"></i> Edit Payment Record & Transition Management
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body p-4">
                     <input type="hidden" name="edit_payment_id" id="editPaymentId">
                     <input type="hidden" name="edit_student_id" id="editStudentId">
 
-                    <div class="mb-3">
-                        <label for="editPaymentStudentName" class="form-label fw-bold">Student Name</label>
-                        <input type="text" class="form-control" name="edit_full_name" id="editPaymentStudentName" required>
-                    </div>
-
-                    <div class="row g-2">
-                        <div class="col-md-6 mb-3">
-                            <label for="editPaymentClass" class="form-label fw-bold">Class</label>
-                            <select class="form-select" name="edit_class_id" id="editPaymentClass" onchange="handleEditClassChange()" required>
-                                <?php foreach ($all_classes as $cls): ?>
-                                    <option value="<?= $cls['id'] ?>"><?= htmlspecialchars($cls['class_name']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                    <div class="row g-4">
+                        <!-- Left Column: Student Details -->
+                        <div class="col-lg-4 border-end">
+                            <h6 class="text-primary fw-bold mb-3 border-bottom pb-2">Student Information</h6>
+                            <div class="mb-3">
+                                <label for="editPaymentStudentName" class="form-label fw-bold">Full Name</label>
+                                <input type="text" class="form-control" name="edit_full_name" id="editPaymentStudentName" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="editPaymentClass" class="form-label fw-bold">Class</label>
+                                <select class="form-select" name="edit_class_id" id="editPaymentClass" onchange="handleEditClassChange()" required>
+                                    <?php foreach ($all_classes as $cls): ?>
+                                        <option value="<?= $cls['id'] ?>"><?= htmlspecialchars($cls['class_name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="editPaymentCategory" class="form-label fw-bold">Category</label>
+                                <select class="form-select" name="edit_category" id="editPaymentCategory" onchange="handleEditClassChange()" required>
+                                    <?php foreach ($student_categories as $cat): ?>
+                                        <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="editPaymentBoarding" class="form-label fw-bold">Day/Boarding Status</label>
+                                <select class="form-select" name="edit_day_boarding" id="editPaymentBoarding" required>
+                                    <option value="Day">Day</option>
+                                    <option value="Boarding">Boarding</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="editPaymentTerm" class="form-label fw-bold">Current Term</label>
+                                <input type="text" class="form-control" name="edit_term" id="editPaymentTerm" oninput="handleEditClassChange()" placeholder="e.g. Term 1" required>
+                            </div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="editPaymentCategory" class="form-label fw-bold">Category</label>
-                            <select class="form-select" name="edit_category" id="editPaymentCategory" onchange="handleEditClassChange()" required>
-                                <?php foreach ($student_categories as $cat): ?>
-                                    <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
-                                <?php endforeach; ?>
-                            </select>
+
+                        <!-- Middle Column: Transition & Fees -->
+                        <div class="col-lg-4 border-end">
+                            <h6 class="text-success fw-bold mb-3 border-bottom pb-2">Tuition & Transitions</h6>
+                            
+                            <div class="alert alert-soft-info py-2 mb-3 small">
+                                <i class="bi bi-info-circle me-1"></i> Use this section if the student changed from Day to Boarding (or vice versa) mid-year.
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-muted">Amount Paid So Far</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control bg-light" id="editPaidSoFar" readonly>
+                                </div>
+                                <small class="text-muted">Total payments recorded before this edit.</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-success">Remaining Expected Tuition</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-success text-white">$</span>
+                                    <input type="number" class="form-control border-success" id="editRemainingExpected" step="0.01" min="0" placeholder="Enter remaining amount" oninput="calculateTransitionTuition()">
+                                </div>
+                                <small class="text-success">Enter the new amount for remaining terms.</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Final Annual Expected Tuition</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-primary text-white">$</span>
+                                    <input type="number" class="form-control fw-bold" name="edit_expected_tuition" id="editPaymentExpected" readonly style="background-color: #f8f9fa; border: 2px solid #0d6efd;">
+                                </div>
+                                <small class="text-primary">Auto-calculated: Paid + Remaining</small>
+                            </div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="editPaymentBoarding" class="form-label fw-bold">Day/Boarding</label>
-                            <select class="form-select" name="edit_day_boarding" id="editPaymentBoarding" required>
-                                <option value="Day">Day</option>
-                                <option value="Boarding">Boarding</option>
-                            </select>
+
+                        <!-- Right Column: Balance & Extras -->
+                        <div class="col-lg-4">
+                            <h6 class="text-warning fw-bold mb-3 border-bottom pb-2">Payments & Balance</h6>
+                            
+                            <div class="mb-3">
+                                <label for="editPaymentAmountPaid" class="form-label fw-bold">New Payment Amount</label>
+                                <input type="number" class="form-control" id="editPaymentAmountPaid" name="edit_amount_paid" step="0.01" min="0" required oninput="calculateEditBalance()" <?= $moneyReadonly ?>>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Calculated New Balance</label>
+                                <input type="number" class="form-control text-danger fw-bold" id="editPaymentNewBalance" readonly style="background-color: #f8f9fa;">
+                            </div>
+
+                            <div class="row g-2">
+                                <div class="col-6 mb-3">
+                                    <label for="editPaymentAdmissionFee" class="form-label small fw-bold">Admission Fee</label>
+                                    <input type="number" class="form-control form-control-sm" id="editPaymentAdmissionFee" name="edit_admission_fee" step="0.01" min="0" required <?= $moneyReadonly ?>>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <label for="editPaymentUniformFee" class="form-label small fw-bold">Uniform Fee</label>
+                                    <input type="number" class="form-control form-control-sm" id="editPaymentUniformFee" name="edit_uniform_fee" step="0.01" min="0" required <?= $moneyReadonly ?>>
+                                </div>
+                            </div>
+
+                            <div class="alert alert-warning small mt-3">
+                                <i class="bi bi-shield-check me-1"></i> Saving will automatically set status to <strong>Approved</strong>.
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="editPaymentTerm" class="form-label fw-bold">Term</label>
-                        <input type="text" class="form-control" name="edit_term" id="editPaymentTerm" oninput="handleEditClassChange()" placeholder="e.g. Term 1" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Expected Tuition</label>
-                        <input type="number" class="form-control" name="edit_expected_tuition" id="editPaymentExpected" readonly style="background-color: #f8f9fa; font-weight: bold; border: 2px solid #17a2b8;">
-                    </div>
-
-                    <?php
-                    $moneyReadonly = '';
-                    if ($userRole === 'principal' && !$canPrincipalEdit) $moneyReadonly = 'readonly';
-                    if ($userRole === 'bursar' && !$canBursarEdit) $moneyReadonly = 'readonly';
-                    ?>
-
-                    <div class="mb-3">
-                        <label for="editPaymentAmountPaid" class="form-label">Amount Paid</label>
-                        <input type="number" class="form-control" id="editPaymentAmountPaid" name="edit_amount_paid" step="0.01" min="0" required oninput="calculateEditBalance()" <?= $moneyReadonly ?>>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">New Balance</label>
-                        <input type="number" class="form-control" id="editPaymentNewBalance" readonly style="background-color: #e9ecef; font-weight: 700;">
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="editPaymentAdmissionFee" class="form-label">Admission Fee</label>
-                        <input type="number" class="form-control" id="editPaymentAdmissionFee" name="edit_admission_fee" step="0.01" min="0" required <?= $moneyReadonly ?>>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="editPaymentUniformFee" class="form-label">Uniform Fee</label>
-                        <input type="number" class="form-control" id="editPaymentUniformFee" name="edit_uniform_fee" step="0.01" min="0" required <?= $moneyReadonly ?>>
-                    </div>
-
-                    <div class="alert alert-info small mb-0">
-                        <i class="bi bi-info-circle"></i> After correction, the payment status will be updated to <strong>Approved</strong> automatically.
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" name="edit_payment_record" class="btn btn-form-submit">
-                        <i class="bi bi-check-circle"></i> Save Correction
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="edit_payment_record" class="btn btn-form-submit px-4">
+                        <i class="bi bi-check-circle me-2"></i> Save Correction
                     </button>
                 </div>
             </form>

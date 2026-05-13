@@ -219,6 +219,8 @@ function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuiti
     el('editPaymentStudentName').value = studentName;
     el('editPaymentExpected').value = parseFloat(expectedTuition).toFixed(2);
     el('editPaymentAmountPaid').value = parseFloat(amountPaid).toFixed(2);
+    el('editPaidSoFar').value = parseFloat(amountPaid).toFixed(2); // Set base for transitions
+    el('editRemainingExpected').value = ''; // Reset transition field
     el('editPaymentAdmissionFee').value = parseFloat(admissionFee).toFixed(2);
     el('editPaymentUniformFee').value = parseFloat(uniformFee).toFixed(2);
     
@@ -229,6 +231,25 @@ function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuiti
     if (el('editPaymentTerm')) el('editPaymentTerm').value = term || '';
 
     calculateEditBalance();
+}
+
+// Handle manual transition override
+function calculateTransitionTuition() {
+    const paidSoFar = parseFloat(document.getElementById('editPaidSoFar').value) || 0;
+    const remaining = parseFloat(document.getElementById('editRemainingExpected').value) || 0;
+    const tuitionInput = document.getElementById('editPaymentExpected');
+    
+    if (remaining > 0) {
+        // Calculate new annual total: what they paid + what they still owe
+        const newTotal = paidSoFar + remaining;
+        tuitionInput.value = newTotal.toFixed(2);
+        
+        // Trigger balance recalculation
+        calculateEditBalance();
+    } else {
+        // If remaining is cleared, revert to standard class/category fee
+        handleEditClassChange();
+    }
 }
 
 // Handle class change in EDIT modal to update expected tuition
