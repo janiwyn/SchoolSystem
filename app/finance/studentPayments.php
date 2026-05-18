@@ -233,6 +233,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_single_payment
         if ($delete_id > 0) {
             $mysqli->begin_transaction();
             try {
+                // Get the student_id before deleting the payment
+                $getSid = $mysqli->prepare("SELECT student_id FROM student_payments WHERE id = ?");
+                $getSid->bind_param("i", $delete_id);
+                $getSid->execute();
+                $sidRes = $getSid->get_result()->fetch_assoc();
+                $student_to_check = $sidRes['student_id'] ?? 0;
+                $getSid->close();
+
                 // Delete related topups first
                 $delTopups = $mysqli->prepare("DELETE FROM student_payment_topups WHERE payment_id = ?");
                 $delTopups->bind_param("i", $delete_id);
@@ -244,6 +252,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_single_payment
                 $delPayment->bind_param("i", $delete_id);
                 $delPayment->execute();
                 $delPayment->close();
+
+                // Check if student has any other payments left
+                if ($student_to_check > 0) {
+                    $otherPays = $mysqli->query("SELECT id FROM student_payments WHERE student_id = $student_to_check LIMIT 1");
+                    if ($otherPays->num_rows === 0) {
+                        // No other payments, delete from admit_students too
+                        $delAdmit = $mysqli->prepare("DELETE FROM admit_students WHERE id = ?");
+                        $delAdmit->bind_param("i", $student_to_check);
+                        $delAdmit->execute();
+                        $delAdmit->close();
+                    }
+                }
 
                 $mysqli->commit();
                 header("Location: studentPayments.php?deleted=1");
@@ -291,43 +311,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
         try {
             // 1. If student_id is 0, this is a new admission
             if ($student_id === 0) {
-                // GLOBAL CHECK: Check if student with same name already exists anywhere in the school
+                // GLOBAL CHECK: Check if student with same name already exists
                 $checkStmt = $mysqli->prepare("SELECT id FROM admit_students WHERE first_name = ?");
                 $checkStmt->bind_param("s", $full_name);
                 $checkStmt->execute();
-                if ($checkStmt->get_result()->num_rows > 0) {
-                    throw new Exception("A student named '$full_name' is already registered in the school. Please select them from the list instead of creating a new admission.");
+                $checkRes = $checkStmt->get_result();
+                
+                if ($checkRes->num_rows > 0) {
+                    $existing = $checkRes->fetch_assoc();
+                    $existing_id = $existing['id'];
+                    
+                    // Check if they have any payments
+                    $pCheck = $mysqli->query("SELECT id FROM student_payments WHERE student_id = $existing_id LIMIT 1");
+                    if ($pCheck->num_rows > 0) {
+                        // They have payments, so they are truly a duplicate
+                        throw new Exception("A student named '$full_name' is already registered with active payments. Please select them from the search list instead.");
+                    } else {
+                        // They exist in admissions but have no payments (Ghost Student)
+                        // We will automatically use this ID instead of creating a new one
+                        $student_id = $existing_id;
+                        
+                        // Update their admission details to match current form
+                        $admitUpdate = $mysqli->prepare("UPDATE admit_students SET gender = ?, class_id = ?, category = ?, day_boarding = ?, admission_fee = ?, uniform_fee = ?, expected_tuition = ?, parent_contact = ?, parent_email = ? WHERE id = ?");
+                        $admitUpdate->bind_param("sissddsssi", $gender, $class_id, $category, $day_boarding, $admission_fee, $uniform_fee, $expected_tuition, $parent_contact, $parent_email, $student_id);
+                        $admitUpdate->execute();
+                        
+                        // Get their admission number
+                        $admNoRes = $mysqli->query("SELECT admission_no FROM admit_students WHERE id = $student_id");
+                        $admNoRow = $admNoRes->fetch_assoc();
+                        $admission_no = $admNoRow['admission_no'];
+                    }
+                } else {
+                    // Truly new student
+                    $admission_no = generateSerialNumber($mysqli);
+                    $status = 'approved';
+                    $user_id = $_SESSION['user_id'];
+
+                    $admitStmt = $mysqli->prepare(
+                        "INSERT INTO admit_students 
+                            (admission_no, first_name, gender, class_id, category, day_boarding, 
+                             admission_fee, uniform_fee, expected_tuition, parent_contact, 
+                             parent_email, status, created_by, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                    );
+                    $admitStmt->bind_param("sssissdddsssi", 
+                        $admission_no, $full_name, $gender, $class_id, $category, $day_boarding,
+                        $admission_fee, $uniform_fee, $expected_tuition, $parent_contact,
+                        $parent_email, $status, $user_id);
+                    
+                    if (!$admitStmt->execute()) {
+                        throw new Exception("Error admitting student: " . $admitStmt->error);
+                    }
+                    $student_id = $admitStmt->insert_id;
+                    $admitStmt->close();
                 }
                 $checkStmt->close();
-
-                // Admit student
-                $admission_no = generateSerialNumber($mysqli);
-                $status = 'approved';
-                $user_id = $_SESSION['user_id'];
-
-                $admitStmt = $mysqli->prepare(
-                    "INSERT INTO admit_students 
-                        (admission_no, first_name, gender, class_id, category, day_boarding, 
-                         admission_fee, uniform_fee, expected_tuition, parent_contact, 
-                         parent_email, status, created_by, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
-                );
-                
-                if (!$admitStmt) {
-                    throw new Exception("Database prepare error: " . $mysqli->error);
-                }
-
-                // s(1), s(2), s(3), i(4), s(5), s(6), d(7), d(8), d(9), s(10), s(11), s(12), i(13)
-                $admitStmt->bind_param("sssissdddsssi", 
-                    $admission_no, $full_name, $gender, $class_id, $category, $day_boarding,
-                    $admission_fee, $uniform_fee, $expected_tuition, $parent_contact,
-                    $parent_email, $status, $user_id);
-                
-                if (!$admitStmt->execute()) {
-                    throw new Exception("Error admitting student: " . $admitStmt->error);
-                }
-                $student_id = $admitStmt->insert_id;
-                $admitStmt->close();
             } else {
                 // For existing students, verify they exist
                 $verifyStmt = $mysqli->prepare("SELECT admission_no FROM admit_students WHERE id = ?");
@@ -759,7 +797,7 @@ $student_categories = array_merge(['Normal'], $db_categories);
                 
                 <div class="col-md-3">
                     <label class="form-label">Class</label>
-                    <select name="class_id" id="classSelect" class="form-control" required onchange="handleClassChange()">
+                    <select name="class_id" id="classSelect" class="form-control" required onchange="document.getElementById('category').value = 'Normal'; handleClassChange()">
                         <option value="">Select Class</option>
                         <?php foreach ($all_classes as $cls): ?>
                             <option value="<?= $cls['id'] ?>"><?= htmlspecialchars($cls['class_name']) ?></option>
@@ -769,7 +807,7 @@ $student_categories = array_merge(['Normal'], $db_categories);
                 
                 <div class="col-md-3">
                     <label class="form-label">Category</label>
-                    <select name="category" id="category" class="form-control" required>
+                    <select name="category" id="category" class="form-control" onchange="handleClassChange()" required>
                         <?php foreach ($student_categories as $cat): ?>
                             <option value="<?= htmlspecialchars($cat) ?>"><?= htmlspecialchars($cat) ?></option>
                         <?php endforeach; ?>
@@ -1336,7 +1374,7 @@ $student_categories = array_merge(['Normal'], $db_categories);
                             </div>
                             <div class="mb-3">
                                 <label for="editPaymentClass" class="form-label fw-bold">Class</label>
-                                <select class="form-select" name="edit_class_id" id="editPaymentClass" onchange="handleEditClassChange()" required>
+                                <select class="form-select" name="edit_class_id" id="editPaymentClass" onchange="document.getElementById('editPaymentCategory').value = 'Normal'; handleEditClassChange()" required>
                                     <?php foreach ($all_classes as $cls): ?>
                                         <option value="<?= $cls['id'] ?>"><?= htmlspecialchars($cls['class_name']) ?></option>
                                     <?php endforeach; ?>
@@ -1448,10 +1486,190 @@ window.classNameTuition = <?= json_encode($classNameTuition, JSON_FORCE_OBJECT) 
 window.categoryTuition = <?= json_encode($categoryExpected, JSON_FORCE_OBJECT) ?>;
 window.classNames = <?= json_encode($classNames, JSON_FORCE_OBJECT) ?>;
 window.currentTerm = <?= json_encode($currentTerm ?: 'Term 1') ?>;
+
+// Helper to normalize different term strings (e.g. "Term 3", "term 3", "3", "t3" all become "term 3")
+function normalizeTermName(term) {
+    if (!term) return '';
+    const t = String(term).trim().toLowerCase();
+    
+    // Check for annual
+    if (t.includes('annual') || t.includes('annually') || t.includes('year') || t === 'yr') {
+        return 'annual';
+    }
+    
+    // Extract numbers to match Term 1, Term 2, Term 3
+    const numMatch = t.match(/\d+/);
+    if (numMatch) {
+        return 'term ' + numMatch[0];
+    }
+    
+    // Default return trimmed lowercased
+    return t;
+}
+
+// Inline override of handleClassChange to guarantee cache bypass online
+function handleClassChange() {
+    const classSelect = document.getElementById('classSelect');
+    const classId = classSelect.value;
+    const termInput = document.getElementById('term');
+    const tuitionInput = document.getElementById('expectedTuition');
+    
+    if (!classId) {
+        termInput.value = '';
+        tuitionInput.value = '';
+        return;
+    }
+
+    const selectedOption = classSelect.options[classSelect.selectedIndex];
+    const className = selectedOption ? selectedOption.text : '';
+    const category = document.getElementById('category').value;
+    console.log('Class Change triggered:', { classId, className, category });
+    
+    // 1. Try to find tuition data by Category first (if not Normal)
+    let tuitionData = null;
+    const termToUse = document.getElementById('term').value || window.currentTerm || 'Term 1';
+
+    if (category && category.toLowerCase() !== 'normal') {
+        const catTuition = window.categoryTuition[category.toLowerCase().trim()];
+        if (catTuition) {
+            // Advanced fuzzy lookup for term
+            const normTerm = normalizeTermName(termToUse);
+            const matchedKey = Object.keys(catTuition).find(k => normalizeTermName(k) === normTerm);
+            if (matchedKey !== undefined && catTuition[matchedKey] !== undefined) {
+                tuitionData = { [termToUse]: catTuition[matchedKey] };
+            }
+        }
+    }
+
+    // 2. Fallback to Class Tuition Data if no category fee found
+    if (!tuitionData) {
+        tuitionData = window.classTermTuition[classId] || window.classTermTuition[parseInt(classId)];
+    }
+
+    // 2. Fallback: Try to find by exact Name (normalized for casing/spaces)
+    if (!tuitionData && className) {
+        const normalizedName = className.trim().toLowerCase();
+        tuitionData = window.classNameTuition[normalizedName];
+        
+        // 3. Fallback: Try fuzzy matching (no dots)
+        if (!tuitionData) {
+            const fuzzyName = normalizedName.replace(/\./g, '');
+            tuitionData = window.classNameTuition[fuzzyName];
+        }
+    }
+
+    if (tuitionData) {
+        const availableTerms = Object.keys(tuitionData);
+        let termToSelect = '';
+
+        // Prefer the current system term if it's available for this class
+        if (availableTerms.includes(window.currentTerm)) {
+            termToSelect = window.currentTerm;
+        } else if (availableTerms.length > 0) {
+            // Otherwise pick the first available one (e.g. Term 1 or Annual)
+            termToSelect = availableTerms[0];
+        }
+
+        if (termToSelect) {
+            termInput.value = termToSelect;
+        }
+
+        // Now update tuition based on the auto-filled term
+        const finalTerm = termInput.value;
+        if (tuitionData[finalTerm] !== undefined) {
+            tuitionInput.value = parseFloat(tuitionData[finalTerm]).toFixed(2);
+        } else {
+            tuitionInput.value = '';
+        }
+    } else {
+        console.warn('No tuition data found for:', className);
+        termInput.value = '';
+        tuitionInput.value = '';
+    }
+    
+    // Update preview if name is present
+    const name = document.getElementById('studentNameInput').value;
+    if (name) {
+        const boarding = document.getElementById('dayBoarding').value;
+        const gender = document.getElementById('gender').value;
+        updatePreview(name, className, termInput.value, boarding, gender, category);
+    }
+}
+
+// Inline override of handleEditClassChange to guarantee cache bypass online
+function handleEditClassChange() {
+    const classId = document.getElementById('editPaymentClass').value;
+    const termInput = document.getElementById('editPaymentTerm');
+    const tuitionInput = document.getElementById('editPaymentExpected');
+
+    if (!classId) return;
+
+    const category = document.getElementById('editPaymentCategory').value;
+    const termToUse = termInput.value || window.currentTerm || 'Term 1';
+    
+    // 1. Try category fee first
+    let tuitionData = null;
+    if (category && category.toLowerCase() !== 'normal') {
+        const catTuition = window.categoryTuition[category.toLowerCase().trim()];
+        if (catTuition) {
+            // Advanced fuzzy lookup for term
+            const normTerm = normalizeTermName(termToUse);
+            const matchedKey = Object.keys(catTuition).find(k => normalizeTermName(k) === normTerm);
+            if (matchedKey !== undefined && catTuition[matchedKey] !== undefined) {
+                tuitionData = { [termToUse]: catTuition[matchedKey] };
+            }
+        }
+    }
+
+    // 2. Fallback to Class Tuition Data
+    if (!tuitionData) {
+        tuitionData = window.classTermTuition[classId] || window.classTermTuition[parseInt(classId)];
+    }
+    
+    if (tuitionData) {
+        const availableTerms = Object.keys(tuitionData);
+        let currentVal = termInput.value;
+
+        // If the current term typed is not in this new class, auto-pick one
+        if (!availableTerms.includes(currentVal)) {
+            if (availableTerms.includes(window.currentTerm)) {
+                termInput.value = window.currentTerm;
+            } else if (availableTerms.length > 0) {
+                termInput.value = availableTerms[0];
+            }
+        }
+
+        const finalTerm = termInput.value;
+        if (tuitionData[finalTerm] !== undefined) {
+            tuitionInput.value = parseFloat(tuitionData[finalTerm]).toFixed(2);
+        } else {
+            tuitionInput.value = '';
+        }
+    } else {
+        console.warn('No tuition data found for this class in edit modal');
+        tuitionInput.value = '';
+    }
+
+    calculateEditBalance();
+}
+
+// Re-bind the category event listener online
+document.addEventListener('DOMContentLoaded', function() {
+    const catSelect = document.getElementById('category');
+    if (catSelect) {
+        catSelect.removeEventListener('change', handleClassChange);
+        catSelect.addEventListener('change', handleClassChange);
+    }
+    const editCatSelect = document.getElementById('editPaymentCategory');
+    if (editCatSelect) {
+        editCatSelect.removeEventListener('change', handleEditClassChange);
+        editCatSelect.addEventListener('change', handleEditClassChange);
+    }
+});
 </script>
 
 <link rel="stylesheet" href="../../assets/css/studentPayments.css">
 <link rel="stylesheet" href="../../assets/css/studentPreviewCard.css">
-<script src="../../assets/js/studentPayments.js?v=10"></script>
+<script src="../../assets/js/studentPayments.js?v=<?= time() ?>"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

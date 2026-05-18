@@ -83,6 +83,26 @@ function handleStudentInput() {
     }
 }
 
+// Helper to normalize different term strings (e.g. "Term 3", "term 3", "3", "t3" all become "term 3")
+function normalizeTermName(term) {
+    if (!term) return '';
+    const t = String(term).trim().toLowerCase();
+    
+    // Check for annual
+    if (t.includes('annual') || t.includes('annually') || t.includes('year') || t === 'yr') {
+        return 'annual';
+    }
+    
+    // Extract numbers to match Term 1, Term 2, Term 3
+    const numMatch = t.match(/\d+/);
+    if (numMatch) {
+        return 'term ' + numMatch[0];
+    }
+    
+    // Default return trimmed lowercased
+    return t;
+}
+
 // Auto-fill expected tuition when class or term changes
 function handleClassChange() {
     const classSelect = document.getElementById('classSelect');
@@ -106,9 +126,14 @@ function handleClassChange() {
     const termToUse = document.getElementById('term').value || window.currentTerm || 'Term 1';
 
     if (category && category.toLowerCase() !== 'normal') {
-        const catTuition = window.categoryTuition[category.toLowerCase()];
-        if (catTuition && catTuition[termToUse] !== undefined) {
-            tuitionData = { [termToUse]: catTuition[termToUse] };
+        const catTuition = window.categoryTuition[category.toLowerCase().trim()];
+        if (catTuition) {
+            // Advanced fuzzy lookup for term
+            const normTerm = normalizeTermName(termToUse);
+            const matchedKey = Object.keys(catTuition).find(k => normalizeTermName(k) === normTerm);
+            if (matchedKey !== undefined && catTuition[matchedKey] !== undefined) {
+                tuitionData = { [termToUse]: catTuition[matchedKey] };
+            }
         }
     }
 
@@ -266,9 +291,14 @@ function handleEditClassChange() {
     // 1. Try category fee first
     let tuitionData = null;
     if (category && category.toLowerCase() !== 'normal') {
-        const catTuition = window.categoryTuition[category.toLowerCase()];
-        if (catTuition && catTuition[termToUse] !== undefined) {
-             tuitionData = { [termToUse]: catTuition[termToUse] };
+        const catTuition = window.categoryTuition[category.toLowerCase().trim()];
+        if (catTuition) {
+            // Advanced fuzzy lookup for term
+            const normTerm = normalizeTermName(termToUse);
+            const matchedKey = Object.keys(catTuition).find(k => normalizeTermName(k) === normTerm);
+            if (matchedKey !== undefined && catTuition[matchedKey] !== undefined) {
+                tuitionData = { [termToUse]: catTuition[matchedKey] };
+            }
         }
     }
 
