@@ -164,6 +164,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
     $edit_category = trim($_POST['edit_category'] ?? 'Normal');
     $edit_day_boarding = trim($_POST['edit_day_boarding']);
     $edit_expected_tuition = floatval($_POST['edit_expected_tuition']);
+    
+    $edit_app_terms_arr = $_POST['edit_applicable_terms'] ?? ['T1', 'T2', 'T3'];
+    if (empty($edit_app_terms_arr)) {
+        $edit_app_terms_arr = ['T1', 'T2', 'T3'];
+    }
+    $edit_applicable_terms = implode(',', $edit_app_terms_arr);
 
     if ($edit_id > 0 && $edit_full_name !== '' && $edit_amount_paid >= 0 && $edit_admission_fee >= 0 && $edit_uniform_fee >= 0) {
         $mysqli->begin_transaction();
@@ -200,16 +206,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
                     $cnStmt->close();
 
                     // 1. Update student_payments
-                    $updateStmt = $mysqli->prepare("UPDATE student_payments SET full_name = ?, amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, class_id = ?, class_name = ?, category = ?, day_boarding = ?, expected_tuition = ?, status_approved = 'approved' WHERE id = ?");
-                    $updateStmt->bind_param("sddddisssdi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_class_id, $edit_class_name, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_id);
+                    $updateStmt = $mysqli->prepare("UPDATE student_payments SET full_name = ?, amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, class_id = ?, class_name = ?, category = ?, day_boarding = ?, expected_tuition = ?, applicable_terms = ?, status_approved = 'approved' WHERE id = ?");
+                    $updateStmt->bind_param("sddddissssdi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_class_id, $edit_class_name, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_applicable_terms, $edit_id);
                     $updateStmt->execute();
                     $updateStmt->close();
 
                     // 2. Sync to admit_students
                     if ($edit_student_id > 0) {
-                        $admitUpdate = $mysqli->prepare("UPDATE admit_students SET first_name = ?, class_id = ?, category = ?, day_boarding = ?, expected_tuition = ? WHERE id = ?");
-                        // s(1):full_name, i(2):class_id, s(3):category, s(4):day_boarding, d(5):expected_tuition, i(6):student_id
-                        $admitUpdate->bind_param("sissdi", $edit_full_name, $edit_class_id, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_student_id);
+                        $admitUpdate = $mysqli->prepare("UPDATE admit_students SET first_name = ?, class_id = ?, category = ?, day_boarding = ?, expected_tuition = ?, applicable_terms = ? WHERE id = ?");
+                        // s(1):full_name, i(2):class_id, s(3):category, s(4):day_boarding, d(5):expected_tuition, s(6):applicable_terms, i(7):student_id
+                        $admitUpdate->bind_param("sissdsi", $edit_full_name, $edit_class_id, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_applicable_terms, $edit_student_id);
                         $admitUpdate->execute();
                         $admitUpdate->close();
                     }
@@ -300,6 +306,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     $parent_contact = trim($_POST['parent_contact'] ?? '');
     $parent_email = trim($_POST['parent_email'] ?? '');
     
+    $app_terms_arr = $_POST['applicable_terms'] ?? ['T1', 'T2', 'T3'];
+    if (empty($app_terms_arr)) {
+        $app_terms_arr = ['T1', 'T2', 'T3'];
+    }
+    $applicable_terms = implode(',', $app_terms_arr);
+    
     if (!$full_name || !$payment_date || !$term || !$gender || !$class_id || !$category || !$day_boarding) {
         $error = "All required fields must be filled (Name, Gender, Class, Category, Day/Boarding, Term, Date)";
     } elseif ($amount_paid < 0) {
@@ -332,8 +344,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
                         $student_id = $existing_id;
                         
                         // Update their admission details to match current form
-                        $admitUpdate = $mysqli->prepare("UPDATE admit_students SET gender = ?, class_id = ?, category = ?, day_boarding = ?, admission_fee = ?, uniform_fee = ?, expected_tuition = ?, parent_contact = ?, parent_email = ? WHERE id = ?");
-                        $admitUpdate->bind_param("sissddsssi", $gender, $class_id, $category, $day_boarding, $admission_fee, $uniform_fee, $expected_tuition, $parent_contact, $parent_email, $student_id);
+                        $admitUpdate = $mysqli->prepare("UPDATE admit_students SET gender = ?, class_id = ?, category = ?, day_boarding = ?, admission_fee = ?, uniform_fee = ?, expected_tuition = ?, parent_contact = ?, parent_email = ?, applicable_terms = ? WHERE id = ?");
+                        $admitUpdate->bind_param("sissddssssi", $gender, $class_id, $category, $day_boarding, $admission_fee, $uniform_fee, $expected_tuition, $parent_contact, $parent_email, $applicable_terms, $student_id);
                         $admitUpdate->execute();
                         
                         // Get their admission number
@@ -351,13 +363,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
                         "INSERT INTO admit_students 
                             (admission_no, first_name, gender, class_id, category, day_boarding, 
                              admission_fee, uniform_fee, expected_tuition, parent_contact, 
-                             parent_email, status, created_by, created_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+                             parent_email, status, applicable_terms, created_by, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
                     );
-                    $admitStmt->bind_param("sssissdddsssi", 
+                    $admitStmt->bind_param("sssissdddssssi", 
                         $admission_no, $full_name, $gender, $class_id, $category, $day_boarding,
                         $admission_fee, $uniform_fee, $expected_tuition, $parent_contact,
-                        $parent_email, $status, $user_id);
+                        $parent_email, $status, $applicable_terms, $user_id);
                     
                     if (!$admitStmt->execute()) {
                         throw new Exception("Error admitting student: " . $admitStmt->error);
@@ -402,11 +414,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
             $user_id = $_SESSION['user_id'];
             $status_approved = 'approved';
             
-            $insertPay = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, category, term, expected_tuition, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, status_approved, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $insertPay = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, category, term, expected_tuition, applicable_terms, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, status_approved, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
             
-            $insertPay->bind_param("issssisssdddddssssi", 
+            $insertPay->bind_param("issssissssddddddssssi", 
                 $student_id, $admission_no, $full_name, $day_boarding, 
-                $gender, $class_id, $class_name, $category, $term, $expected_tuition, 
+                $gender, $class_id, $class_name, $category, $term, $expected_tuition, $applicable_terms,
                 $amount_paid, $balance, $admission_fee, $uniform_fee, 
                 $parent_contact, $parent_email, $payment_date, $status_approved, $user_id);
             
@@ -543,7 +555,7 @@ $orderBy .= ", id DESC"; // Stability
 // Get all payments recorded with filter and pagination
 $paymentsQuery = "SELECT 
     id, student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, category, term,
-    expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
+    expected_tuition, applicable_terms, amount_paid, balance, admission_fee, uniform_fee,
     parent_contact, payment_date, created_at, status_approved, comment
 FROM student_payments
 WHERE $filterWhere
@@ -589,7 +601,7 @@ if ($canRecordPayment) {
     $approvedStudentsQuery = "SELECT 
         s.id, s.admission_no, s.first_name, s.gender, s.class_id, 
         s.category, s.day_boarding, s.admission_fee, s.uniform_fee, 
-        s.parent_contact, s.parent_email, s.status,
+        s.parent_contact, s.parent_email, s.status, s.applicable_terms,
         c.class_name
     FROM admit_students s
     LEFT JOIN classes c ON s.class_id = c.id
@@ -678,6 +690,15 @@ if ($catNamesRes) {
 }
 $student_categories = array_merge(['Normal'], $db_categories);
 ?>
+<style>
+.term-badge.na {
+    background-color: #f1f2f6 !important;
+    color: #a4b0be !important;
+    border: 1px dashed #ced6e0 !important;
+    text-decoration: line-through !important;
+    opacity: 0.6 !important;
+}
+</style>
 
 <?php if (isset($_GET['corrected'])): ?>
     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -770,7 +791,8 @@ $student_categories = array_merge(['Normal'], $db_categories);
                                     data-email="<?= htmlspecialchars($s['parent_email'] ?? '') ?>"
                                     data-status="<?= htmlspecialchars($s['status']) ?>"
                                     data-class-name="<?= htmlspecialchars($s['class_name'] ?? 'N/A') ?>"
-                                    data-category="<?= htmlspecialchars($s['category'] ?? 'Normal') ?>">
+                                    data-category="<?= htmlspecialchars($s['category'] ?? 'Normal') ?>"
+                                    data-applicable-terms="<?= htmlspecialchars($s['applicable_terms'] ?? 'T1,T2,T3') ?>">
                                 (SN: <?= htmlspecialchars($s['admission_no']) ?>)
                             </option>
                         <?php endforeach; ?>
@@ -837,6 +859,24 @@ $student_categories = array_merge(['Normal'], $db_categories);
                 <div class="col-md-3">
                     <label class="form-label">Amount Paid</label>
                     <input type="number" name="amount_paid" id="amountPaid" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label d-block fw-bold text-primary">Apply Tuition To</label>
+                    <div class="d-flex align-items-center gap-3 mt-2">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" id="termT1" value="T1" checked>
+                            <label class="form-check-label fw-bold text-success" for="termT1">T1</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" id="termT2" value="T2" checked>
+                            <label class="form-check-label fw-bold text-warning" for="termT2">T2</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" id="termT3" value="T3" checked>
+                            <label class="form-check-label fw-bold text-danger" for="termT3">T3</label>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="col-md-3">
@@ -1064,12 +1104,39 @@ $student_categories = array_merge(['Normal'], $db_categories);
                                     <?php
                                     $total = (float)$payment['expected_tuition'];
                                     $paid = (float)$payment['amount_paid'];
-                                    $t_threshold = $total / 3;
                                     
-                                    // Calculate segment widths (each term is 33.33% of the bar)
-                                    $w1 = ($total > 0) ? (min($paid, $t_threshold) / $total) * 100 : 0;
-                                    $w2 = ($total > 0) ? (max(0, min($paid - $t_threshold, $t_threshold)) / $total) * 100 : 0;
-                                    $w3 = ($total > 0) ? (max(0, min($paid - (2 * $t_threshold), $t_threshold)) / $total) * 100 : 0;
+                                    // Parse which terms are active
+                                    $app_terms_str = $payment['applicable_terms'] ?? 'T1,T2,T3';
+                                    $app_terms = explode(',', $app_terms_str);
+                                    if (empty($app_terms) || count($app_terms) === 0) {
+                                        $app_terms = ['T1', 'T2', 'T3'];
+                                    }
+                                    
+                                    $num_active_terms = count($app_terms);
+                                    $t_threshold = ($num_active_terms > 0) ? $total / $num_active_terms : 0;
+                                    
+                                    $w1 = 0; $w2 = 0; $w3 = 0;
+                                    $paid_remaining = $paid;
+                                    
+                                    $t1_active = in_array('T1', $app_terms);
+                                    $t2_active = in_array('T2', $app_terms);
+                                    $t3_active = in_array('T3', $app_terms);
+                                    
+                                    $active_in_order = [];
+                                    if ($t1_active) $active_in_order[] = 'T1';
+                                    if ($t2_active) $active_in_order[] = 'T2';
+                                    if ($t3_active) $active_in_order[] = 'T3';
+                                    
+                                    $term_payments = ['T1' => 0, 'T2' => 0, 'T3' => 0];
+                                    foreach ($active_in_order as $term_key) {
+                                        $alloc = min($paid_remaining, $t_threshold);
+                                        $term_payments[$term_key] = $alloc;
+                                        $paid_remaining -= $alloc;
+                                    }
+                                    
+                                    $w1 = ($total > 0) ? ($term_payments['T1'] / $total) * 100 : 0;
+                                    $w2 = ($total > 0) ? ($term_payments['T2'] / $total) * 100 : 0;
+                                    $w3 = ($total > 0) ? ($term_payments['T3'] / $total) * 100 : 0;
                                     ?>
                                     <div class="term-progress-container" title="Paid: <?= number_format($paid, 2) ?> / <?= number_format($total, 2) ?>">
                                         <div class="term-progress">
@@ -1078,17 +1145,31 @@ $student_categories = array_merge(['Normal'], $db_categories);
                                             <div class="term-segment t3" style="width: <?= $w3 ?>%"></div>
                                         </div>
                                         <div class="term-calibrations">
-                                            <span>T1</span>
-                                            <span>T2</span>
-                                            <span>T3</span>
+                                            <span class="<?= $t1_active ? '' : 'text-muted' ?>" style="<?= $t1_active ? '' : 'text-decoration: line-through;' ?>">T1</span>
+                                            <span class="<?= $t2_active ? '' : 'text-muted' ?>" style="<?= $t2_active ? '' : 'text-decoration: line-through;' ?>">T2</span>
+                                            <span class="<?= $t3_active ? '' : 'text-muted' ?>" style="<?= $t3_active ? '' : 'text-decoration: line-through;' ?>">T3</span>
                                         </div>
                                     </div>
                                 </td>
                                 <td>
                                     <div class="terms-paid-badges">
-                                        <span class="term-badge <?= ($paid >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T1</span>
-                                        <span class="term-badge <?= ($paid >= (2 * $t_threshold) - 0.01) ? 'paid' : 'unpaid' ?>">T2</span>
-                                        <span class="term-badge <?= ($paid >= $total - 0.01) ? 'paid' : 'unpaid' ?>">T3</span>
+                                        <?php if ($t1_active): ?>
+                                            <span class="term-badge <?= ($term_payments['T1'] >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T1</span>
+                                        <?php else: ?>
+                                            <span class="term-badge na" title="Not Applicable for this student">T1</span>
+                                        <?php endif; ?>
+                                        
+                                        <?php if ($t2_active): ?>
+                                            <span class="term-badge <?= ($term_payments['T2'] >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T2</span>
+                                        <?php else: ?>
+                                            <span class="term-badge na" title="Not Applicable for this student">T2</span>
+                                        <?php endif; ?>
+                                        
+                                        <?php if ($t3_active): ?>
+                                            <span class="term-badge <?= ($term_payments['T3'] >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T3</span>
+                                        <?php else: ?>
+                                            <span class="term-badge na" title="Not Applicable for this student">T3</span>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                                 <td><?= number_format($payment['admission_fee'], 2) ?></td>
@@ -1130,7 +1211,7 @@ $student_categories = array_merge(['Normal'], $db_categories);
                                     <div class="action-buttons">
                                         <button type="button" class="btn btn-sm btn-primary" title="Edit Payment"
                                                 data-bs-toggle="modal" data-bs-target="#editPaymentModal"
-                                                onclick="loadEditPayment(<?= $payment['id'] ?>, <?= $payment['amount_paid'] ?>, <?= $payment['admission_fee'] ?>, <?= $payment['uniform_fee'] ?>, <?= $payment['expected_tuition'] ?>, '<?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>', <?= $payment['student_id'] ?>, '<?= htmlspecialchars($payment['class_id'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['category'] ?? 'Normal', ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['day_boarding'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['term'], ENT_QUOTES) ?>')">
+                                                onclick="loadEditPayment(<?= $payment['id'] ?>, <?= $payment['amount_paid'] ?>, <?= $payment['admission_fee'] ?>, <?= $payment['uniform_fee'] ?>, <?= $payment['expected_tuition'] ?>, '<?= htmlspecialchars($payment['full_name'], ENT_QUOTES) ?>', <?= $payment['student_id'] ?>, '<?= htmlspecialchars($payment['class_id'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['category'] ?? 'Normal', ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['day_boarding'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['term'], ENT_QUOTES) ?>', '<?= htmlspecialchars($payment['applicable_terms'] ?? 'T1,T2,T3', ENT_QUOTES) ?>')">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
                                         <?php if (isset($_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'principal'])): ?>
@@ -1353,7 +1434,7 @@ $student_categories = array_merge(['Normal'], $db_categories);
 <div class="modal fade" id="editPaymentModal" tabindex="-1" aria-labelledby="editPaymentModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
-            <form method="POST">
+            <form method="POST" id="editPaymentForm">
                 <div class="modal-header form-header text-white py-3">
                     <h5 class="modal-title" id="editPaymentModalLabel">
                         <i class="bi bi-pencil-square me-2"></i> Edit Payment Record & Transition Management
@@ -1398,6 +1479,24 @@ $student_categories = array_merge(['Normal'], $db_categories);
                             <div class="mb-3">
                                 <label for="editPaymentTerm" class="form-label fw-bold">Current Term</label>
                                 <input type="text" class="form-control" name="edit_term" id="editPaymentTerm" oninput="handleEditClassChange()" placeholder="e.g. Term 1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label d-block fw-bold text-primary">Apply Tuition To</label>
+                                <div class="d-flex align-items-center gap-3 mt-2">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" id="editTermT1" value="T1">
+                                        <label class="form-check-label fw-bold text-success" for="editTermT1">T1</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" id="editTermT2" value="T2">
+                                        <label class="form-check-label fw-bold text-warning" for="editTermT2">T2</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" id="editTermT3" value="T3">
+                                        <label class="form-check-label fw-bold text-danger" for="editTermT3">T3</label>
+                                    </div>
+                                </div>
+                                <small class="text-muted d-block mt-1">Select covered terms for tuition progress.</small>
                             </div>
                         </div>
 

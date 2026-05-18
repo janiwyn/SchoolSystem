@@ -49,11 +49,22 @@ function handleStudentInput() {
         // Auto-fill tuition for this class
         handleClassChange();
         
+        // Auto-fill applicable terms
+        const termsArr = (data.applicableTerms || "T1,T2,T3").split(",");
+        if (document.getElementById("termT1")) document.getElementById("termT1").checked = termsArr.includes("T1");
+        if (document.getElementById("termT2")) document.getElementById("termT2").checked = termsArr.includes("T2");
+        if (document.getElementById("termT3")) document.getElementById("termT3").checked = termsArr.includes("T3");
+        
         updatePreview(val, data.className, window.currentTerm, data.boarding, data.gender);
     } else {
         // New student or manual typing
         hiddenId.value = '0';
         document.getElementById('studentStatus').value = 'Approved (New)';
+        
+        // Reset terms to checked by default
+        if (document.getElementById("termT1")) document.getElementById("termT1").checked = true;
+        if (document.getElementById("termT2")) document.getElementById("termT2").checked = true;
+        if (document.getElementById("termT3")) document.getElementById("termT3").checked = true;
         
         // CHECK FOR DUPLICATE NAME MANUALLY
         let isDuplicate = false;
@@ -231,7 +242,7 @@ function setPaymentId(id, balance) {
 }
 
 // Load edit payment data into modal
-function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuition, studentName, studentId, classId, category, dayBoarding, term) {
+function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuition, studentName, studentId, classId, category, dayBoarding, term, applicableTerms) {
     const el = (selector) => document.getElementById(selector);
 
     if (!el('editPaymentId')) {
@@ -254,6 +265,12 @@ function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuiti
     if (el('editPaymentCategory')) el('editPaymentCategory').value = category || 'Normal';
     if (el('editPaymentBoarding')) el('editPaymentBoarding').value = dayBoarding || '';
     if (el('editPaymentTerm')) el('editPaymentTerm').value = term || '';
+
+    // Load active checkboxes for terms
+    const termsArr = (applicableTerms || "T1,T2,T3").split(",");
+    if (el("editTermT1")) el("editTermT1").checked = termsArr.includes("T1");
+    if (el("editTermT2")) el("editTermT2").checked = termsArr.includes("T2");
+    if (el("editTermT3")) el("editTermT3").checked = termsArr.includes("T3");
 
     calculateEditBalance();
 }
@@ -403,6 +420,15 @@ document.addEventListener('DOMContentLoaded', function() {
         let isSubmitting = false;
 
         paymentForm.addEventListener('submit', function(e) {
+            // Check checkboxes
+            const checkboxes = paymentForm.querySelectorAll('.term-checkbox');
+            const isChecked = Array.from(checkboxes).some(cb => cb.checked);
+            if (!isChecked) {
+                e.preventDefault();
+                alert('Please check at least one term (T1, T2, or T3) to apply the tuition to.');
+                return false;
+            }
+
             if (isSubmitting) {
                 e.preventDefault();
                 return false;
@@ -415,6 +441,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             isSubmitting = true;
+        });
+    }
+
+    const editPaymentForm = document.getElementById('editPaymentForm');
+    if (editPaymentForm) {
+        editPaymentForm.addEventListener('submit', function(e) {
+            const checkboxes = editPaymentForm.querySelectorAll('.edit-term-checkbox');
+            const isChecked = Array.from(checkboxes).some(cb => cb.checked);
+            if (!isChecked) {
+                e.preventDefault();
+                alert('Please check at least one term (T1, T2, or T3) to apply the tuition to in the edit form.');
+                return false;
+            }
         });
     }
 });
