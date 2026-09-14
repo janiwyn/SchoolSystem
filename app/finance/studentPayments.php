@@ -5,13 +5,19 @@ require_once __DIR__ . '/../middleware/role.php';
 
 requireRole(['bursar', 'admin', 'principal']);
 
-// Get System Settings for dynamic permissions
-$settingsRes = $mysqli->query("SELECT setting_key, setting_value FROM system_settings");
-$sys_settings = [];
-if ($settingsRes) {
-    while ($row = $settingsRes->fetch_assoc()) {
-        $sys_settings[$row['setting_key']] = (int)$row['setting_value'];
+// Get System Settings with 5-min session cache to avoid DB roundtrip
+if (!isset($_SESSION['sys_settings_cache']) || (time() - ($_SESSION['sys_settings_time'] ?? 0)) > 300) {
+    $settingsRes = $mysqli->query("SELECT setting_key, setting_value FROM system_settings");
+    $sys_settings = [];
+    if ($settingsRes) {
+        while ($row = $settingsRes->fetch_assoc()) {
+            $sys_settings[$row['setting_key']] = (int)$row['setting_value'];
+        }
     }
+    $_SESSION['sys_settings_cache'] = $sys_settings;
+    $_SESSION['sys_settings_time'] = time();
+} else {
+    $sys_settings = $_SESSION['sys_settings_cache'];
 }
 
 $canPrincipalEdit = (isset($sys_settings['principal_edit_payments']) && $sys_settings['principal_edit_payments'] === 1);
@@ -132,6 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
                             $updateStmt->close();
                             
                             $mysqli->commit();
+                            unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache']);
                             header("Location: studentPayments.php?topup_success=1");
                             exit();
                         }
@@ -164,14 +171,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
     $edit_category = trim($_POST['edit_category'] ?? 'Normal');
     $edit_day_boarding = trim($_POST['edit_day_boarding']);
     $edit_expected_tuition = floatval($_POST['edit_expected_tuition']);
-    
-    $edit_app_terms_arr = $_POST['edit_applicable_terms'] ?? ['T1', 'T2', 'T3'];
-    if (empty($edit_app_terms_arr)) {
-        $edit_app_terms_arr = ['T1', 'T2', 'T3'];
-    }
-    $edit_applicable_terms = implode(',', $edit_app_terms_arr);
 
-    if ($edit_id > 0 && $edit_full_name !== '' && $edit_amount_paid >= 0 && $edit_admission_fee >= 0 && $edit_uniform_fee >= 0) {
+    // Parse edit applicable terms checkboxes
+    $edit_app_terms_arr = $_POST['edit_applicable_terms'] ?? [];
+    $edit_applicable_terms_str = empty($edit_app_terms_arr) ? 'T1,T2,T3' : implode(',', $edit_app_terms_arr);
+
+    if ($edit_id > 0 && $edit_full_name !== '' && $edit_amount_paid >= 0 && $edit_admission_fee >= 0 && $edit_uniform_fee >= 0 && !empty($edit_app_terms_arr)) {
         $mysqli->begin_transaction();
         try {
                 // 1. Get existing data to enforce role-based restrictions
@@ -207,20 +212,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
 
                     // 1. Update student_payments
                     $updateStmt = $mysqli->prepare("UPDATE student_payments SET full_name = ?, amount_paid = ?, admission_fee = ?, uniform_fee = ?, balance = ?, class_id = ?, class_name = ?, category = ?, day_boarding = ?, expected_tuition = ?, applicable_terms = ?, status_approved = 'approved' WHERE id = ?");
-                    $updateStmt->bind_param("sddddissssdi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_class_id, $edit_class_name, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_applicable_terms, $edit_id);
+                    $updateStmt->bind_param("sddddisssdsi", $edit_full_name, $edit_amount_paid, $edit_admission_fee, $edit_uniform_fee, $new_balance, $edit_class_id, $edit_class_name, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_applicable_terms_str, $edit_id);
                     $updateStmt->execute();
                     $updateStmt->close();
 
                     // 2. Sync to admit_students
                     if ($edit_student_id > 0) {
                         $admitUpdate = $mysqli->prepare("UPDATE admit_students SET first_name = ?, class_id = ?, category = ?, day_boarding = ?, expected_tuition = ?, applicable_terms = ? WHERE id = ?");
-                        // s(1):full_name, i(2):class_id, s(3):category, s(4):day_boarding, d(5):expected_tuition, s(6):applicable_terms, i(7):student_id
-                        $admitUpdate->bind_param("sissdsi", $edit_full_name, $edit_class_id, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_applicable_terms, $edit_student_id);
+                        $admitUpdate->bind_param("sissdsi", $edit_full_name, $edit_class_id, $edit_category, $edit_day_boarding, $edit_expected_tuition, $edit_applicable_terms_str, $edit_student_id);
                         $admitUpdate->execute();
                         $admitUpdate->close();
                     }
 
                     $mysqli->commit();
+                    unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache']);
                     header("Location: studentPayments.php?corrected=1");
                     exit();
                 }
@@ -228,6 +233,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
             $mysqli->rollback();
             $error = "Error updating record: " . $e->getMessage();
         }
+    } else {
+        $error = "Invalid payment parameters or at least one applicable term must be selected.";
     }
 }
 
@@ -272,6 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_single_payment
                 }
 
                 $mysqli->commit();
+                unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache']);
                 header("Location: studentPayments.php?deleted=1");
                 exit();
             } catch (Throwable $e) {
@@ -306,14 +314,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
     $parent_contact = trim($_POST['parent_contact'] ?? '');
     $parent_email = trim($_POST['parent_email'] ?? '');
     
-    $app_terms_arr = $_POST['applicable_terms'] ?? ['T1', 'T2', 'T3'];
-    if (empty($app_terms_arr)) {
-        $app_terms_arr = ['T1', 'T2', 'T3'];
-    }
-    $applicable_terms = implode(',', $app_terms_arr);
-    
-    if (!$full_name || !$payment_date || !$term || !$gender || !$class_id || !$category || !$day_boarding) {
-        $error = "All required fields must be filled (Name, Gender, Class, Category, Day/Boarding, Term, Date)";
+    // Parse applicable terms checkboxes
+    $app_terms_arr = $_POST['applicable_terms'] ?? [];
+    $applicable_terms_str = empty($app_terms_arr) ? 'T1,T2,T3' : implode(',', $app_terms_arr);
+
+    if (!$full_name || !$payment_date || !$term || !$gender || !$class_id || !$category || !$day_boarding || empty($app_terms_arr)) {
+        $error = "All required fields must be filled (Name, Gender, Class, Category, Day/Boarding, Term, Date, and at least one Applicable Term)";
     } elseif ($amount_paid < 0) {
         $error = "Amount cannot be negative";
     } elseif ($payment_date > date('Y-m-d')) {
@@ -345,7 +351,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
                         
                         // Update their admission details to match current form
                         $admitUpdate = $mysqli->prepare("UPDATE admit_students SET gender = ?, class_id = ?, category = ?, day_boarding = ?, admission_fee = ?, uniform_fee = ?, expected_tuition = ?, parent_contact = ?, parent_email = ?, applicable_terms = ? WHERE id = ?");
-                        $admitUpdate->bind_param("sissddssssi", $gender, $class_id, $category, $day_boarding, $admission_fee, $uniform_fee, $expected_tuition, $parent_contact, $parent_email, $applicable_terms, $student_id);
+                        $admitUpdate->bind_param("sissddssssi", $gender, $class_id, $category, $day_boarding, $admission_fee, $uniform_fee, $expected_tuition, $parent_contact, $parent_email, $applicable_terms_str, $student_id);
                         $admitUpdate->execute();
                         
                         // Get their admission number
@@ -362,14 +368,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
                     $admitStmt = $mysqli->prepare(
                         "INSERT INTO admit_students 
                             (admission_no, first_name, gender, class_id, category, day_boarding, 
-                             admission_fee, uniform_fee, expected_tuition, parent_contact, 
-                             parent_email, status, applicable_terms, created_by, created_at)
+                             admission_fee, uniform_fee, expected_tuition, applicable_terms, parent_contact, 
+                             parent_email, status, created_by, created_at)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
                     );
                     $admitStmt->bind_param("sssissdddssssi", 
                         $admission_no, $full_name, $gender, $class_id, $category, $day_boarding,
-                        $admission_fee, $uniform_fee, $expected_tuition, $parent_contact,
-                        $parent_email, $status, $applicable_terms, $user_id);
+                        $admission_fee, $uniform_fee, $expected_tuition, $applicable_terms_str, $parent_contact,
+                        $parent_email, $status, $user_id);
                     
                     if (!$admitStmt->execute()) {
                         throw new Exception("Error admitting student: " . $admitStmt->error);
@@ -380,7 +386,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
                 $checkStmt->close();
             } else {
                 // For existing students, verify they exist
-                $verifyStmt = $mysqli->prepare("SELECT admission_no FROM admit_students WHERE id = ?");
+                $verifyStmt = $mysqli->prepare("SELECT admission_no, applicable_terms FROM admit_students WHERE id = ?");
                 $verifyStmt->bind_param("i", $student_id);
                 $verifyStmt->execute();
                 $vRes = $verifyStmt->get_result();
@@ -389,6 +395,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
                 }
                 $studentData = $vRes->fetch_assoc();
                 $admission_no = $studentData['admission_no'];
+                // If it is an existing student, we should update/sync their applicable terms to the database if submitted
+                if (!empty($app_terms_arr)) {
+                    $updTerms = $mysqli->prepare("UPDATE admit_students SET applicable_terms = ? WHERE id = ?");
+                    $updTerms->bind_param("si", $applicable_terms_str, $student_id);
+                    $updTerms->execute();
+                    $updTerms->close();
+                } else {
+                    $applicable_terms_str = $studentData['applicable_terms'] ?? 'T1,T2,T3';
+                }
                 $verifyStmt->close();
             }
 
@@ -416,9 +431,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
             
             $insertPay = $mysqli->prepare("INSERT INTO student_payments (student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, category, term, expected_tuition, applicable_terms, amount_paid, balance, admission_fee, uniform_fee, parent_contact, parent_email, payment_date, status_approved, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
             
-            $insertPay->bind_param("issssissssddddddssssi", 
+            $insertPay->bind_param("issssisssdsddddssssi", 
                 $student_id, $admission_no, $full_name, $day_boarding, 
-                $gender, $class_id, $class_name, $category, $term, $expected_tuition, $applicable_terms,
+                $gender, $class_id, $class_name, $category, $term, $expected_tuition, $applicable_terms_str,
                 $amount_paid, $balance, $admission_fee, $uniform_fee, 
                 $parent_contact, $parent_email, $payment_date, $status_approved, $user_id);
             
@@ -428,6 +443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
             $insertPay->close();
 
             $mysqli->commit();
+            unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache']);
             header("Location: studentPayments.php?payment_recorded=1");
             exit();
 
@@ -494,24 +510,31 @@ if ($show_duplicates) {
 }
 
 if ($pay_status_filter) {
+    // Dynamic SQL fragments for term threshold calculations and sequential credit allocations
+    $sql_num_active = "((IF(FIND_IN_SET('T1', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0, 1, 0) + IF(FIND_IN_SET('T2', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0, 1, 0) + IF(FIND_IN_SET('T3', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0, 1, 0)))";
+    $sql_t_thresh   = "(expected_tuition / NULLIF($sql_num_active, 0))";
+    $sql_p1         = "(IF(FIND_IN_SET('T1', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0, LEAST(amount_paid, $sql_t_thresh), 0))";
+    $sql_p2         = "(IF(FIND_IN_SET('T2', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0, LEAST(amount_paid - $sql_p1, $sql_t_thresh), 0))";
+    $sql_p3         = "(IF(FIND_IN_SET('T3', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0, LEAST(amount_paid - $sql_p1 - $sql_p2, $sql_t_thresh), 0))";
+
     switch ($pay_status_filter) {
         case 't1_paid':
-            $filterWhere .= " AND amount_paid >= (expected_tuition / 3 - 0.01)";
+            $filterWhere .= " AND FIND_IN_SET('T1', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0 AND $sql_p1 >= ($sql_t_thresh - 0.01)";
             break;
         case 't1_partial':
-            $filterWhere .= " AND amount_paid > 0.01 AND amount_paid < (expected_tuition / 3 - 0.01)";
+            $filterWhere .= " AND FIND_IN_SET('T1', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0 AND $sql_p1 > 0.01 AND $sql_p1 < ($sql_t_thresh - 0.01)";
             break;
         case 't2_paid':
-            $filterWhere .= " AND amount_paid >= (2 * expected_tuition / 3 - 0.01)";
+            $filterWhere .= " AND FIND_IN_SET('T2', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0 AND $sql_p2 >= ($sql_t_thresh - 0.01)";
             break;
         case 't2_partial':
-            $filterWhere .= " AND amount_paid > (expected_tuition / 3 + 0.01) AND amount_paid < (2 * expected_tuition / 3 - 0.01)";
+            $filterWhere .= " AND FIND_IN_SET('T2', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0 AND $sql_p2 > 0.01 AND $sql_p2 < ($sql_t_thresh - 0.01)";
             break;
         case 't3_paid':
-            $filterWhere .= " AND amount_paid >= (expected_tuition - 0.01)";
+            $filterWhere .= " AND FIND_IN_SET('T3', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0 AND $sql_p3 >= ($sql_t_thresh - 0.01)";
             break;
         case 't3_partial':
-            $filterWhere .= " AND amount_paid > (2 * expected_tuition / 3 + 0.01) AND amount_paid < (expected_tuition - 0.01)";
+            $filterWhere .= " AND FIND_IN_SET('T3', COALESCE(NULLIF(applicable_terms, ''), 'T1,T2,T3')) > 0 AND $sql_p3 > 0.01 AND $sql_p3 < ($sql_t_thresh - 0.01)";
             break;
         case 'unpaid':
             $filterWhere .= " AND amount_paid <= 0.01";
@@ -536,50 +559,9 @@ $records_per_page = 60;
 $current_page = isset($_GET['page']) ? intval($_GET['page']) : 1;
 $offset = ($current_page - 1) * $records_per_page;
 
-// Get total count for pagination
-$countQuery = "SELECT COUNT(*) as total FROM student_payments WHERE $filterWhere";
-$countResult = $mysqli->query($countQuery);
-$countRow = $countResult->fetch_assoc();
-$total_records = $countRow['total'];
-$total_pages = ceil($total_records / $records_per_page);
-
-// Build Order By clause
-$orderBy = "payment_date DESC"; // Default
-if ($sort_by === 'admission_no') {
-    $orderBy = "CAST(admission_no AS UNSIGNED) $sort_order";
-} else {
-    $orderBy = "payment_date $sort_order";
-}
-$orderBy .= ", id DESC"; // Stability
-
-// Get all payments recorded with filter and pagination
-$paymentsQuery = "SELECT 
-    id, student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, category, term,
-    expected_tuition, applicable_terms, amount_paid, balance, admission_fee, uniform_fee,
-    parent_contact, payment_date, created_at, status_approved, comment
-FROM student_payments
-WHERE $filterWhere
-ORDER BY $orderBy
-LIMIT $offset, $records_per_page";
-
-$paymentsResult = $mysqli->query($paymentsQuery);
-$payments = $paymentsResult->fetch_all(MYSQLI_ASSOC);
-
-// Get unique terms for filter
-$termsQuery = "SELECT DISTINCT term FROM student_payments ORDER BY term ASC";
-$termsResult = $mysqli->query($termsQuery);
-$terms = $termsResult ? $termsResult->fetch_all(MYSQLI_ASSOC) : [];
-
-// Get active classes (those with fees or students) for filter and modals
-$classesQuery = "SELECT id, class_name FROM classes 
-                 WHERE id IN (SELECT DISTINCT class_id FROM fee_structure) 
-                 OR id IN (SELECT DISTINCT class_id FROM admit_students)
-                 ORDER BY class_name ASC";
-$classesResult = $mysqli->query($classesQuery);
-$all_classes = $classesResult ? $classesResult->fetch_all(MYSQLI_ASSOC) : [];
-
-// Calculate totals for all payments (not just current page)
-$totalsQuery = "SELECT 
+// Combined Summary Query (Count + Totals in 1 single network roundtrip)
+$summaryQuery = "SELECT 
+    COUNT(*) as total_records,
     SUM(expected_tuition) as total_tuition,
     SUM(amount_paid) as total_paid,
     SUM(balance) as total_balance,
@@ -588,117 +570,167 @@ $totalsQuery = "SELECT
 FROM student_payments
 WHERE $filterWhere";
 
-$totalsResult = $mysqli->query($totalsQuery);
-$totals = $totalsResult->fetch_assoc();
+$summaryResult = $mysqli->query($summaryQuery);
+$totals = $summaryResult ? $summaryResult->fetch_assoc() : [];
+$total_records = (int)($totals['total_records'] ?? 0);
+$total_pages = ceil($total_records / $records_per_page);
 
-// Get current user role - MUST be before student loading
+// Build Order By clause (Using pure index order without triggering filesort)
+if ($sort_by === 'admission_no') {
+    $orderBy = "admission_no $sort_order, id DESC";
+} else {
+    $orderBy = "payment_date $sort_order";
+}
+
+// Get all payments recorded with filter and pagination
+$paymentsQuery = "SELECT 
+    id, student_id, admission_no, full_name, day_boarding, gender, class_id, class_name, category, term,
+    expected_tuition, amount_paid, balance, admission_fee, uniform_fee,
+    parent_contact, payment_date, created_at, status_approved, comment, applicable_terms
+FROM student_payments
+WHERE $filterWhere
+ORDER BY $orderBy
+LIMIT $offset, $records_per_page";
+
+$paymentsResult = $mysqli->query($paymentsQuery);
+$payments = $paymentsResult ? $paymentsResult->fetch_all(MYSQLI_ASSOC) : [];
+
+// Cache active classes list (5-min session cache)
+if (!isset($_SESSION['classes_cache']) || (time() - ($_SESSION['classes_cache_time'] ?? 0)) > 300) {
+    $classesQuery = "SELECT id, class_name FROM classes ORDER BY class_name ASC";
+    $classesResult = $mysqli->query($classesQuery);
+    $all_classes = $classesResult ? $classesResult->fetch_all(MYSQLI_ASSOC) : [];
+    $_SESSION['classes_cache'] = $all_classes;
+    $_SESSION['classes_cache_time'] = time();
+} else {
+    $all_classes = $_SESSION['classes_cache'];
+}
+
+// Map class names directly from $all_classes without extra query
+$classNames = [];
+foreach ($all_classes as $cls) {
+    $classNames[(int)$cls['id']] = $cls['class_name'];
+}
+
+// Cache unique terms list (5-min session cache)
+if (!isset($_SESSION['terms_cache']) || (time() - ($_SESSION['terms_cache_time'] ?? 0)) > 300) {
+    $termsQuery = "SELECT DISTINCT term FROM student_payments ORDER BY term ASC";
+    $termsResult = $mysqli->query($termsQuery);
+    $terms = $termsResult ? $termsResult->fetch_all(MYSQLI_ASSOC) : [];
+    $_SESSION['terms_cache'] = $terms;
+    $_SESSION['terms_cache_time'] = time();
+} else {
+    $terms = $_SESSION['terms_cache'];
+}
+
+// Get current user role
 $userRole = strtolower($_SESSION['role'] ?? '');
 $canRecordPayment = in_array($userRole, ['admin', 'bursar', 'principal']);
 
-// Get approved students for dropdown - LOAD DIRECTLY
+// Cache approved students list for dropdown (5-min session cache) - Direct PRIMARY KEY search without JOIN
 $approved_students = [];
 if ($canRecordPayment) {
-    $approvedStudentsQuery = "SELECT 
-        s.id, s.admission_no, s.first_name, s.gender, s.class_id, 
-        s.category, s.day_boarding, s.admission_fee, s.uniform_fee, 
-        s.parent_contact, s.parent_email, s.status, s.applicable_terms,
-        c.class_name
-    FROM admit_students s
-    LEFT JOIN classes c ON s.class_id = c.id
-    WHERE s.status IN ('approved', 'unapproved')
-    ORDER BY s.first_name ASC";
-    
-    $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
-    if ($approvedStudentsResult) {
-        $approved_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
-    }
-}
-
-// Build expected tuition map: [class_id][term] => total_amount
-$classTermExpected = [];
-$classNameTuition = [];
-$classNames = [];
-
-// Use JOIN to get class names along with IDs for name-based fallback
-$classExpectedQuery = "SELECT fs.class_id, c.class_name, fs.term, SUM(fs.amount) AS total_expected 
-                       FROM fee_structure fs 
-                       LEFT JOIN classes c ON fs.class_id = c.id
-                       GROUP BY fs.class_id, fs.term";
-$classExpectedResult = $mysqli->query($classExpectedQuery);
-if ($classExpectedResult) {
-    while ($row = $classExpectedResult->fetch_assoc()) {
-        $cid = (int)$row['class_id'];
-        $name = strtolower(trim($row['class_name'] ?? ''));
-        $trm = $row['term'];
+    if (!isset($_SESSION['approved_students_cache']) || (time() - ($_SESSION['approved_students_cache_time'] ?? 0)) > 300) {
+        $approvedStudentsQuery = "SELECT 
+            id, admission_no, first_name, gender, class_id, 
+            category, day_boarding, admission_fee, uniform_fee, 
+            parent_contact, parent_email, status, applicable_terms
+        FROM admit_students
+        WHERE status IN ('approved', 'unapproved')
+        ORDER BY id DESC
+        LIMIT 50";
         
-        if (!isset($classTermExpected[$cid])) {
-            $classTermExpected[$cid] = [];
+        $approvedStudentsResult = $mysqli->query($approvedStudentsQuery);
+        if ($approvedStudentsResult) {
+            $raw_students = $approvedStudentsResult->fetch_all(MYSQLI_ASSOC);
+            foreach ($raw_students as &$sRow) {
+                $sRow['class_name'] = $classNames[(int)($sRow['class_id'] ?? 0)] ?? 'N/A';
+            }
+            unset($sRow);
+            $approved_students = $raw_students;
         }
-        $classTermExpected[$cid][$trm] = (float)$row['total_expected'];
-
-        if ($name) {
-            $classNameTuition[$name][$trm] = (float)$row['total_expected'];
-            // Store a dot-free version for fuzzy matching (e.g. S.4S matches S4S)
-            $cleanName = str_replace('.', '', $name);
-            $classNameTuition[$cleanName][$trm] = (float)$row['total_expected'];
-        }
+        $_SESSION['approved_students_cache'] = $approved_students;
+        $_SESSION['approved_students_cache_time'] = time();
+    } else {
+        $approved_students = $_SESSION['approved_students_cache'];
     }
 }
 
-// Build category-based expected tuition map: [category_name][term] => amount
-$categoryExpected = [];
-$catQuery = "SELECT category_name, term, amount FROM category_fees";
-$catResult = $mysqli->query($catQuery);
-if ($catResult) {
-    while ($row = $catResult->fetch_assoc()) {
-        $cname = strtolower(trim($row['category_name']));
-        $trm = $row['term'];
-        if (!isset($categoryExpected[$cname])) {
-            $categoryExpected[$cname] = [];
-        }
-        $categoryExpected[$cname][$trm] = (float)$row['amount'];
-    }
-}
+// Session Caching for Fee Maps (5 minute TTL to avoid remote DB roundtrips)
+if (!isset($_SESSION['tuition_map_cache']) || (time() - ($_SESSION['tuition_map_time'] ?? 0)) > 300) {
+    $classTermExpected = [];
+    $classNameTuition = [];
 
-// Also get class names for the map
-$cnResult = $mysqli->query("SELECT id, class_name FROM classes");
-if ($cnResult) {
-    while ($row = $cnResult->fetch_assoc()) {
-        $classNames[(int)$row['id']] = $row['class_name'];
-    }
-}
+    // Direct query without unneeded JOIN
+    $classExpectedQuery = "SELECT class_id, term, SUM(amount) AS total_expected FROM fee_structure GROUP BY class_id, term";
+    $classExpectedResult = $mysqli->query($classExpectedQuery);
+    if ($classExpectedResult) {
+        while ($row = $classExpectedResult->fetch_assoc()) {
+            $cid = (int)$row['class_id'];
+            $trm = $row['term'];
+            
+            if (!isset($classTermExpected[$cid])) {
+                $classTermExpected[$cid] = [];
+            }
+            $classTermExpected[$cid][$trm] = (float)$row['total_expected'];
 
-// Get a default/current term (latest term defined in fee_structure)
-$currentTerm = '';
-$currentTermQuery = "SELECT term FROM fee_structure ORDER BY id DESC LIMIT 1";
-$currentTermResult = $mysqli->query($currentTermQuery);
-if ($currentTermResult) {
-    $termRow = $currentTermResult->fetch_assoc();
-    $currentTerm = $termRow['term'] ?? '';
-}
-
-// Get dynamic student categories from category_fees table
-$db_categories = [];
-$catNamesQuery = "SELECT DISTINCT category_name FROM category_fees ORDER BY category_name ASC";
-$catNamesRes = $mysqli->query($catNamesQuery);
-if ($catNamesRes) {
-    while ($cRow = $catNamesRes->fetch_assoc()) {
-        if (strtolower($cRow['category_name']) !== 'normal') {
-            $db_categories[] = $cRow['category_name'];
+            $name = strtolower(trim($classNames[$cid] ?? ''));
+            if ($name) {
+                $classNameTuition[$name][$trm] = (float)$row['total_expected'];
+                $cleanName = str_replace('.', '', $name);
+                $classNameTuition[$cleanName][$trm] = (float)$row['total_expected'];
+            }
         }
     }
+
+    // Build category-based expected tuition map & categories list in 1 single pass
+    $categoryExpected = [];
+    $db_categories = [];
+    $catQuery = "SELECT category_name, term, amount FROM category_fees ORDER BY category_name ASC";
+    $catResult = $mysqli->query($catQuery);
+    if ($catResult) {
+        while ($row = $catResult->fetch_assoc()) {
+            $cname = strtolower(trim($row['category_name']));
+            $rawCatName = trim($row['category_name']);
+            $trm = $row['term'];
+            if (!isset($categoryExpected[$cname])) {
+                $categoryExpected[$cname] = [];
+            }
+            $categoryExpected[$cname][$trm] = (float)$row['amount'];
+
+            if ($cname !== 'normal' && !in_array($rawCatName, $db_categories)) {
+                $db_categories[] = $rawCatName;
+            }
+        }
+    }
+    $student_categories = array_merge(['Normal'], $db_categories);
+
+    // Derive current default term from fee_structure without extra DB query
+    $currentTerm = 'Term 1';
+    foreach ($classTermExpected as $termArr) {
+        if (!empty($termArr)) {
+            $termsArr = array_keys($termArr);
+            $currentTerm = end($termsArr);
+            break;
+        }
+    }
+
+    $_SESSION['tuition_map_cache'] = [
+        'classTermExpected'  => $classTermExpected,
+        'classNameTuition'   => $classNameTuition,
+        'categoryExpected'   => $categoryExpected,
+        'student_categories' => $student_categories,
+        'currentTerm'        => $currentTerm
+    ];
+    $_SESSION['tuition_map_time'] = time();
+} else {
+    $classTermExpected  = $_SESSION['tuition_map_cache']['classTermExpected'];
+    $classNameTuition   = $_SESSION['tuition_map_cache']['classNameTuition'];
+    $categoryExpected   = $_SESSION['tuition_map_cache']['categoryExpected'];
+    $student_categories = $_SESSION['tuition_map_cache']['student_categories'];
+    $currentTerm        = $_SESSION['tuition_map_cache']['currentTerm'];
 }
-$student_categories = array_merge(['Normal'], $db_categories);
 ?>
-<style>
-.term-badge.na {
-    background-color: #f1f2f6 !important;
-    color: #a4b0be !important;
-    border: 1px dashed #ced6e0 !important;
-    text-decoration: line-through !important;
-    opacity: 0.6 !important;
-}
-</style>
 
 <?php if (isset($_GET['corrected'])): ?>
     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -862,19 +894,19 @@ $student_categories = array_merge(['Normal'], $db_categories);
                 </div>
                 
                 <div class="col-md-3">
-                    <label class="form-label d-block fw-bold text-primary">Apply Tuition To</label>
-                    <div class="d-flex align-items-center gap-3 mt-2">
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" id="termT1" value="T1" checked>
-                            <label class="form-check-label fw-bold text-success" for="termT1">T1</label>
+                    <label class="form-label fw-bold text-primary">Applicable Terms <span class="text-danger">*</span></label>
+                    <div class="d-flex gap-3 align-items-center mt-2 border px-3 rounded bg-white" style="height: 38px; border-color: #ced4da !important;">
+                        <div class="form-check mb-0">
+                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" value="T1" id="termT1" checked>
+                            <label class="form-check-label fw-bold" for="termT1">T1</label>
                         </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" id="termT2" value="T2" checked>
-                            <label class="form-check-label fw-bold text-warning" for="termT2">T2</label>
+                        <div class="form-check mb-0">
+                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" value="T2" id="termT2" checked>
+                            <label class="form-check-label fw-bold" for="termT2">T2</label>
                         </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" id="termT3" value="T3" checked>
-                            <label class="form-check-label fw-bold text-danger" for="termT3">T3</label>
+                        <div class="form-check mb-0">
+                            <input class="form-check-input term-checkbox" type="checkbox" name="applicable_terms[]" value="T3" id="termT3" checked>
+                            <label class="form-check-label fw-bold" for="termT3">T3</label>
                         </div>
                     </div>
                 </div>
@@ -1061,6 +1093,7 @@ $student_categories = array_merge(['Normal'], $db_categories);
                 <table class="table table-striped student-payments-table">
                     <thead>
                         <tr>
+                            <th style="width: 40px;" class="text-center"></th>
                             <th>
                                 <a href="?<?= http_build_query(array_merge($_GET, ['sort_by' => 'admission_no', 'sort_order' => ($sort_by === 'admission_no' && $sort_order === 'ASC' ? 'DESC' : 'ASC')])) ?>" class="text-decoration-none text-white d-flex align-items-center justify-content-between">
                                     Adm No
@@ -1091,6 +1124,14 @@ $student_categories = array_merge(['Normal'], $db_categories);
                     <tbody>
                         <?php foreach ($payments as $payment): ?>
                             <tr>
+                                <td class="text-center align-middle">
+                                    <button type="button" class="btn btn-sm btn-outline-primary border-0 p-0 me-1 toggle-history-btn"
+                                            style="width: 24px; height: 24px; line-height: 24px;"
+                                            data-payment-id="<?= $payment['id'] ?>"
+                                            title="View Payment History & Top-ups">
+                                        <i class="bi bi-plus-circle-fill fs-6 text-primary"></i>
+                                    </button>
+                                </td>
                                 <td><?= htmlspecialchars($payment['admission_no']) ?></td>
                                 <td><?= htmlspecialchars($payment['full_name']) ?></td>
                                 <td><?= $payment['gender'] === 'Male' ? 'M' : 'F' ?></td>
@@ -1102,74 +1143,66 @@ $student_categories = array_merge(['Normal'], $db_categories);
                                 <td><?= number_format($payment['balance'], 2) ?></td>
                                 <td>
                                     <?php
+                                    $app_terms = !empty($payment['applicable_terms']) ? explode(',', $payment['applicable_terms']) : ['T1', 'T2', 'T3'];
+                                    $num_applicable = count($app_terms);
+                                    $is_t1_app = in_array('T1', $app_terms);
+                                    $is_t2_app = in_array('T2', $app_terms);
+                                    $is_t3_app = in_array('T3', $app_terms);
+
                                     $total = (float)$payment['expected_tuition'];
                                     $paid = (float)$payment['amount_paid'];
-                                    
-                                    // Parse which terms are active
-                                    $app_terms_str = $payment['applicable_terms'] ?? 'T1,T2,T3';
-                                    $app_terms = explode(',', $app_terms_str);
-                                    if (empty($app_terms) || count($app_terms) === 0) {
-                                        $app_terms = ['T1', 'T2', 'T3'];
+                                    $t_threshold = ($num_applicable > 0) ? $total / $num_applicable : 0;
+
+                                    $p1 = 0;
+                                    $p2 = 0;
+                                    $p3 = 0;
+                                    $rem = $paid;
+
+                                    if ($is_t1_app) {
+                                        $p1 = min($rem, $t_threshold);
+                                        $rem -= $p1;
                                     }
-                                    
-                                    $num_active_terms = count($app_terms);
-                                    $t_threshold = ($num_active_terms > 0) ? $total / $num_active_terms : 0;
-                                    
-                                    $w1 = 0; $w2 = 0; $w3 = 0;
-                                    $paid_remaining = $paid;
-                                    
-                                    $t1_active = in_array('T1', $app_terms);
-                                    $t2_active = in_array('T2', $app_terms);
-                                    $t3_active = in_array('T3', $app_terms);
-                                    
-                                    $active_in_order = [];
-                                    if ($t1_active) $active_in_order[] = 'T1';
-                                    if ($t2_active) $active_in_order[] = 'T2';
-                                    if ($t3_active) $active_in_order[] = 'T3';
-                                    
-                                    $term_payments = ['T1' => 0, 'T2' => 0, 'T3' => 0];
-                                    foreach ($active_in_order as $term_key) {
-                                        $alloc = min($paid_remaining, $t_threshold);
-                                        $term_payments[$term_key] = $alloc;
-                                        $paid_remaining -= $alloc;
+                                    if ($is_t2_app) {
+                                        $p2 = min($rem, $t_threshold);
+                                        $rem -= $p2;
                                     }
-                                    
-                                    $w1 = ($total > 0) ? ($term_payments['T1'] / $total) * 100 : 0;
-                                    $w2 = ($total > 0) ? ($term_payments['T2'] / $total) * 100 : 0;
-                                    $w3 = ($total > 0) ? ($term_payments['T3'] / $total) * 100 : 0;
+                                    if ($is_t3_app) {
+                                        $p3 = min($rem, $t_threshold);
+                                        $rem -= $p3;
+                                    }
+
+                                    // Calculate filled percentages relative to their respective 33.33% containers
+                                    $w1 = ($is_t1_app && $t_threshold > 0) ? ($p1 / $t_threshold) * 100 : 0;
+                                    $w2 = ($is_t2_app && $t_threshold > 0) ? ($p2 / $t_threshold) * 100 : 0;
+                                    $w3 = ($is_t3_app && $t_threshold > 0) ? ($p3 / $t_threshold) * 100 : 0;
                                     ?>
                                     <div class="term-progress-container" title="Paid: <?= number_format($paid, 2) ?> / <?= number_format($total, 2) ?>">
-                                        <div class="term-progress">
-                                            <div class="term-segment t1" style="width: <?= $w1 ?>%"></div>
-                                            <div class="term-segment t2" style="width: <?= $w2 ?>%"></div>
-                                            <div class="term-segment t3" style="width: <?= $w3 ?>%"></div>
+                                        <div class="term-progress" style="display: flex; height: 10px; background-color: #cbd5e1; border-radius: 5px; overflow: hidden;">
+                                            <!-- T1 Segment Container -->
+                                            <div style="width: 33.33%; height: 100%; background-color: <?= $is_t1_app ? '#e2e8f0' : '#94a3b8' ?>; border-right: 1px solid #fff; position: relative;">
+                                                <div style="width: <?= $w1 ?>%; height: 100%; background-color: #2ecc71; transition: width 0.3s ease;"></div>
+                                            </div>
+                                            <!-- T2 Segment Container -->
+                                            <div style="width: 33.33%; height: 100%; background-color: <?= $is_t2_app ? '#e2e8f0' : '#94a3b8' ?>; border-right: 1px solid #fff; position: relative;">
+                                                <div style="width: <?= $w2 ?>%; height: 100%; background-color: #f1c40f; transition: width 0.3s ease;"></div>
+                                            </div>
+                                            <!-- T3 Segment Container -->
+                                            <div style="width: 33.34%; height: 100%; background-color: <?= $is_t3_app ? '#e2e8f0' : '#94a3b8' ?>; position: relative;">
+                                                <div style="width: <?= $w3 ?>%; height: 100%; background-color: #e67e22; transition: width 0.3s ease;"></div>
+                                            </div>
                                         </div>
                                         <div class="term-calibrations">
-                                            <span class="<?= $t1_active ? '' : 'text-muted' ?>" style="<?= $t1_active ? '' : 'text-decoration: line-through;' ?>">T1</span>
-                                            <span class="<?= $t2_active ? '' : 'text-muted' ?>" style="<?= $t2_active ? '' : 'text-decoration: line-through;' ?>">T2</span>
-                                            <span class="<?= $t3_active ? '' : 'text-muted' ?>" style="<?= $t3_active ? '' : 'text-decoration: line-through;' ?>">T3</span>
+                                            <span class="<?= !$is_t1_app ? 'text-decoration-line-through text-muted' : '' ?>">T1</span>
+                                            <span class="<?= !$is_t2_app ? 'text-decoration-line-through text-muted' : '' ?>">T2</span>
+                                            <span class="<?= !$is_t3_app ? 'text-decoration-line-through text-muted' : '' ?>">T3</span>
                                         </div>
                                     </div>
                                 </td>
                                 <td>
                                     <div class="terms-paid-badges">
-                                        <?php if ($t1_active): ?>
-                                            <span class="term-badge <?= ($term_payments['T1'] >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T1</span>
-                                        <?php else: ?>
-                                            <span class="term-badge na" title="Not Applicable for this student">T1</span>
-                                        <?php endif; ?>
-                                        
-                                        <?php if ($t2_active): ?>
-                                            <span class="term-badge <?= ($term_payments['T2'] >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T2</span>
-                                        <?php else: ?>
-                                            <span class="term-badge na" title="Not Applicable for this student">T2</span>
-                                        <?php endif; ?>
-                                        
-                                        <?php if ($t3_active): ?>
-                                            <span class="term-badge <?= ($term_payments['T3'] >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T3</span>
-                                        <?php else: ?>
-                                            <span class="term-badge na" title="Not Applicable for this student">T3</span>
-                                        <?php endif; ?>
+                                        <span class="term-badge <?= ($is_t1_app && $p1 >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T1</span>
+                                        <span class="term-badge <?= ($is_t2_app && $p2 >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T2</span>
+                                        <span class="term-badge <?= ($is_t3_app && $p3 >= $t_threshold - 0.01) ? 'paid' : 'unpaid' ?>">T3</span>
                                     </div>
                                 </td>
                                 <td><?= number_format($payment['admission_fee'], 2) ?></td>
@@ -1242,11 +1275,21 @@ $student_categories = array_merge(['Normal'], $db_categories);
                                     </div>
                                 </td>
                             </tr>
+                            <tr id="history-row-<?= $payment['id'] ?>" class="history-expand-row d-none bg-light">
+                                <td colspan="21" class="p-3">
+                                    <div id="history-content-<?= $payment['id'] ?>" class="history-content">
+                                        <div class="text-center py-3 text-muted">
+                                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                            Loading payment timeline...
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
                         <?php endforeach; ?>
                         
                         <!-- Totals Row -->
                         <tr class="table-totals">
-                            <td colspan="5" class="text-end fw-bold">TOTALS:</td>
+                            <td colspan="6" class="text-end fw-bold">TOTALS:</td>
                             <td class="totals-expected"><?= number_format($totals['total_tuition'] ?? 0, 2) ?></td>
                             <td class="totals-paid"><?= number_format($totals['total_paid'] ?? 0, 2) ?></td>
                             <td class="totals-balance"><?= number_format($totals['total_balance'] ?? 0, 2) ?></td>
@@ -1434,7 +1477,7 @@ $student_categories = array_merge(['Normal'], $db_categories);
 <div class="modal fade" id="editPaymentModal" tabindex="-1" aria-labelledby="editPaymentModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
-            <form method="POST" id="editPaymentForm">
+            <form method="POST" id="editPaymentForm" onsubmit="return validateEditForm()">
                 <div class="modal-header form-header text-white py-3">
                     <h5 class="modal-title" id="editPaymentModalLabel">
                         <i class="bi bi-pencil-square me-2"></i> Edit Payment Record & Transition Management
@@ -1481,22 +1524,21 @@ $student_categories = array_merge(['Normal'], $db_categories);
                                 <input type="text" class="form-control" name="edit_term" id="editPaymentTerm" oninput="handleEditClassChange()" placeholder="e.g. Term 1" required>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label d-block fw-bold text-primary">Apply Tuition To</label>
-                                <div class="d-flex align-items-center gap-3 mt-2">
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" id="editTermT1" value="T1">
-                                        <label class="form-check-label fw-bold text-success" for="editTermT1">T1</label>
+                                <label class="form-label fw-bold text-primary">Applicable Terms <span class="text-danger">*</span></label>
+                                <div class="d-flex gap-3 align-items-center mt-2 border px-3 rounded bg-white" style="height: 38px; border-color: #ced4da !important;">
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" value="T1" id="editTermT1">
+                                        <label class="form-check-label fw-bold" for="editTermT1">T1</label>
                                     </div>
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" id="editTermT2" value="T2">
-                                        <label class="form-check-label fw-bold text-warning" for="editTermT2">T2</label>
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" value="T2" id="editTermT2">
+                                        <label class="form-check-label fw-bold" for="editTermT2">T2</label>
                                     </div>
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" id="editTermT3" value="T3">
-                                        <label class="form-check-label fw-bold text-danger" for="editTermT3">T3</label>
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input edit-term-checkbox" type="checkbox" name="edit_applicable_terms[]" value="T3" id="editTermT3">
+                                        <label class="form-check-label fw-bold" for="editTermT3">T3</label>
                                     </div>
                                 </div>
-                                <small class="text-muted d-block mt-1">Select covered terms for tuition progress.</small>
                             </div>
                         </div>
 
@@ -1636,6 +1678,14 @@ function handleClassChange() {
             const matchedKey = Object.keys(catTuition).find(k => normalizeTermName(k) === normTerm);
             if (matchedKey !== undefined && catTuition[matchedKey] !== undefined) {
                 tuitionData = { [termToUse]: catTuition[matchedKey] };
+            } else {
+                // FALLBACK: Use first available term fee for this category
+                const allKeys = Object.keys(catTuition);
+                if (allKeys.length > 0) {
+                    const fallbackKey = allKeys[0];
+                    tuitionData = { [termToUse]: catTuition[fallbackKey] };
+                    console.log('Fell back to category term fee:', fallbackKey, catTuition[fallbackKey]);
+                }
             }
         }
     }
@@ -1716,6 +1766,14 @@ function handleEditClassChange() {
             const matchedKey = Object.keys(catTuition).find(k => normalizeTermName(k) === normTerm);
             if (matchedKey !== undefined && catTuition[matchedKey] !== undefined) {
                 tuitionData = { [termToUse]: catTuition[matchedKey] };
+            } else {
+                // FALLBACK: Use first available term fee for this category
+                const allKeys = Object.keys(catTuition);
+                if (allKeys.length > 0) {
+                    const fallbackKey = allKeys[0];
+                    tuitionData = { [termToUse]: catTuition[fallbackKey] };
+                    console.log('Edit Modal: Fell back to category term fee:', fallbackKey, catTuition[fallbackKey]);
+                }
             }
         }
     }
@@ -1767,8 +1825,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<link rel="stylesheet" href="../../assets/css/studentPayments.css">
-<link rel="stylesheet" href="../../assets/css/studentPreviewCard.css">
-<script src="../../assets/js/studentPayments.js?v=<?= time() ?>"></script>
+<link rel="stylesheet" href="../../assets/css/studentPayments.css?v=2.1.0">
+<link rel="stylesheet" href="../../assets/css/studentPreviewCard.css?v=2.1.0">
+<script src="../../assets/js/studentPayments.js?v=2.1.0"></script>
 
 <?php require_once __DIR__ . '/../helper/layout-footer.php'; ?>

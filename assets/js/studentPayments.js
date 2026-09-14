@@ -46,14 +46,14 @@ function handleStudentInput() {
         document.getElementById('term').value = window.currentTerm || 'Term 1';
         document.getElementById('category').value = data.category || 'Normal';
         
+        // Set main checkboxes from loaded student
+        const terms = (data.applicableTerms || 'T1,T2,T3').split(',');
+        if (document.getElementById('termT1')) document.getElementById('termT1').checked = terms.includes('T1');
+        if (document.getElementById('termT2')) document.getElementById('termT2').checked = terms.includes('T2');
+        if (document.getElementById('termT3')) document.getElementById('termT3').checked = terms.includes('T3');
+        
         // Auto-fill tuition for this class
         handleClassChange();
-        
-        // Auto-fill applicable terms
-        const termsArr = (data.applicableTerms || "T1,T2,T3").split(",");
-        if (document.getElementById("termT1")) document.getElementById("termT1").checked = termsArr.includes("T1");
-        if (document.getElementById("termT2")) document.getElementById("termT2").checked = termsArr.includes("T2");
-        if (document.getElementById("termT3")) document.getElementById("termT3").checked = termsArr.includes("T3");
         
         updatePreview(val, data.className, window.currentTerm, data.boarding, data.gender);
     } else {
@@ -61,10 +61,10 @@ function handleStudentInput() {
         hiddenId.value = '0';
         document.getElementById('studentStatus').value = 'Approved (New)';
         
-        // Reset terms to checked by default
-        if (document.getElementById("termT1")) document.getElementById("termT1").checked = true;
-        if (document.getElementById("termT2")) document.getElementById("termT2").checked = true;
-        if (document.getElementById("termT3")) document.getElementById("termT3").checked = true;
+        // Reset checkboxes to default checked state
+        if (document.getElementById('termT1')) document.getElementById('termT1').checked = true;
+        if (document.getElementById('termT2')) document.getElementById('termT2').checked = true;
+        if (document.getElementById('termT3')) document.getElementById('termT3').checked = true;
         
         // CHECK FOR DUPLICATE NAME MANUALLY
         let isDuplicate = false;
@@ -266,11 +266,11 @@ function loadEditPayment(id, amountPaid, admissionFee, uniformFee, expectedTuiti
     if (el('editPaymentBoarding')) el('editPaymentBoarding').value = dayBoarding || '';
     if (el('editPaymentTerm')) el('editPaymentTerm').value = term || '';
 
-    // Load active checkboxes for terms
-    const termsArr = (applicableTerms || "T1,T2,T3").split(",");
-    if (el("editTermT1")) el("editTermT1").checked = termsArr.includes("T1");
-    if (el("editTermT2")) el("editTermT2").checked = termsArr.includes("T2");
-    if (el("editTermT3")) el("editTermT3").checked = termsArr.includes("T3");
+    // Set edit checkboxes
+    const terms = (applicableTerms || 'T1,T2,T3').split(',');
+    if (el('editTermT1')) el('editTermT1').checked = terms.includes('T1');
+    if (el('editTermT2')) el('editTermT2').checked = terms.includes('T2');
+    if (el('editTermT3')) el('editTermT3').checked = terms.includes('T3');
 
     calculateEditBalance();
 }
@@ -420,12 +420,11 @@ document.addEventListener('DOMContentLoaded', function() {
         let isSubmitting = false;
 
         paymentForm.addEventListener('submit', function(e) {
-            // Check checkboxes
-            const checkboxes = paymentForm.querySelectorAll('.term-checkbox');
-            const isChecked = Array.from(checkboxes).some(cb => cb.checked);
-            if (!isChecked) {
+            // Enforce that at least one term checkbox is selected
+            const checkboxes = document.querySelectorAll('.term-checkbox:checked');
+            if (checkboxes.length === 0) {
                 e.preventDefault();
-                alert('Please check at least one term (T1, T2, or T3) to apply the tuition to.');
+                alert('You must select at least one applicable term (T1, T2, T3)!');
                 return false;
             }
 
@@ -444,16 +443,55 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    const editPaymentForm = document.getElementById('editPaymentForm');
-    if (editPaymentForm) {
-        editPaymentForm.addEventListener('submit', function(e) {
-            const checkboxes = editPaymentForm.querySelectorAll('.edit-term-checkbox');
-            const isChecked = Array.from(checkboxes).some(cb => cb.checked);
-            if (!isChecked) {
-                e.preventDefault();
-                alert('Please check at least one term (T1, T2, or T3) to apply the tuition to in the edit form.');
-                return false;
+    // Expandable payment history toggle handler
+    document.querySelectorAll('.toggle-history-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const paymentId = this.getAttribute('data-payment-id');
+            const targetRow = document.getElementById('history-row-' + paymentId);
+            const contentDiv = document.getElementById('history-content-' + paymentId);
+            const icon = this.querySelector('i');
+
+            if (!targetRow || !contentDiv) return;
+
+            if (targetRow.classList.contains('d-none')) {
+                // Expand row
+                targetRow.classList.remove('d-none');
+                if (icon) {
+                    icon.classList.remove('bi-plus-circle-fill', 'text-primary');
+                    icon.classList.add('bi-dash-circle-fill', 'text-danger');
+                }
+
+                // Load content if not loaded yet
+                if (!contentDiv.getAttribute('data-loaded')) {
+                    fetch('get_payment_history.php?payment_id=' + paymentId)
+                        .then(response => response.text())
+                        .then(html => {
+                            contentDiv.innerHTML = html;
+                            contentDiv.setAttribute('data-loaded', 'true');
+                        })
+                        .catch(err => {
+                            contentDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0">Failed to load payment history.</div>';
+                        });
+                }
+            } else {
+                // Collapse row
+                targetRow.classList.add('d-none');
+                if (icon) {
+                    icon.classList.remove('bi-dash-circle-fill', 'text-danger');
+                    icon.classList.add('bi-plus-circle-fill', 'text-primary');
+                }
             }
         });
-    }
+    });
 });
+
+// Validate that at least one edit term is checked
+function validateEditForm() {
+    const checkboxes = document.querySelectorAll('.edit-term-checkbox:checked');
+    if (checkboxes.length === 0) {
+        alert('You must select at least one applicable term (T1, T2, T3) for the student!');
+        return false;
+    }
+    return true;
+}

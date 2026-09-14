@@ -3,24 +3,31 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth/auth.php'; 
 requireLogin(); 
 
-// Get unread notifications count
-$notifCountQuery = "SELECT COUNT(*) as unread_count FROM notifications WHERE user_id = ? AND is_read = 0";
-$notifStmt = $mysqli->prepare($notifCountQuery);
-$notifStmt->bind_param("i", $_SESSION['user_id']);
-$notifStmt->execute();
-$notifResult = $notifStmt->get_result();
-$notifRow = $notifResult->fetch_assoc();
-$unreadCount = $notifRow['unread_count'] ?? 0;
-$notifStmt->close();
+// Cache unread notifications for 30 seconds to eliminate repeated DB network roundtrips across all page loads
+if (!isset($_SESSION['notif_cache']) || (time() - ($_SESSION['notif_cache_time'] ?? 0)) > 30) {
+    $recentNotifQuery = "SELECT id, title, message, type, created_at FROM notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 10";
+    $recentNotifStmt = $mysqli->prepare($recentNotifQuery);
+    if ($recentNotifStmt) {
+        $recentNotifStmt->bind_param("i", $_SESSION['user_id']);
+        $recentNotifStmt->execute();
+        $recentNotifResult = $recentNotifStmt->get_result();
+        $recentNotifications = $recentNotifResult ? $recentNotifResult->fetch_all(MYSQLI_ASSOC) : [];
+        $recentNotifStmt->close();
+    } else {
+        $recentNotifications = [];
+    }
 
-// Get recent unread notifications for modal (max 5)
-$recentNotifQuery = "SELECT id, title, message, type, created_at FROM notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5";
-$recentNotifStmt = $mysqli->prepare($recentNotifQuery);
-$recentNotifStmt->bind_param("i", $_SESSION['user_id']);
-$recentNotifStmt->execute();
-$recentNotifResult = $recentNotifStmt->get_result();
-$recentNotifications = $recentNotifResult->fetch_all(MYSQLI_ASSOC);
-$recentNotifStmt->close();
+    $unreadCount = count($recentNotifications);
+
+    $_SESSION['notif_cache'] = [
+        'unreadCount' => $unreadCount,
+        'recentNotifications' => array_slice($recentNotifications, 0, 5)
+    ];
+    $_SESSION['notif_cache_time'] = time();
+} else {
+    $unreadCount = $_SESSION['notif_cache']['unreadCount'];
+    $recentNotifications = $_SESSION['notif_cache']['recentNotifications'];
+}
 
 // Check if user just logged in (first page load in session)
 $justLoggedIn = !isset($_SESSION['notif_shown']) && !empty($recentNotifications);

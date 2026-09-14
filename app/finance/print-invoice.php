@@ -77,33 +77,35 @@ $logoPath = __DIR__ . '/../../assets/images/logo.png';
 
     <!-- Invoice Body -->
     <div class="invoice-body">
-        <!-- Bill From -->
-        <div class="section">
-            <div class="section-title">Bill From</div>
-            <div class="detail-row">
-                <span class="detail-label">Name:</span>
-                <span class="detail-value"><?= htmlspecialchars($schoolName) ?></span>
+        <div class="bill-grid">
+            <!-- Bill From -->
+            <div class="section">
+                <div class="section-title">Bill From</div>
+                <div class="detail-row">
+                    <span class="detail-label">Name:</span>
+                    <span class="detail-value"><?= htmlspecialchars($schoolName) ?></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Address:</span>
+                    <span class="detail-value"><?= htmlspecialchars($schoolAddress) ?></span>
+                </div>
             </div>
-            <div class="detail-row">
-                <span class="detail-label">Address:</span>
-                <span class="detail-value"><?= htmlspecialchars($schoolAddress) ?></span>
-            </div>
-        </div>
 
-        <!-- Bill To -->
-        <div class="section">
-            <div class="section-title">Bill To</div>
-            <div class="detail-row">
-                <span class="detail-label">Name:</span>
-                <span class="detail-value"><?= htmlspecialchars($payment['full_name']) ?></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Admission No:</span>
-                <span class="detail-value"><?= htmlspecialchars($payment['admission_no']) ?></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Class:</span>
-                <span class="detail-value"><?= htmlspecialchars($payment['class_name']) ?></span>
+            <!-- Bill To -->
+            <div class="section">
+                <div class="section-title">Bill To</div>
+                <div class="detail-row">
+                    <span class="detail-label">Name:</span>
+                    <span class="detail-value"><?= htmlspecialchars($payment['full_name']) ?></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Admission No:</span>
+                    <span class="detail-value"><?= htmlspecialchars($payment['admission_no']) ?></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Class:</span>
+                    <span class="detail-value"><?= htmlspecialchars($payment['class_name']) ?></span>
+                </div>
             </div>
         </div>
 

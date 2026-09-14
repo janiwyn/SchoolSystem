@@ -11,6 +11,12 @@ if (!$payment_id) {
     die("Invalid payment ID");
 }
 
+// Check for history type redirect
+if (isset($_GET['type']) && $_GET['type'] === 'history') {
+    require_once __DIR__ . '/print-history-receipt.php';
+    exit;
+}
+
 // Get payment details
 $query = "SELECT * FROM student_payments WHERE id = ?";
 $stmt = $mysqli->prepare($query);
@@ -20,8 +26,8 @@ $result = $stmt->get_result();
 $payment = $result->fetch_assoc();
 $stmt->close();
 
-if (!$payment || $payment['balance'] != 0) {
-    die("Receipt can only be printed for fully paid payments");
+if (!$payment) {
+    die("Payment record not found");
 }
 
 // School details
@@ -131,9 +137,13 @@ $logoPath = __DIR__ . '/../../assets/images/logo.png';
                 <span>Additional Fees:</span>
                 <span>$ <?= number_format($payment['admission_fee'] + $payment['uniform_fee'], 2) ?></span>
             </div>
-            <div class="total-row grand-total">
+            <div class="total-row">
                 <span>Amount Paid:</span>
                 <span>$ <?= number_format($payment['amount_paid'], 2) ?></span>
+            </div>
+            <div class="total-row grand-total">
+                <span>Remaining Balance:</span>
+                <span>$ <?= number_format($payment['balance'], 2) ?></span>
             </div>
         </div>
 
@@ -141,7 +151,7 @@ $logoPath = __DIR__ . '/../../assets/images/logo.png';
         <div class="section">
             <div class="detail-row">
                 <span class="detail-label">Payment Date:</span>
-                <span class="detail-value"><?= date('d/m/Y H:i', strtotime($payment['payment_date'])) ?></span>
+                <span class="detail-value"><?= date('d/m/Y', strtotime($payment['payment_date'])) ?></span>
             </div>
         </div>
     </div>

@@ -496,7 +496,14 @@
 }
 
 .term-badge.unpaid {
-    background-color: #f8f9fa;
-    color: #dee2e6;
-    border: 1px solid #dee2e6;
+    background-color: #e74c3c;
+    color: white;
+    border: 1px solid #e74c3c;
+}
+
+.term-badge.na {
+    background-color: #e9ecef !important;
+    color: #a0a5a9 !important;
+    border: 1px dashed #ced4da !important;
+    text-decoration: line-through;
 }
