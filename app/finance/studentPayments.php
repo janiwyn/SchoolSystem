@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_payment'])) {
                             $updateStmt->close();
                             
                             $mysqli->commit();
-                            unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache']);
+                            unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache'], $_SESSION['classes_cache'], $_SESSION['class_names_cache']);
                             header("Location: studentPayments.php?topup_success=1");
                             exit();
                         }
@@ -225,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_payment_record']
                     }
 
                     $mysqli->commit();
-                    unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache']);
+                    unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache'], $_SESSION['classes_cache'], $_SESSION['class_names_cache']);
                     header("Location: studentPayments.php?corrected=1");
                     exit();
                 }
@@ -279,7 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_single_payment
                 }
 
                 $mysqli->commit();
-                unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache']);
+                unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache'], $_SESSION['classes_cache'], $_SESSION['class_names_cache']);
                 header("Location: studentPayments.php?deleted=1");
                 exit();
             } catch (Throwable $e) {
@@ -443,7 +443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_payment'])) {
             $insertPay->close();
 
             $mysqli->commit();
-            unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache']);
+            unset($_SESSION['approved_students_cache'], $_SESSION['terms_cache'], $_SESSION['tuition_map_cache'], $_SESSION['classes_cache'], $_SESSION['class_names_cache']);
             header("Location: studentPayments.php?payment_recorded=1");
             exit();
 
@@ -595,21 +595,37 @@ LIMIT $offset, $records_per_page";
 $paymentsResult = $mysqli->query($paymentsQuery);
 $payments = $paymentsResult ? $paymentsResult->fetch_all(MYSQLI_ASSOC) : [];
 
-// Cache active classes list (5-min session cache)
+// Cache active classes list (5-min session cache) - Only classes present on the Tuition Page (fee_structure)
 if (!isset($_SESSION['classes_cache']) || (time() - ($_SESSION['classes_cache_time'] ?? 0)) > 300) {
-    $classesQuery = "SELECT id, class_name FROM classes ORDER BY class_name ASC";
+    // Fetch only active classes configured in fee_structure (Tuition Page)
+    $classesQuery = "SELECT DISTINCT c.id, c.class_name 
+                    FROM classes c 
+                    INNER JOIN fee_structure fs ON c.id = fs.class_id 
+                    ORDER BY c.class_name ASC";
     $classesResult = $mysqli->query($classesQuery);
     $all_classes = $classesResult ? $classesResult->fetch_all(MYSQLI_ASSOC) : [];
+
+    // Fallback: If fee_structure is empty, load all classes
+    if (empty($all_classes)) {
+        $classesResult = $mysqli->query("SELECT id, class_name FROM classes ORDER BY class_name ASC");
+        $all_classes = $classesResult ? $classesResult->fetch_all(MYSQLI_ASSOC) : [];
+    }
+
+    // Complete class names map for all class IDs in database
+    $allClassesResult = $mysqli->query("SELECT id, class_name FROM classes");
+    $classNames = [];
+    if ($allClassesResult) {
+        while ($cRow = $allClassesResult->fetch_assoc()) {
+            $classNames[(int)$cRow['id']] = $cRow['class_name'];
+        }
+    }
+
     $_SESSION['classes_cache'] = $all_classes;
+    $_SESSION['class_names_cache'] = $classNames;
     $_SESSION['classes_cache_time'] = time();
 } else {
     $all_classes = $_SESSION['classes_cache'];
-}
-
-// Map class names directly from $all_classes without extra query
-$classNames = [];
-foreach ($all_classes as $cls) {
-    $classNames[(int)$cls['id']] = $cls['class_name'];
+    $classNames = $_SESSION['class_names_cache'] ?? [];
 }
 
 // Cache unique terms list (5-min session cache)

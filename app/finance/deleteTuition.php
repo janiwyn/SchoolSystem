@@ -19,6 +19,7 @@ if (isset($_GET['id'])) {
     if ($stmt) {
         $stmt->bind_param("i", $id);
         if ($stmt->execute()) {
+            unset($_SESSION['classes_cache'], $_SESSION['class_names_cache'], $_SESSION['tuition_map_cache']);
             header("Location: $redirect");
         } else {
             header("Location: tuition.php?error=1");

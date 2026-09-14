@@ -58,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_tuition'])) {
             if ($stmt) {
                 $stmt->bind_param("isdi", $class_id, $term, $amount, $user_id);
                 if ($stmt->execute()) {
+                    unset($_SESSION['classes_cache'], $_SESSION['class_names_cache'], $_SESSION['tuition_map_cache']);
                     header("Location: tuition.php?success=1&tab=class");
                     exit();
                 } else {
@@ -129,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_tuition'])) {
             if ($stmt) {
                 $stmt->bind_param("isdi", $class_id, $term, $amount, $tuition_id);
                 if ($stmt->execute()) {
+                    unset($_SESSION['classes_cache'], $_SESSION['class_names_cache'], $_SESSION['tuition_map_cache']);
                     header("Location: tuition.php?updated=1&tab=class");
                     exit();
                 } else {
