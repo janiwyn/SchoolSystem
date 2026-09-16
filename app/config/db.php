@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/server_status.php';
+
 // Check if we're in development or production
 // When running via CLI (command line), use localhost
 $isProduction = false;

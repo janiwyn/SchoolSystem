@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/server_status.php';
+
 // Session security
 ini_set('session.cookie_httponly', 1);
 ini_set('session.use_only_cookies', 1);
